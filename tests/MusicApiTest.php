@@ -144,6 +144,33 @@ trait MusicApiTestHelpers
 
 uses(MusicApiTestHelpers::class);
 
+test('operator comparison uses identical bounded reads with only authorization differing', function (): void {
+    [$api, $http] = $this->api([
+        $this->ok(['contents' => ['private-account-value' => 'do-not-print']]),
+        ['status' => 400, 'data' => ['error' => ['status' => 'INVALID_ARGUMENT',
+            'message' => 'private-token', 'errors' => [['reason' => 'badRequest']]]]],
+    ]);
+    $report = $api->compareHome('private-token');
+    $this->assertCount(2, $http->calls);
+    $this->assertSame($http->calls[0][3], $http->calls[1][3]);
+    $this->assertSame(['browseId' => 'FEmusic_home'], array_diff_key($http->calls[0][3], ['context' => true]));
+    $this->assertSame($http->calls[0][1], $http->calls[1][1]);
+    $this->assertSame('POST', $http->calls[0][0]);
+    $this->assertNotContains('Authorization: Bearer private-token', $http->calls[0][2]);
+    $this->assertContains('Authorization: Bearer private-token', $http->calls[1][2]);
+    $this->assertSame(['accepted' => true, 'contents_present' => true], $report['anonymous']);
+    $this->assertSame(400, $report['authenticated']['upstream_http_status']);
+    $this->assertStringNotContainsString('private-token', json_encode($report));
+    $this->assertStringNotContainsString('do-not-print', json_encode($report));
+});
+
+test('operator comparison requires a token and never dispatches a mutation', function (): void {
+    [$api, $http] = $this->api([]);
+    try { $api->compareHome(''); $this->fail('Missing credentials must stop diagnosis.'); }
+    catch (ServiceError $error) { $this->assertSame('MUSIC_CONNECT_REQUIRED', $error->reason); }
+    $this->assertSame([], $http->calls);
+});
+
 test('music error diagnostics retain safe codes but discard secrets and arbitrary details', function (): void {
     $raw = ['error' => ['status' => 'PERMISSION_DENIED', 'message' => 'private-token', 'details' => [
         ['reason' => 'ACCESS_TOKEN_SCOPE_INSUFFICIENT', 'metadata' => ['access_token' => 'private-token']],

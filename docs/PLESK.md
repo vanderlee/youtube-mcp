@@ -259,6 +259,8 @@ The initial implementation supports a single Plesk host with local SQLite and fi
 
 ### Database failure during Music device authorization
 
+For persistent Music HTTP 400 after authorization, run `/opt/plesk/php/8.5/bin/php bin/music-probe.php CHANNEL_ID` from the deployed project root as the subscription user, using the domain's actual PHP version. This compares anonymous and authenticated Music-home reads using the stored Music connection and prints sanitized JSON. It does not change playlists or history; an expired Music token may be refreshed normally. See [probe details](MUSIC.md#operator-comparison-for-persistent-http-400).
+
 After successful Music consent, the dashboard displays **Authorization saved** and **Reconnect YouTube Music** for a current channel-bound connection. **Connect YouTube Music** indicates that no matching current connection is stored. This dashboard status does not confirm successful Music endpoint access.
 
 If Music reads still return HTTP 400 after successful authorization, deploy the minimal OAuth request profile and retry `get_music_account` with the existing connection. Its errors include `music_request_profile=oauth_minimal_v1`; absence of that marker means the new profile was not used. This profile removes redundant client headers and body visitor context. It requires no new permissions, migration or consent and does not guarantee upstream acceptance. See [Music request details](MUSIC.md#runtime-and-authorization).

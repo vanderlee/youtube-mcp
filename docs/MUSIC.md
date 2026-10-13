@@ -34,6 +34,14 @@ Live Music access with this deployment's Google grant is **not established by lo
 
 ## Permissions and tools
 
+### Operator comparison for persistent HTTP 400
+
+From the deployed project root, as the subscription user, run `php bin/music-probe.php CHANNEL_ID` with the domain's PHP CLI. The channel must match exactly one local connected service user; the probe validates the Music connection against that user's channel, connection generation and configured client under the account lock. It requires the separate Music device connection. The stored Music token may be refreshed through the existing isolated refresh mechanism.
+
+The probe sends one anonymous and one authenticated `FEmusic_home` read with the same body, client version and visitor context. It performs no playlist/library/history mutation and does not retry upstream calls. Public bootstrap is fetched once. Native transport timeouts and response-size limits apply. Output contains only acceptance/contents-presence flags and safe diagnostics, never tokens or account contents. No new environment settings are needed.
+
+Anonymous acceptance with authenticated rejection isolates the difference to the authorization path, but does not prove whether the token, client registration or upstream account policy causes it. Both failing points to a shared request/transport problem; both succeeding means the original endpoint still needs investigation. A bootstrap or transport failure makes the comparison inconclusive. Share the command's sanitized JSON output, never `.env` or tokens.
+
 The dashboard shows **Authorization saved** and **Reconnect YouTube Music** only when the stored Music connection matches the current user's confirmed channel, Google connection generation and configured client. Otherwise it shows **Not connected** and **Connect YouTube Music**. **Disconnect Music** appears only for a current connection. Stored authorization does not establish successful Music endpoint access.
 
 Music device authorization requires storage migration `003_music_connections.sql`. A missing Music table returns `DEPLOYMENT_MIGRATION_REQUIRED` before contacting Google; the operator must run `php bin/console.php init` from the deployed project root as the subscription user and restart authorization. See [Plesk database troubleshooting](PLESK.md#database-failure-during-music-device-authorization) for safe diagnostics and repair.

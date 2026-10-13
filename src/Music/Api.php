@@ -319,6 +319,25 @@ class Api
         return $this->listing($r, $limit);
     }
 
+    /** Operator-only read comparison; return no account contents or credentials. */
+    public function compareHome(string $accessToken): array
+    {
+        if ($accessToken === '') {
+            throw new ServiceError('MUSIC_CONNECT_REQUIRED', 'A Music token is required.', [], 401);
+        }
+        $this->bootstrap->load($this->config);
+        $results = [];
+        foreach (['anonymous' => '', 'authenticated' => $accessToken] as $mode => $token) {
+            try {
+                $data = $this->request('browse', ['browseId' => 'FEmusic_home'], $token);
+                $results[$mode] = ['accepted' => true, 'contents_present' => isset($data['contents'])];
+            } catch (ServiceError $error) {
+                $results[$mode] = ['accepted' => false, 'code' => $error->reason] + Diagnostics::safe($error->details);
+            }
+        }
+        return $results;
+    }
+
     private function request(string $endpoint, array $body, string $token, bool $write = false): array
     {
         $profile = $this->bootstrap->load($this->config);
@@ -371,7 +390,6 @@ class Api
     {
         $profile ??= $this->bootstrap->load($this->config);
         $headers = [
-            'Authorization: Bearer ' . $token,
             'Content-Type: application/json',
             'Accept: */*',
             'Origin: https://music.youtube.com',
@@ -380,6 +398,9 @@ class Api
             'X-Goog-Request-Time: ' . time(),
             'User-Agent: ' . Bootstrap::USER_AGENT
         ];
+        if ($token !== '') {
+            $headers[] = 'Authorization: Bearer ' . $token;
+        }
         if ($profile !== null) {
             // OAuth requests follow the reference profile: client identity belongs in
             // context.client; the public visitor identifier is a separate header.
