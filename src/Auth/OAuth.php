@@ -72,6 +72,10 @@ final class OAuth
         }
         foreach ($redirects as $uri) {
             if (!is_string($uri) || !in_array($uri, $this->config->list('OAUTH_REDIRECT_URIS'), true)) {
+                error_log(json_encode([
+                    'event' => 'oauth_registration_callback_rejected',
+                    'redirect_uri' => is_string($uri) ? substr($uri, 0, 2048) : null,
+                ]));
                 throw new ServiceError('invalid_redirect_uri', 'Callback URL is not in the operator allowlist.');
             }
         }
