@@ -63,6 +63,12 @@ final class App
                     [$this->config->url(), 'https://chatgpt.com'],
                     true
                 )) {
+                error_log(json_encode([
+                    'event' => 'request_origin_rejected',
+                    'request_id' => $requestId,
+                    'path' => $request->getUri()->getPath(),
+                    'origin' => substr($request->getHeaderLine('Origin'), 0, 512),
+                ]));
                 throw new ServiceError('INVALID_ORIGIN', 'Unexpected origin.', [], 403);
             }
             if ((int)$request->getHeaderLine('Content-Length') > 65536 || $request->getBody()->getSize() > 65536) {
