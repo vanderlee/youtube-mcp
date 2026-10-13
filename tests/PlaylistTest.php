@@ -33,6 +33,56 @@ final class PlaylistTest extends TestCase
     }
     private function metadata(string $channel='channel1'): array
     { return ['items'=>[['id'=>'PLtest123456','snippet'=>['channelId'=>$channel,'title'=>'Original','description'=>'Keep me'],'status'=>['privacyStatus'=>'private']]]]; }
+    public function testPreferencePermissionsDoNotFollowPlaylistPermissions(): void
+    {
+        [$s,$api]=$this->service([]);
+        foreach (['list_liked_tracks','rate_track','list_subscriptions','subscribe_artist','unsubscribe_artist'] as $tool) {
+            try { $s->execute('u1',['playlists.read','playlists.write'],$tool,[]); self::fail(); }
+            catch (ServiceError $e) { self::assertSame('INSUFFICIENT_SERVICE_SCOPE',$e->reason); }
+        }
+        self::assertSame([],$api->calls);
+    }
+    public function testLikedVideosPaginationAndRatings(): void
+    {
+        [$s,$api]=$this->service([['items'=>[], 'nextPageToken'=>'next'],['items'=>[['videoId'=>'aaaaaaaaaaa','rating'=>'like']]]]);
+        $r=$s->execute('u1',['likes.read'],'list_liked_tracks',['page_token'=>'page','page_size'=>10]);
+        self::assertSame('next',$r['nextPageToken']);
+        self::assertSame('like',$api->calls[0][1]['myRating']);
+        self::assertSame('page',$api->calls[0][1]['pageToken']);
+        $s->execute('u1',['likes.read'],'get_track_ratings',['video_ids'=>['https://music.youtube.com/watch?v=aaaaaaaaaaa']]);
+        self::assertSame(['id'=>'aaaaaaaaaaa'],$api->calls[1][1]);
+    }
+    public function testRatingReplayAndRemoval(): void
+    {
+        [$s,$api]=$this->service([[]]);
+        $args=['video_id'=>'aaaaaaaaaaa','rating'=>'none','operation_key'=>'rate-1234'];
+        $r=$s->execute('u1',['likes.write'],'rate_track',$args);
+        self::assertSame('completed',$r['status']);
+        self::assertSame($r,$s->execute('u1',['likes.write'],'rate_track',$args));
+        self::assertCount(1,$api->calls);
+        self::assertSame(['videos.rate',['id'=>'aaaaaaaaaaa','rating'=>'none'],null],$api->calls[0]);
+    }
+    public function testSubscriptionsResolveOwnedIdAndSkipExisting(): void
+    {
+        $channel='UC'.str_repeat('a',22);
+        [$s,$api]=$this->service([['items'=>[['id'=>'owned-sub']]],['items'=>[['id'=>'owned-sub']]],[]]);
+        $r=$s->execute('u1',['subscriptions.write'],'subscribe_artist',['channel_id'=>$channel,'operation_key'=>'sub-1234']);
+        self::assertSame(0,$r['result']['changed']);
+        $r=$s->execute('u1',['subscriptions.write'],'unsubscribe_artist',['channel_id'=>$channel,'operation_key'=>'unsub-1234']);
+        self::assertSame('completed',$r['status']);
+        self::assertSame('true',$api->calls[1][1]['mine']);
+        self::assertSame($channel,$api->calls[1][1]['forChannelId']);
+        self::assertSame(['subscriptions.delete',['id'=>'owned-sub'],null],$api->calls[2]);
+    }
+    public function testSubscriptionCreationAndAbsentRemoval(): void
+    {
+        $channel='UC'.str_repeat('b',22);
+        [$s,$api]=$this->service([['items'=>[]],['id'=>'new-sub'],['items'=>[]]]);
+        $s->execute('u1',['subscriptions.write'],'subscribe_artist',['channel_id'=>$channel,'operation_key'=>'sub-1234']);
+        self::assertSame($channel,$api->calls[1][2]['snippet']['resourceId']['channelId']);
+        $r=$s->execute('u1',['subscriptions.write'],'unsubscribe_artist',['channel_id'=>$channel,'operation_key'=>'unsub-1234']);
+        self::assertSame(0,$r['result']['changed']); self::assertCount(3,$api->calls);
+    }
     private function entry(string $id,string $video,int $position=0): array
     { return ['id'=>$id,'snippet'=>['playlistId'=>'PLtest123456','position'=>$position,'resourceId'=>['kind'=>'youtube#video','videoId'=>$video]]]; }
     public function testWriteScopeEnforcedBeforeAnyApiCall(): void

@@ -13,6 +13,8 @@ use YouTubeMcp\Storage\Database;
 final class Budget
 {
     public const COSTS = [
+        'videos.rate'=>50, 'videos.getRating'=>1,
+        'subscriptions.list'=>1, 'subscriptions.insert'=>50, 'subscriptions.delete'=>50,
         'channels.list'=>1, 'videos.list'=>1, 'playlists.list'=>1, 'playlistItems.list'=>1, 'search.list'=>1,
         'playlists.insert'=>50, 'playlists.update'=>50, 'playlists.delete'=>50,
         'playlistItems.insert'=>50, 'playlistItems.update'=>50, 'playlistItems.delete'=>50,

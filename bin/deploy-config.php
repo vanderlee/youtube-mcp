@@ -80,7 +80,9 @@ try {
                 'ALLOWED_EMAILS',
                 'GOOGLE_CLIENT_ID',
                 'GOOGLE_CLIENT_SECRET',
-                'OAUTH_REDIRECT_URIS'
+                'OAUTH_REDIRECT_URIS',
+                'MUSIC_CLIENT_VERSION',
+                'MUSIC_LOCATION'
             ] as $name
         ) {
             $input = getenv('DEPLOY_' . $name);

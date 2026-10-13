@@ -36,6 +36,10 @@ final class McpTest extends TestCase
         $this->rpc(['jsonrpc'=>'2.0','method'=>'notifications/initialized'],$session);
         $list=$this->rpc(['jsonrpc'=>'2.0','id'=>2,'method'=>'tools/list'],$session);
         self::assertSame(200,$list->getStatusCode(),(string)$list->getBody()); self::assertStringContainsString('add_tracks',(string)$list->getBody());
+        self::assertStringContainsString('search_music',(string)$list->getBody());
+        self::assertStringContainsString('history.write',(string)$list->getBody());
+        $music=$this->rpc(['jsonrpc'=>'2.0','id'=>4,'method'=>'tools/call','params'=>['name'=>'get_music_home','arguments'=>new \stdClass()]],$session);
+        self::assertSame(200,$music->getStatusCode()); self::assertStringContainsString('INSUFFICIENT_SERVICE_SCOPE',(string)$music->getBody());
         $usage=$this->rpc(['jsonrpc'=>'2.0','id'=>3,'method'=>'tools/call','params'=>['name'=>'get_usage_status','arguments'=>new \stdClass()]],$session);
         self::assertSame(200,$usage->getStatusCode(),(string)$usage->getBody()); self::assertStringContainsString('quota_enforced_by',(string)$usage->getBody());
     }
@@ -43,6 +47,19 @@ final class McpTest extends TestCase
     {
         $r=$this->app->handle(new ServerRequest('POST','https://music.example.test/mcp',['Host'=>'music.example.test']));
         self::assertSame(401,$r->getStatusCode()); self::assertStringContainsString('oauth-protected-resource/mcp',$r->getHeaderLine('WWW-Authenticate'));
+    }
+    public function testPreferenceToolsAdvertiseSeparateScopes(): void
+    {
+        $tools=array_column(\YouTubeMcp\Mcp\Tools::definitions(),null,'name');
+        foreach (['list_liked_tracks'=>'likes.read','get_track_ratings'=>'likes.read','rate_track'=>'likes.write',
+                  'list_subscriptions'=>'subscriptions.read','subscribe_artist'=>'subscriptions.write','unsubscribe_artist'=>'subscriptions.write'] as $name=>$scope) {
+            self::assertSame($scope,\YouTubeMcp\Playlist\Service::scope($name));
+            self::assertArrayHasKey($name,$tools);
+            self::assertStringContainsString($scope,json_encode($tools[$name]));
+        }
+        $repo=new OAuthRepository($this->database(),'https://music.example.test');
+        foreach (Scope::SUPPORTED as $scope) { self::assertNotNull($repo->getScopeEntityByIdentifier($scope)); }
+        self::assertNull($repo->getScopeEntityByIdentifier('unknown.write'));
     }
     public function testDuplicateHostHeadersDoNotBlockAuthenticatedInitialization(): void
     {

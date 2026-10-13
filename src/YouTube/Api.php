@@ -32,7 +32,8 @@ class Api
     ): array {
         [$resource, $action] = explode('.', $method);
         [$bucket] = $this->budget->method($method);
-        $verb = ['list' => 'GET', 'insert' => 'POST', 'update' => 'PUT', 'delete' => 'DELETE'][$action];
+        $verb = ['list' => 'GET', 'getRating' => 'GET', 'rate' => 'POST', 'insert' => 'POST', 'update' => 'PUT', 'delete' => 'DELETE'][$action];
+        $path = in_array($action, ['rate', 'getRating'], true) ? $resource . '/' . $action : $resource;
         $key = hash('sha256', $user . '|' . $method . '|' . json_encode($params));
         if ($verb === 'GET' && $ttl > 0) {
             $cached = $this->db->one(
@@ -53,7 +54,7 @@ class Api
             try {
                 $response = $this->http->request(
                     $verb,
-                    'https://www.googleapis.com/youtube/v3/' . $resource . '?' . http_build_query($params),
+                    'https://www.googleapis.com/youtube/v3/' . $path . '?' . http_build_query($params),
                     ['Authorization: Bearer ' . $access, 'Content-Type: application/json'],
                     $body === null ? null : json_encode($body, JSON_THROW_ON_ERROR)
                 );

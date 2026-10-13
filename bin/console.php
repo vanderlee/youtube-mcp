@@ -8,6 +8,11 @@ $root=dirname(__DIR__); $command=$argv[1]??'help';
 try {
     if ($command==='key:generate') { echo base64_encode(random_bytes(32)).PHP_EOL; exit(0); }
     $config=Config::load($root);
+    if ($command==='music:check') {
+        $config->validate();
+        if (!extension_loaded('curl')) { throw new RuntimeException('Music requires the PHP curl extension.'); }
+        echo "Native PHP Music transport configuration ready. Live authorization is not checked.\n"; exit(0);
+    }
     if ($command==='init') {
         $config->validate(); $dir=$config->storage();
         if (!is_dir($dir)) { mkdir($dir,0700,true); }
@@ -38,5 +43,5 @@ try {
         $db=new Database($config->storage().'/service.sqlite'); $oauth=new \YouTubeMcp\Auth\OAuth($db,$config);
         echo json_encode($oauth->register(['redirect_uris'=>[$uri],'client_name'=>$argv[3]??'ChatGPT','token_endpoint_auth_method'=>'client_secret_post']),JSON_PRETTY_PRINT).PHP_EOL; exit(0);
     }
-    echo "Commands: key:generate, init, migrate, cleanup, client:create CALLBACK_URI [NAME]\n";
+    echo "Commands: key:generate, init, migrate, cleanup, music:check, client:create CALLBACK_URI [NAME]\n";
 } catch (Throwable $e) { fwrite(STDERR,$e->getMessage().PHP_EOL); exit(1); }

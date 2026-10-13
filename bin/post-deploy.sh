@@ -30,7 +30,7 @@ Usage: bash bin/post-deploy.sh [options]
 Optional environment inputs (credentials are never command-line arguments):
   DEPLOY_APP_URL, DEPLOY_STORAGE_PATH, DEPLOY_ALLOWED_EMAILS,
   DEPLOY_GOOGLE_CLIENT_ID, DEPLOY_GOOGLE_CLIENT_SECRET,
-  DEPLOY_OAUTH_REDIRECT_URIS
+  DEPLOY_OAUTH_REDIRECT_URIS, DEPLOY_MUSIC_CLIENT_VERSION, DEPLOY_MUSIC_LOCATION
 
 Existing keys and credentials are preserved unless an explicit input replaces
 credentials. APP_KEY is generated only for a genuinely new installation.
@@ -109,6 +109,7 @@ unset DEPLOY_GOOGLE_CLIENT_ID DEPLOY_GOOGLE_CLIENT_SECRET
 "$PHP_BIN" "$ROOT/bin/console.php" init
 "$PHP_BIN" "$ROOT/bin/console.php" cleanup
 "$PHP_BIN" "$ROOT/bin/deploy-config.php" verify
+"$PHP_BIN" "$ROOT/bin/console.php" music:check
 
 STORAGE="$("$PHP_BIN" "$ROOT/bin/deploy-config.php" storage)"
 if ((CREATE_CLIENT)); then "$PHP_BIN" "$ROOT/bin/deploy-config.php" client; fi

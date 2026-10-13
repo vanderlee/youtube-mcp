@@ -10,6 +10,7 @@ This is an initial implementation with automated local verification. It has **no
 - Google sign-in, invite-only onboarding, explicit channel confirmation, offline token refresh, and encrypted credentials.
 - OAuth authorization code with PKCE S256, expiring service tokens, refresh rotation, revocation, and audience validation.
 - Playlist listing, inspection, search, creation, metadata updates, track addition/removal/movement, and deletion.
+- Native PHP YouTube Music catalog/search, discovery, saved library and listening-history tools using unofficial web endpoints.
 - Informational, cache-aware daily usage estimates; YouTube enforces quotas and rate limits.
 - Mutation receipts, explicit partial resume, and protection against replay of completed operations.
 - PHP-FPM hosting in Plesk, SQLite storage, no Docker or background worker.
@@ -39,7 +40,17 @@ No OpenAI API key is needed: the service exposes tools to ChatGPT and does not c
 
 `get_connection_status`, `get_usage_status`, `get_operation`, `list_playlists`, `get_playlist`, `search_tracks`, `create_playlist`, `update_playlist`, `add_tracks`, `remove_tracks`, `move_track`, and `delete_playlist`.
 
+Likes and subscriptions: `list_liked_tracks`, `get_track_ratings`, `rate_track`, `list_subscriptions`, `subscribe_artist`, and `unsubscribe_artist`.
+
+These likes/subscription tools use the official YouTube Data API with the existing Google `youtube.force-ssl` authorization. Liked tracks are YouTube liked videos and may include non-music content; subscriptions are YouTube channels, including non-artists. YouTube Music catalog membership, playback, and exact correspondence with its library are not guaranteed.
+
+Grant `likes.read` for liked videos/ratings, `likes.write` for rating changes, `subscriptions.read` for subscriptions, and `subscriptions.write` for subscribing/unsubscribing. Existing playlist permissions do not grant these tools. Reauthorize the ChatGPT connection with the desired new permissions after deployment.
+
+`rate_track` accepts `video_id` (an 11-character ID or HTTPS YouTube watch URL), `rating` (`like`, `dislike`, or `none` to remove the rating), and `operation_key`. `get_track_ratings` accepts up to 20 `video_ids`. Subscription writes accept a `channel_id` in the form `UC` followed by 22 characters and an `operation_key`. Use artist channel IDs rather than Music browse IDs. Listing tools use `page_size` and `page_token`. Writes share playlist mutation receipts and account locks; subscribing to an existing subscription or removing an absent one completes without a write.
+
 Writes require `playlists.write`; reads require `playlists.read`. New playlists default to private. Entries are removed or moved by **playlist-item ID**, identifying an occurrence; video IDs identify the video and can occur more than once.
+
+Music tools cover artists/albums/songs/lyrics/credits, typed Music search and suggestions, home/radio/related/charts/moods, saved library contents and song/album/playlist save/unsave, and history read/add/remove. They run directly in PHP/cURL and reuse per-user Google OAuth tokens. Grant `catalog.read`, `discovery.read`, `library.read/write`, and `history.read/write` as needed; existing playlist scopes do not grant them. See [Music tools, arguments and limits](docs/MUSIC.md) and [Plesk setup](docs/PLESK.md#youtube-music-tools). Music endpoints are unofficial, return bounded first-response prefixes, and require live authorization/compatibility checks.
 
 Example mutation arguments:
 

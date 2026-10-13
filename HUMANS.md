@@ -1,0 +1,9 @@
+# Human to do list
+- Add support for other LLM's besides ChatGTP.
+- Add full support for all YouTube Music API's.
+- Reduce API calls as much as possible.
+- Reduce Chat token usage as much as possible.
+- Increase performance.
+- Reduce overhead.
+- Simply rollout on Plesk (Docker?).
+- Enable easy rollout on other platforms.

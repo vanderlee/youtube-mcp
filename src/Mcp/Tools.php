@@ -33,6 +33,20 @@ final class Tools
         $description = ['type' => 'string', 'maxLength' => 5000];
         $array = fn($schema) => ['type' => 'array', 'minItems' => 1, 'maxItems' => 20, 'items' => $schema];
         $specs = [
+            'list_liked_tracks' => ['List your liked YouTube videos, including non-music content, one page at a time.', $page, []],
+            'get_track_ratings' => ['Read your ratings for up to 20 video IDs or HTTPS YouTube URLs.',
+                ['video_ids' => $array(['type' => 'string', 'minLength' => 11, 'maxLength' => 500])], ['video_ids']],
+            'rate_track' => ['Like or dislike a video, or remove your rating with none. This changes your YouTube rating.',
+                ['video_id' => ['type' => 'string', 'minLength' => 11, 'maxLength' => 500],
+                 'rating' => ['type' => 'string', 'enum' => ['like', 'dislike', 'none']]] + $op,
+                ['video_id', 'rating', 'operation_key']],
+            'list_subscriptions' => ['List your YouTube channel subscriptions, including non-artists, one page at a time.', $page, []],
+            'subscribe_artist' => ['Subscribe to an artist YouTube channel using its UC channel ID; also supports other channels.',
+                ['channel_id' => ['type' => 'string', 'pattern' => '^UC[A-Za-z0-9_-]{22}$']] + $op,
+                ['channel_id', 'operation_key']],
+            'unsubscribe_artist' => ['Unsubscribe from a YouTube channel using its UC channel ID.',
+                ['channel_id' => ['type' => 'string', 'pattern' => '^UC[A-Za-z0-9_-]{22}$']] + $op,
+                ['channel_id', 'operation_key']],
             'get_connection_status' => ['Show the connected YouTube channel.', [], []],
             'get_usage_status' => [
                 'Show locally observed daily usage estimates. YouTube enforces quotas; remaining quota is not known to this service.',
@@ -108,9 +122,10 @@ final class Tools
                 ['playlist_id', 'operation_key']
             ],
         ];
+        $specs += \YouTubeMcp\Music\Tools::specs();
         $result = [];
         foreach ($specs as $name => [$desc, $props, $required]) {
-            $write = in_array($name, Service::WRITES, true);
+            $write = in_array($name, array_merge(Service::WRITES, \YouTubeMcp\Music\Tools::WRITES), true);
             $result[] = new Tool(
                 $name,
                 null,
@@ -126,7 +141,7 @@ final class Tools
                         'readOnlyHint' => !$write,
                         'destructiveHint' => in_array(
                             $name,
-                            ['remove_tracks', 'delete_playlist', 'update_playlist', 'move_track'],
+                            ['remove_tracks', 'delete_playlist', 'update_playlist', 'move_track', 'rate_track', 'unsubscribe_artist', 'set_music_song_library_status', 'set_music_playlist_library_status', 'remove_music_history_items'],
                             true
                         ),
                         'idempotentHint' => !$write,
@@ -137,7 +152,7 @@ final class Tools
                 'securitySchemes' => [
                     [
                         'type' => 'oauth2',
-                        'scopes' => [$write ? 'playlists.write' : 'playlists.read']
+                        'scopes' => [Service::scope($name)]
                     ]
                 ]
             ]

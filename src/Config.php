@@ -46,6 +46,10 @@ final class Config
 
     public function validate(): void
     {
+        $location = $this->get('MUSIC_LOCATION');
+        $version = $this->get('MUSIC_CLIENT_VERSION');
+        if ($location !== '' && !preg_match('/^[A-Z]{2}$/D', $location)) { throw new RuntimeException('MUSIC_LOCATION must be a two-letter country code.'); }
+        if ($version !== '' && !preg_match('/^[0-9.]{8,64}$/D', $version)) { throw new RuntimeException('Invalid MUSIC_CLIENT_VERSION.'); }
         if (!preg_match('~^https://[^/]+$~', $this->url())) {
             throw new RuntimeException('APP_URL must be an HTTPS origin without a path.');
         }

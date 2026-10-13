@@ -43,7 +43,7 @@ final class OAuthRepository implements ClientRepositoryInterface, AccessTokenRep
 
     public function getScopeEntityByIdentifier(string $identifier): ?ScopeEntityInterface
     {
-        return in_array($identifier, ['playlists.read', 'playlists.write'], true) ? new Scope($identifier) : null;
+        return in_array($identifier, \YouTubeMcp\Auth\Scope::SUPPORTED, true) ? new Scope($identifier) : null;
     }
 
     public function finalizeScopes(

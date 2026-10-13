@@ -10,6 +10,23 @@ use YouTubeMcp\ServiceError;
 final class ApiTest extends TestCase
 {
     use Fixture;
+    public function testRatingRoutesAndEmptyWriteResponse(): void
+    {
+        $db=$this->database(); $budget=new Budget($db,$this->config());
+        $http=new class extends Client {
+            public array $calls=[];
+            public function request(string $method,string $url,array $headers=[],?string $body=null): array {
+                $this->calls[]=[$method,$url,$body];
+                return ['status'=>$method==='POST'?204:200,'data'=>[]];
+            }
+        };
+        $api=new Api($http,$budget,$db);
+        $api->call('a','videos.getRating',['id'=>'aaaaaaaaaaa'],token:'test');
+        self::assertSame([],$api->call('a','videos.rate',['id'=>'aaaaaaaaaaa','rating'=>'like'],token:'test'));
+        self::assertSame(['GET','https://www.googleapis.com/youtube/v3/videos/getRating?id=aaaaaaaaaaa',null],$http->calls[0]);
+        self::assertSame(['POST','https://www.googleapis.com/youtube/v3/videos/rate?id=aaaaaaaaaaa&rating=like',null],$http->calls[1]);
+        self::assertSame(51,$budget->status('a')['buckets']['general']['user_spent']);
+    }
     public function testCachedSearchDoesNotConsumeAnotherSearchCall(): void
     {
         $db=$this->database(); $budget=new Budget($db,$this->config());

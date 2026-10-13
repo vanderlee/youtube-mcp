@@ -1,4 +1,4 @@
-﻿# Direct PHP installation in Plesk
+# Direct PHP installation in Plesk
 
 ## Domain and runtime
 
@@ -7,6 +7,26 @@ Create a dedicated subdomain with a valid TLS certificate. Enable HTTPS redirect
 Keep the application under a private project directory within the subscription, and set the domain's document root to that project's `public/` directory. Do not point it at the project root: that would expose configuration, credentials, source, and storage.
 
 Install production dependencies with `composer install --no-dev --prefer-dist --optimize-autoloader`. If Composer is unavailable on the server, build a release including `vendor/` elsewhere with a compatible runtime. Do not upload a developer `.env` or temporary test database.
+
+The domain's PHP handler and shell's default `php` can differ. Select the installed handler explicitly for Composer, initialization, and maintenance. For example:
+
+```sh
+/opt/plesk/php/8.3/bin/php -v
+/opt/plesk/php/8.3/bin/php -m
+/opt/plesk/php/8.3/bin/php /usr/lib/plesk-9.0/composer.phar install --no-dev --prefer-dist --optimize-autoloader
+```
+
+These version/path values are examples; verify them on your host. A failed Composer run is a failed deployment. A Git deployment hook installing dependencies does not replace initialization, permissions checks, or browser acceptance.
+
+## YouTube Music tools
+
+Music catalog, Music search, discovery, personal library and listening history run directly in PHP through Music's unofficial web endpoints. The existing PHP/cURL runtime is sufficient; no subprocess, additional runtime, daemon or cron task is required. Allow outbound HTTPS to music.youtube.com and YouTube playback tracking endpoints.
+
+Optional private configuration: `MUSIC_LOCATION=NL` (two-letter country code) and `MUSIC_CLIENT_VERSION` (an explicit web client version if upstream compatibility requires it). Leave the version empty to use the current UTC date. Post-deployment setup accepts `DEPLOY_MUSIC_LOCATION` and `DEPLOY_MUSIC_CLIENT_VERSION` and runs `php bin/console.php music:check`, which checks local configuration only.
+
+The Music adapter reuses the user's server-managed Google OAuth token. Authorize ChatGPT with `catalog.read`, `discovery.read`, `library.read`, `library.write`, `history.read`, and/or `history.write` as desired. Existing tokens do not gain these permissions automatically; reauthorize after upgrading. No additional Google API is enabled by this implementation.
+
+Verify `get_music_account` against the intended Music account/channel, then test catalog/search, home/radio/charts, each library kind and recent history. Confirm two accounts remain isolated. On disposable content, test save/unsave and history add/remove, replay completed operation keys and restore the original state. Brand-account history removal may be unsupported. Health/configuration checks do not establish live Music authorization. See [Music tools and limitations](MUSIC.md).
 
 ## Routing
 
@@ -24,6 +44,8 @@ Plesk may already generate a `location /` block. Do not paste a duplicate blindl
 
 The app validates the requested Host against `APP_URL` and builds all authorization URLs from configuration. It ignores forwarded URL headers, so an attacker cannot choose the callback origin. If the server proxies to PHP, preserve the public Host. Use TLS at Plesk; no separate internal HTTPS configuration is required.
 
+Deployment fixes normalize duplicate Host values before passing a validated request to the MCP SDK. Deploy the current entry point and application together. If metadata works but MCP transport returns 403, inspect its rejection logs and proxy headers instead of removing Host/Origin protection.
+
 ## Private storage and initialization
 
 Set `STORAGE_PATH` to a local absolute directory outside `public/`, writable only by the subscription owner and PHP-FPM user. The app uses SQLite WAL, local lock files, browser sessions, and persistent MCP sessions there. Avoid NFS/network shares and deployments across multiple hosts.
@@ -35,6 +57,8 @@ php bin/console.php init
 ```
 
 Initialization creates OAuth RSA signing keys if missing and applies migrations. Re-running it preserves existing keys. Protect `oauth-private.pem` and `.env` with restrictive permissions. Keep `APP_KEY` and signing keys stable across upgrades.
+
+Root-owned files can pass CLI initialization yet fail under PHP-FPM. SQLite needs directory write access to create WAL/shared-memory files, and session/lock directories need write access too. If root was used accidentally, identify the subscription owner/group and repair only application-owned private files with administrator assistance. Preserve the keys/database; do not regenerate keys or use world-writable permissions to fix ownership. Retest through HTTPS.
 
 Set PHP `display_errors=Off`, `log_errors=On`, and a memory limit such as 128 MiB. Allow approximately 180 seconds for PHP requests and the corresponding FPM/proxy timeout to accommodate bounded preflight and write windows; tune down bulk sizes if hosting policy permits shorter requests. Individual upstream requests have a 20-second timeout. Disable proxy buffering only if actual negotiated streaming behavior requires it, and verify rather than assuming.
 
@@ -153,15 +177,18 @@ php bin/console.php client:create https://EXACT_CALLBACK_URI ChatGPT
 
 - Enter the generated credentials only into the connection setup; do not publish the secret or put it in chat.
 - Complete service consent with `playlists.read` and `playlists.write` for full management.
+- For likes and subscriptions, also request the desired `likes.read`, `likes.write`, `subscriptions.read`, and `subscriptions.write` permissions. After upgrading, reauthorize ChatGPT to grant these; existing playlist tokens do not acquire them automatically. The current Google `youtube.force-ssl` grant covers these official API methods, so no additional runtime or Google API is required.
 - Install/enable the connection and confirm tools appear. Follow [CONNECTIONS.md](CONNECTIONS.md) for PKCE/resource requirements and troubleshooting.
 
 ### 7. Run the live acceptance workflow
 
-- Ask ChatGPT to show the connected channel and remaining usage.
+- Ask ChatGPT to show the connected channel and observed usage; actual remaining quota is unknown.
 - Create a disposable private playlist and add a known music video.
 - Confirm it appears and plays in YouTube Music.
 - Test listing entries, editing metadata, moving an entry, removing an occurrence, and replaying a completed operation key.
 - Delete only the disposable playlist.
+- Test `list_liked_tracks`, `get_track_ratings`, and `list_subscriptions` with the new read permissions. Liked videos and subscribed channels can include non-music content.
+- On a disposable video/channel, record the initial rating/subscription, test `rate_track` and `subscribe_artist`/`unsubscribe_artist`, replay a completed operation key, and restore the initial state. Confirm playlist-only tokens cannot call these tools. Verify the resulting state in YouTube and YouTube Music separately; Music correspondence has not been established by local tests.
 - Connect a second Google account and confirm private playlists, receipts, and permissions remain isolated.
 - Test service access revocation/disconnection without affecting the other user.
 - Complete and record the remaining checks in [ACCEPTANCE.md](ACCEPTANCE.md). Live compatibility is not established by health checks alone.
@@ -187,9 +214,30 @@ The initial implementation supports a single Plesk host with local SQLite and fi
 
 ## Troubleshooting browser authorization
 
+### Identify the failing layer
+
+Use Plesk's domain Logs view or HTTPS access/error logs. Common filenames are `access_ssl_log`, `proxy_access_ssl_log`, and `error_log`; locations vary by installation. Correlate endpoint, time, HTTP status, and application request ID. Keep authentication payloads and raw callback query strings private.
+
+| Stage | Expected evidence |
+|---|---|
+| Unauthenticated MCP | 401 with protected-resource metadata challenge |
+| OAuth metadata | 200 JSON with the correct public origin |
+| DCR, when selected | POST `/oauth/register` returns 201 |
+| Browser consent | Login/consent and redirects without browser-policy or WAF errors |
+| Token exchange | POST `/oauth/token` returns 200 |
+| Authenticated MCP | Initialization/tool discovery and a successful local usage query |
+
+Request order can vary; static clients skip DCR. An HTML WAF 403, JSON `INVALID_ORIGIN`, and an SDK transport 403 are different failures. Use `request_origin_rejected`, `oauth_registration_callback_rejected`, and transport diagnostics before changing configuration. Bootstrap 503 errors require runtime/configuration/storage checks; errors carrying `X-Request-Id` can be correlated with app logs.
+
+### Browser policy and recovery
+
+Check effective response headers in browser developer tools. A second CSP set by Plesk/proxy is enforced in addition to the application's policy. A self-only `form-action` can block an otherwise valid redirect after submitting Google/ChatGPT authorization forms. Resolve the conflicting policy, reload the dashboard, and restart the flow; keep unrelated protections enabled.
+
+The following operational checks summarize the deployment lessons:
+
 - Run initialization and maintenance as the subscription user. Root-owned signing keys or SQLite files can make PHP-FPM fail even when CLI checks succeed. Preserve existing keys and repair ownership; do not regenerate keys to fix permissions.
 - The browser policy must use `Referrer-Policy: same-origin` and allow form redirects to `https://accounts.google.com` and `https://chatgpt.com`. After deploying header changes, reload the dashboard and restart authorization; do not replay an old callback or approval form.
-- If Comodo rule `210580` rejects Google's `scope` parameter containing `userinfo.profile`, add the following to this subdomain's Additional Apache directives for HTTPS:
+- A deployment encountered a Comodo/ModSecurity false positive in rule `210580` for Google's callback `scope` containing `userinfo.profile`. This is a rule-set-dependent example, not a required exception for every deployment. First correlate the failure with the WAF audit/error log. If that exact rule is responsible, an administrator can add the following narrowly scoped exception to this subdomain's Additional Apache directives for HTTPS:
 
   ```apache
   <LocationMatch "^/google/callback$">
@@ -197,9 +245,12 @@ The initial implementation supports a single Plesk host with local SQLite and fi
   </LocationMatch>
   ```
 
-  Keep the WAF enabled. Inspect any other rejection's rule ID before adding an exception. Fail2Ban trusted IPs prevent bans but do not bypass WAF rejections.
+  Validate the Apache configuration through Plesk, then retry a fresh flow. Keep the WAF enabled. Inspect any other rejection's rule ID before adding an exception. Fail2Ban trusted IPs prevent bans but do not bypass WAF rejections.
 - ChatGPT can use a connection-specific callback rather than the example callback in `.env.example`. A rejected registration logs `oauth_registration_callback_rejected` with the requested URI. Add that exact trusted callback to `OAUTH_REDIRECT_URIS` and retry the same setup. Multiple exact callbacks can be comma separated.
 - Watch HTTPS access logs (`access_ssl_log` and, where present, `proxy_access_ssl_log`) along with `error_log`. An initial `/mcp` 401 is expected; discovery should return 200, registration 201, and the token exchange 200.
 - A reconnect revokes existing service tokens. Reconnect ChatGPT afterward. Without `playlists.write` consent the connection is read-only.
 - Google and service authorization state is stored in the browser session and expires after ten minutes. Complete one authorization flow at a time in a browser; starting another flow in a second tab replaces the pending state.
 
+An existing static client has its own callback list in the database. Changing `OAUTH_REDIRECT_URIS` alone does not change that registration, and `--create-client` preserves an existing private credentials file on rerun. Register a new client when its callback changes. See [callback recovery](CONNECTIONS.md#discover-the-actual-callback).
+
+After an upgrade, verify usage expectations against the current implementation: YouTube enforces quotas, while the app reports observed estimates and explicitly marks remaining quota unknown. Legacy local budget settings are ignored. Use Cloud Console for actual limits/consumption and inspect receipts after upstream errors. Scheduled cleanup must not replay pending writes.

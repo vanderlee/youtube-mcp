@@ -48,7 +48,7 @@ final class OAuth
             'authorization_endpoint' => $u . '/oauth/authorize',
             'token_endpoint' => $u . '/oauth/token',
             'registration_endpoint' => $u . '/oauth/register',
-            'scopes_supported' => ['playlists.read', 'playlists.write'],
+            'scopes_supported' => \YouTubeMcp\Auth\Scope::SUPPORTED,
             'response_types_supported' => ['code'],
             'grant_types_supported' => ['authorization_code', 'refresh_token'],
             'code_challenge_methods_supported' => ['S256'],

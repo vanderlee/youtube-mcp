@@ -14,6 +14,9 @@ use YouTubeMcp\YouTube\Api;
 final class Service
 {
     public const WRITES = [
+        'rate_track',
+        'subscribe_artist',
+        'unsubscribe_artist',
         'create_playlist',
         'update_playlist',
         'add_tracks',
@@ -22,20 +25,36 @@ final class Service
         'delete_playlist'
     ];
 
+    public static function scope(string $tool): string
+    {
+        if (isset(\YouTubeMcp\Music\Tools::specs()[$tool])) { return \YouTubeMcp\Music\Tools::scope($tool); }
+        $group = match ($tool) {
+            'list_liked_tracks', 'get_track_ratings', 'rate_track' => 'likes',
+            'list_subscriptions', 'subscribe_artist', 'unsubscribe_artist' => 'subscriptions',
+            default => 'playlists'
+        };
+        return $group . (in_array($tool, self::WRITES, true) ? '.write' : '.read');
+    }
+
     public function __construct(
         private Google $google,
         private Api $api,
         private Budget $budget,
         private Receipts $receipts,
-        private Lock $locks
+        private Lock $locks,
+        private ?\YouTubeMcp\Music\Service $music = null
     ) {
     }
 
     public function execute(string $user, array $scopes, string $tool, array $a): array
     {
+        if (isset(\YouTubeMcp\Music\Tools::specs()[$tool])) {
+            if (!$this->music) { throw new ServiceError('MUSIC_SETUP_REQUIRED', 'Music integration is not configured.', [], 503); }
+            return $this->music->execute($user, $scopes, $tool, $a);
+        }
         $write = in_array($tool, self::WRITES, true);
-        if (!in_array($write ? 'playlists.write' : 'playlists.read', $scopes, true)) {
-            throw new ServiceError('INSUFFICIENT_SERVICE_SCOPE', 'Authorize the required playlist permission.', [], 403
+        if (!in_array(self::scope($tool), $scopes, true)) {
+            throw new ServiceError('INSUFFICIENT_SERVICE_SCOPE', 'Authorize the required permission: ' . self::scope($tool), [], 403
             );
         }
         if ($tool === 'get_usage_status') {
@@ -74,6 +93,17 @@ final class Service
                 ['part' => 'snippet,status,contentDetails', 'mine' => 'true'] + $page,
                 ttl: 30
             );
+        }
+        if ($tool === 'list_liked_tracks') {
+            $r = $this->api->call($user, 'videos.list', ['part' => 'snippet,contentDetails', 'myRating' => 'like'] + $page, ttl: 30);
+            return $r + ['music_availability' => 'YouTube liked videos; may include non-music content. Music playback is not guaranteed.'];
+        }
+        if ($tool === 'get_track_ratings') {
+            $ids = array_map(fn($v) => $this->video($v), $a['video_ids']);
+            return $this->api->call($user, 'videos.getRating', ['id' => implode(',', array_unique($ids))], ttl: 15);
+        }
+        if ($tool === 'list_subscriptions') {
+            return $this->api->call($user, 'subscriptions.list', ['part' => 'snippet', 'mine' => 'true'] + $page, ttl: 30);
         }
         if ($tool === 'get_playlist') {
             $metadata = $this->metadata($user, $a['playlist_id']);
@@ -132,6 +162,9 @@ final class Service
         string $op,
         array $done
     ): array {
+        if (in_array($tool, ['rate_track', 'subscribe_artist', 'unsubscribe_artist'], true)) {
+            return $this->mutatePreference($user, $tool, $a, $step, $op, $done);
+        }
         $id = $a['playlist_id'] ?? null;
         $metadata = null;
         $entries = [];
@@ -286,6 +319,42 @@ final class Service
             [],
             404
         );
+    }
+
+    private function mutatePreference(string $user, string $tool, array $a, callable $step, string $op, array $done): array
+    {
+        if (array_key_exists('change', $done)) {
+            return ['changed' => 0];
+        }
+        $body = null;
+        if ($tool === 'rate_track') {
+            $target = $this->video($a['video_id']);
+            if (!in_array($a['rating'], ['like', 'dislike', 'none'], true)) {
+                throw new ServiceError('INVALID_RATING', 'Use like, dislike or none.');
+            }
+            $method = 'videos.rate';
+            $params = ['id' => $target, 'rating' => $a['rating']];
+        } else {
+            $target = $a['channel_id'];
+            if (!preg_match('/^UC[A-Za-z0-9_-]{22}$/', $target)) {
+                throw new ServiceError('INVALID_CHANNEL', 'Supply a YouTube channel ID beginning with UC.');
+            }
+            // Resolve only subscriptions owned by the authenticated channel. Never accept an arbitrary subscription ID.
+            $r = $this->api->call($user, 'subscriptions.list', [
+                'part' => 'snippet', 'mine' => 'true', 'forChannelId' => $target, 'maxResults' => 50
+            ]);
+            $subscription = $r['items'][0]['id'] ?? null;
+            if (($tool === 'subscribe_artist' && $subscription !== null) || ($tool === 'unsubscribe_artist' && $subscription === null)) {
+                return ['channel_id' => $target, 'changed' => 0];
+            }
+            $method = $tool === 'subscribe_artist' ? 'subscriptions.insert' : 'subscriptions.delete';
+            $params = $tool === 'subscribe_artist' ? ['part' => 'snippet'] : ['id' => $subscription];
+            if ($tool === 'subscribe_artist') {
+                $body = ['snippet' => ['resourceId' => ['kind' => 'youtube#channel', 'channelId' => $target]]];
+            }
+        }
+        $step('change', fn() => $this->api->call($user, $method, $params, $body, operation: $op));
+        return ['target_id' => $target, 'changed' => 1];
     }
 
     private function video(string $input): string

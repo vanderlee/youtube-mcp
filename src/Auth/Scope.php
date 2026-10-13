@@ -10,6 +10,8 @@ use League\OAuth2\Server\Entities\Traits\ScopeTrait;
 
 final class Scope implements ScopeEntityInterface
 {
+    public const SUPPORTED = ['playlists.read', 'playlists.write', 'likes.read', 'likes.write', 'subscriptions.read', 'subscriptions.write',
+        'catalog.read', 'discovery.read', 'library.read', 'library.write', 'history.read', 'history.write'];
     use EntityTrait;
     use ScopeTrait;
 
