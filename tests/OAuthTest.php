@@ -69,6 +69,8 @@ final class OAuthTest extends TestCase
         $refresh=$r->withParsedBody(['grant_type'=>'refresh_token','client_id'=>$client['client_id'],'refresh_token'=>$tokens['refresh_token']]);
         $next=json_decode((string)$oauth->server->respondToAccessTokenRequest($refresh,new Response())->getBody(),true);
         self::assertNotSame($tokens['refresh_token'],$next['refresh_token']);
+        $bearer=(new ServerRequest('POST','https://music.example.test/mcp'))->withHeader('Authorization','Bearer '.$next['access_token']);
+        self::assertContains('playlists.write',$oauth->authenticate($bearer)['scopes']);
         $this->expectException(\League\OAuth2\Server\Exception\OAuthServerException::class); $oauth->server->respondToAccessTokenRequest($refresh,new Response());
     }
 }

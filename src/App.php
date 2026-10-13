@@ -367,7 +367,7 @@ final class App
             mkdir($this->config->storage() . '/sessions', 0700, true);
         }
         session_save_path($this->config->storage() . '/sessions');
-        session_start(
+        $started = session_start(
             [
                 'use_strict_mode' => 1,
                 'cookie_secure' => $this->config->bool('COOKIE_SECURE', true),
@@ -376,6 +376,9 @@ final class App
                 'cookie_path' => '/'
             ]
         );
+        if (!$started) {
+            throw new ServiceError('SESSION_UNAVAILABLE', 'Browser session storage is unavailable. Check storage permissions.', [], 503);
+        }
         $_SESSION['csrf'] ??= bin2hex(random_bytes(24));
     }
 

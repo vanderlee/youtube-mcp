@@ -184,3 +184,21 @@ php bin/console.php client:create https://EXACT_CALLBACK_URI ChatGPT
 - Record the deployed PHP version, dependency versions, actual quota values, and successful acceptance checks.
 
 The initial implementation supports a single Plesk host with local SQLite and filesystem locks. Docker and multi-host deployment remain deferred.
+
+## Troubleshooting browser authorization
+
+- Run initialization and maintenance as the subscription user. Root-owned signing keys or SQLite files can make PHP-FPM fail even when CLI checks succeed. Preserve existing keys and repair ownership; do not regenerate keys to fix permissions.
+- The browser policy must use `Referrer-Policy: same-origin` and allow form redirects to `https://accounts.google.com` and `https://chatgpt.com`. After deploying header changes, reload the dashboard and restart authorization; do not replay an old callback or approval form.
+- If Comodo rule `210580` rejects Google's `scope` parameter containing `userinfo.profile`, add the following to this subdomain's Additional Apache directives for HTTPS:
+
+  ```apache
+  <LocationMatch "^/google/callback$">
+      SecRuleRemoveById 210580
+  </LocationMatch>
+  ```
+
+  Keep the WAF enabled. Inspect any other rejection's rule ID before adding an exception. Fail2Ban trusted IPs prevent bans but do not bypass WAF rejections.
+- ChatGPT can use a connection-specific callback rather than the example callback in `.env.example`. A rejected registration logs `oauth_registration_callback_rejected` with the requested URI. Add that exact trusted callback to `OAUTH_REDIRECT_URIS` and retry the same setup. Multiple exact callbacks can be comma separated.
+- Watch HTTPS access logs (`access_ssl_log` and, where present, `proxy_access_ssl_log`) along with `error_log`. An initial `/mcp` 401 is expected; discovery should return 200, registration 201, and the token exchange 200.
+- A reconnect revokes existing service tokens. Reconnect ChatGPT afterward. Without `playlists.write` consent the connection is read-only.
+- Google and service authorization state is stored in the browser session and expires after ten minutes. Complete one authorization flow at a time in a browser; starting another flow in a second tab replaces the pending state.

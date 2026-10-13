@@ -44,4 +44,18 @@ final class McpTest extends TestCase
         $r=$this->app->handle(new ServerRequest('POST','https://music.example.test/mcp',['Host'=>'music.example.test']));
         self::assertSame(401,$r->getStatusCode()); self::assertStringContainsString('oauth-protected-resource/mcp',$r->getHeaderLine('WWW-Authenticate'));
     }
+    public function testBrowserPoliciesPermitGoogleAndChatGptFormRedirects(): void
+    {
+        $r=$this->app->handle(new ServerRequest('GET','https://music.example.test/health/live'));
+        self::assertSame('same-origin',$r->getHeaderLine('Referrer-Policy'));
+        self::assertStringContainsString("form-action 'self' https://accounts.google.com https://chatgpt.com;",$r->getHeaderLine('Content-Security-Policy'));
+        self::assertStringContainsString("frame-ancestors 'none'",$r->getHeaderLine('Content-Security-Policy'));
+    }
+    public function testSameOriginAllowedButNullAndForeignOriginsRejected(): void
+    {
+        foreach (['https://music.example.test'=>200,'null'=>403,'https://attacker.test'=>403] as $origin=>$status) {
+            $r=$this->app->handle((new ServerRequest('GET','https://music.example.test/health/live'))->withHeader('Origin',$origin));
+            self::assertSame($status,$r->getStatusCode());
+        }
+    }
 }
