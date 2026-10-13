@@ -51,6 +51,8 @@ Reconnect replaces the active connection and revokes existing ChatGPT service to
 
 ## ChatGPT connection
 
+Music can use a separate native PHP device OAuth connection when Web-client tokens are rejected. Configure a Google client of type TVs and Limited Input devices in `MUSIC_OAUTH_CLIENT_ID/SECRET`, use **Connect YouTube Music** in the dashboard and authorize the exact existing channel. Keep the sign-in/official YouTube Web client unchanged. The server rejects mismatched channels, encrypts device credentials and revokes old ChatGPT tokens when this connection is replaced. Reconnect ChatGPT afterward. See [separate Music authorization](MUSIC.md#separate-music-device-oauth-for-rejected-web-client-tokens).
+
 Use the current custom MCP connection interface on a ChatGPT account/workspace with permission to add custom integrations. The service URL is `https://YOUR_DOMAIN/mcp`.
 
 Choose **OAuth**, rather than No authentication or mixed authentication. This deployment requires authentication for all MCP transport requests. Discovery endpoints for OAuth metadata are public, but MCP initialization/tool listing require service authorization.

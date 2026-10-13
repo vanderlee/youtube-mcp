@@ -11,6 +11,7 @@ This is an initial implementation with automated local verification. It has **no
 - OAuth authorization code with PKCE S256, expiring service tokens, refresh rotation, revocation, and audience validation.
 - Playlist listing, inspection, search, creation, metadata updates, track addition/removal/movement, and deletion.
 - Native PHP YouTube Music catalog/search, discovery, saved library and listening-history tools using unofficial web endpoints.
+- Optional separate Music device OAuth with encrypted per-user credentials and exact channel matching, for installations where Web-client tokens are rejected. Configure `MUSIC_OAUTH_CLIENT_ID/SECRET` and connect Music in the dashboard; see [setup](docs/MUSIC.md#separate-music-device-oauth-for-rejected-web-client-tokens).
 - Music requests discover the actual public web client version and visitor context, with matching request headers. An unavailable bootstrap fails before any account request is sent.
 - Safe upstream Music diagnostics appear in MCP error text/structured content and PHP error logs; credentials and raw response bodies are excluded.
 - Google connections request the additional `youtube` Music grant. After upgrading older connections, reconnect Google with fresh consent and then reconnect ChatGPT; deployment cannot expand existing grants. `get_connection_status` exposes granted scope names for troubleshooting.

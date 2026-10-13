@@ -31,7 +31,8 @@ final class Service
         private Budget $budget,
         private Receipts $receipts,
         private Lock $locks,
-        private ?\YouTubeMusicMcp\Music\Service $music = null
+        private ?\YouTubeMusicMcp\Music\Service $music = null,
+        private ?\YouTubeMusicMcp\Auth\MusicOAuth $musicOAuth = null
     ) {
     }
 
@@ -61,10 +62,11 @@ final class Service
         $c = $this->google->connection($user);
         if ($tool === 'get_connection_status') {
             $googleScopes = array_values(array_filter(preg_split('/\s+/', trim($c['scopes']))));
+            $musicStatus = $this->musicOAuth?->status($user, $c) ?? ['music_authentication' => 'google_web_oauth', 'music_device_connected' => false];
             return ['connected' => true, 'channel_id' => $c['channel_id'], 'channel_name' => $c['channel_name'],
                 'service_scopes' => array_values($scopes), 'google_scopes' => $googleScopes,
-                'music_google_scope_granted' => in_array(Google::MUSIC_SCOPE, $googleScopes, true),
-                'music_access_checked' => false];
+                'music_google_scope_granted' => $musicStatus['music_device_connected'] || in_array(Google::MUSIC_SCOPE, $googleScopes, true),
+                'music_access_checked' => false] + $musicStatus;
         }
         if ($write) {
             return $this->locks->run('account:' . $user, function () use ($user, $tool, $a) {

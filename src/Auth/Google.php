@@ -139,6 +139,7 @@ final class Google
         $this->lock->run(
             'account:' . $user,
             fn() => $this->db->transaction(function () use ($user, $tokens, $channel, $scopes) {
+                $this->db->execute('DELETE FROM music_connections WHERE user_id=?', [$user]);
                 $this->db->execute('UPDATE oauth_tokens SET revoked=1 WHERE user_id=?', [$user]);
                 $this->db->execute(
                     'INSERT INTO google_connections VALUES (?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET channel_id=excluded.channel_id,channel_name=excluded.channel_name,tokens=excluded.tokens,scopes=excluded.scopes,generation=excluded.generation',
@@ -208,6 +209,7 @@ final class Google
                     }
                 }
                 $this->db->transaction(function () use ($user) {
+                    $this->db->execute('DELETE FROM music_connections WHERE user_id=?', [$user]);
                     $this->db->execute('DELETE FROM google_connections WHERE user_id=?', [$user]);
                     $this->db->execute('UPDATE oauth_tokens SET revoked=1 WHERE user_id=?', [$user]);
                     $this->db->execute('DELETE FROM api_cache WHERE user_id=?', [$user]);

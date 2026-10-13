@@ -46,6 +46,9 @@ final class Config
 
     public function validate(): void
     {
+        if (($this->get('MUSIC_OAUTH_CLIENT_ID') === '') !== ($this->get('MUSIC_OAUTH_CLIENT_SECRET') === '')) {
+            throw new RuntimeException('Configure both MUSIC_OAUTH_CLIENT_ID and MUSIC_OAUTH_CLIENT_SECRET, or leave both empty.');
+        }
         $location = $this->get('MUSIC_LOCATION');
         $version = $this->get('MUSIC_CLIENT_VERSION');
         if ($location !== '' && !preg_match('/^[A-Z]{2}$/D', $location)) {

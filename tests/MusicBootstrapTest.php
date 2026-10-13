@@ -36,6 +36,8 @@ test('music requests use actual web metadata consistently and never send oauth t
     $this->assertContains('X-YouTube-Client-Version: 1.20260820.01.00', $http->calls[1][2]);
     $this->assertContains('X-Goog-Visitor-Id: public-visitor', $http->calls[1][2]);
     $this->assertContains('Authorization: Bearer dummy-token-two', $http->calls[2][2]);
+    $this->assertNotContains('X-Goog-AuthUser: 0', $http->calls[1][2]);
+    $this->assertContains('Cookie: SOCS=CAI', $http->calls[1][2]);
 });
 
 test('missing or unsafe bootstrap metadata prevents account mutation dispatch', function (): void {

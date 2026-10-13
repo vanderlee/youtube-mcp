@@ -33,6 +33,7 @@ final class App
     private Budget $budget;
     private Api $api;
     private Service $playlists;
+    private \YouTubeMusicMcp\Auth\MusicOAuth $musicOAuth;
 
     public function __construct(private Config $config)
     {
@@ -44,6 +45,8 @@ final class App
         $this->google = new Google($config, $this->db, new Vault($config->get('APP_KEY')), $http, $locks);
         $this->api = new Api($http, $this->budget, $this->db, $this->google);
         $this->oauth = new OAuth($this->db, $config);
+        $this->musicOAuth = new \YouTubeMusicMcp\Auth\MusicOAuth($config, $this->db, $this->google,
+            new Vault($config->get('APP_KEY')), $http, $this->api, $locks);
         $this->playlists = new Service(
             $this->google, $this->api, $this->budget, new Receipts($this->db, $locks), $locks,
             new \YouTubeMusicMcp\Music\Service(
@@ -51,8 +54,10 @@ final class App
                 new \YouTubeMusicMcp\Music\Api($config),
                 new Receipts($this->db, $locks),
                 $locks,
-                $config
-            )
+                $config,
+                $this->musicOAuth
+            ),
+            $this->musicOAuth
         );
     }
 
@@ -300,6 +305,32 @@ final class App
             );
         }
         $user = $_SESSION['user'];
+        if ($path === '/music/connect') {
+            $this->csrf($r);
+            $_SESSION['music_authorization'] = $this->musicOAuth->begin($user);
+            return $this->musicAuthorizationPage($_SESSION['music_authorization']);
+        }
+        if ($path === '/music/poll') {
+            $this->csrf($r);
+            if (!isset($_SESSION['music_authorization'])) {
+                throw new ServiceError('MUSIC_AUTHORIZATION_EXPIRED', 'Restart Music authorization from the dashboard.', [], 409);
+            }
+            try {
+                $connected = $this->musicOAuth->poll($user, $_SESSION['music_authorization']);
+            } catch (ServiceError $error) {
+                unset($_SESSION['music_authorization']);
+                throw $error;
+            }
+            if (!$connected) { return $this->musicAuthorizationPage($_SESSION['music_authorization']); }
+            unset($_SESSION['music_authorization']);
+            return $this->html('YouTube Music connected', '<p>Music authorization matches your confirmed channel. Reconnect ChatGPT to grant it fresh service permissions, then verify Music account and history access.</p><a href="/">Return to dashboard</a>');
+        }
+        if ($path === '/music/disconnect') {
+            $this->csrf($r);
+            $this->musicOAuth->disconnect($user);
+            unset($_SESSION['music_authorization']);
+            return $this->html('Music disconnected', '<p>Local Music credentials and service access were removed. You can revoke the Google grant separately in Google account settings.</p><a href="/">Return to dashboard</a>');
+        }
         if ($path === '/google/connect') {
             $this->csrf($r);
             return $this->startGoogle(true);
@@ -354,6 +385,10 @@ final class App
             $body .= $this->form('/google/disconnect', 'Disconnect');
         }
         $body .= '</div></section>';
+        if ($c && $this->musicOAuth->configured()) {
+            $body .= '<section class="card"><h2>YouTube Music authorization</h2><p class="muted">Authorize Music separately for the same channel. This uses a dedicated Google client and does not change playlist contents.</p>'
+                . $this->form('/music/connect', 'Connect YouTube Music') . $this->form('/music/disconnect', 'Disconnect Music') . '</section>';
+        }
         $usage = $this->budget->status($user);
         $body .= '<section class="card"><h2>Observed usage</h2><dl class="usage"><div><dt>General units</dt><dd>' . number_format(
                 $usage['buckets']['general']['user_spent']
@@ -384,6 +419,14 @@ final class App
             ['Content-Type' => 'application/json'],
             json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)
         );
+    }
+
+    private function musicAuthorizationPage(array $flow): ResponseInterface
+    {
+        $url = htmlspecialchars($flow['verification_url'], ENT_QUOTES);
+        $code = htmlspecialchars($flow['user_code'], ENT_QUOTES);
+        return $this->html('Authorize YouTube Music', '<p>Open <a href="' . $url . '" target="_blank" rel="noopener noreferrer">Google authorization</a> and enter this code:</p><p><strong>' . $code . '</strong></p><p>Select the same YouTube channel already confirmed in this dashboard. After granting access, wait at least ' . (int)$flow['interval'] . ' seconds and check authorization below.</p>'
+            . $this->form('/music/poll', 'Check authorization') . '<p><a href="/">Return to dashboard</a></p>');
     }
 
     private function post(ServerRequestInterface $r): void

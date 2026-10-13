@@ -20,6 +20,10 @@ These version/path values are examples; verify them on your host. A failed Compo
 
 ## YouTube Music tools
 
+For persistent Music HTTP 400 errors with otherwise working official YouTube access, configure a separate **TVs and Limited Input devices** OAuth client in Google Cloud. Put its credentials in private `.env` as `MUSIC_OAUTH_CLIENT_ID` and `MUSIC_OAUTH_CLIENT_SECRET`; keep `GOOGLE_CLIENT_ID/SECRET` as the Web client. No new runtime or daemon is required. `deploy.sh` applies migration `003_music_connections.sql` through the existing initialization. Optional deployment overrides are `DEPLOY_MUSIC_OAUTH_CLIENT_ID` and `DEPLOY_MUSIC_OAUTH_CLIENT_SECRET`.
+
+After deployment, use **Connect YouTube Music** in the dashboard, authorize the displayed Google code for the same channel, then click **Check authorization**. A different channel is rejected. Reconnect ChatGPT after successful Music consent, then test `get_music_account` and history. No new callback URI is needed for the device client. Full setup and token lifecycle details are in [Music authorization](MUSIC.md#separate-music-device-oauth-for-rejected-web-client-tokens). A completed authorization still requires live endpoint verification.
+
 Music catalog, Music search, discovery, personal library and listening history run directly in PHP through Music's unofficial web endpoints. The existing PHP/cURL runtime is sufficient; no subprocess, additional runtime, daemon or cron task is required. Allow outbound HTTPS to music.youtube.com and YouTube playback tracking endpoints.
 
 Optional private configuration: `MUSIC_LOCATION=NL` (two-letter country code) and `MUSIC_CLIENT_VERSION` (an explicit web client version if upstream compatibility requires it). Leave the version empty to discover the actual version and visitor context from the public Music homepage. Do not use a guessed date-based version. Outbound HTTPS access must allow both the homepage GET and Music API POST requests. Post-deployment setup accepts `DEPLOY_MUSIC_LOCATION` and `DEPLOY_MUSIC_CLIENT_VERSION` and runs `php bin/console.php music:check`, which checks local configuration only.

@@ -376,7 +376,7 @@ class Api
             'Content-Type: application/json',
             'Origin: https://music.youtube.com',
             'Referer: https://music.youtube.com/',
-            'X-Goog-AuthUser: 0',
+            'Cookie: SOCS=CAI',
             'X-Goog-Request-Time: ' . time(),
             'User-Agent: ' . Bootstrap::USER_AGENT
         ];
