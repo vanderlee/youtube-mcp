@@ -88,9 +88,10 @@ final class Tools
                 ['playlist_id']
             ],
             'search_tracks' => [
-                'Search YouTube video candidates; Music availability is uncertain. Prefer supplied IDs/URLs and avoid equivalent repeat searches. Each uncached page consumes a search call.',
+                'Search video candidates; Music availability is uncertain. Prefer supplied IDs. One API call by default; include_details adds durations with another call.',
                 [
                     'query' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 200],
+                    'include_details' => ['type' => 'boolean', 'description' => 'Fetch durations with one additional API call. Default false.'],
                     'region' => ['type' => 'string', 'pattern' => '^[A-Z]{2}$'],
                     'page_token' => $string,
                     'limit' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 50]
@@ -98,8 +99,10 @@ final class Tools
                 ['query']
             ],
             'create_playlist' => [
-                'Create a playlist, private unless explicitly requested otherwise.',
-                ['title' => $title, 'description' => $description, 'privacy' => $privacy] + $op,
+                'Create and optionally populate a playlist in one call; private by default. No search or read-back is needed for supplied video IDs.',
+                ['title' => $title, 'description' => $description, 'privacy' => $privacy,
+                    'video_ids' => ['type' => 'array', 'maxItems' => 20, 'items' => ['type' => 'string', 'minLength' => 11, 'maxLength' => 500]],
+                    'duplicate_policy' => ['type' => 'string', 'enum' => ['skip', 'allow']]] + $op,
                 ['title', 'operation_key']
             ],
             'update_playlist' => [
@@ -145,6 +148,10 @@ final class Tools
         $result = [];
         foreach ($specs as $name => [$desc, $props, $required]) {
             $write = in_array($name, array_merge(Service::WRITES, \YouTubeMusicMcp\Music\Tools::WRITES), true);
+            if (!$write) {
+                $props['response_detail'] = ['type' => 'string', 'enum' => ['compact', 'full'],
+                    'description' => 'Compact by default; full includes available upstream details or the complete local receipt.'];
+            }
             $result[] = new Tool(
                 $name,
                 null,
@@ -200,19 +207,22 @@ final class Tools
             public function execute(array $arguments, ClientGateway $gateway): mixed
             {
                 try {
+                    $detail = $arguments['response_detail'] ?? 'compact';
+                    unset($arguments['response_detail']);
                     $r = $this->service->execute(
                         $this->identity['id'],
                         $this->identity['scopes'],
                         $this->name,
                         $arguments
                     );
+                    $r = $detail === 'full' ? $r : Presentation::compact($this->name, $r);
                     return new CallToolResult(
-                        [new TextContent(json_encode($r, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES))],
+                        [new TextContent('Result in structuredContent' . (isset($r['status']) ? ': ' . $r['status'] : '.') )],
                         isset($r['status']) && $r['status'] !== 'completed',
                         $r
                     );
                 } catch (ServiceError $e) {
-                    return new CallToolResult([new TextContent(json_encode($e->payload(), JSON_THROW_ON_ERROR))],
+                    return new CallToolResult([new TextContent($e->reason . ': ' . $e->getMessage())],
                         true,
                         $e->payload());
                 }

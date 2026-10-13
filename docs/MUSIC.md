@@ -12,6 +12,8 @@ Live Music access with this deployment's Google grant is **not established by lo
 
 ## Permissions and tools
 
+Read tools accept `response_detail: "compact"` (default) or `"full"`. Compact Music results omit thumbnails while preserving account-bound action tokens, requested text, and explicit prefix/truncation indicators. This option is handled at the MCP presentation boundary; it does not broaden permissions or fetch additional upstream pages. MCP text contains a short summary and the actual payload is in `structuredContent`.
+
 | Permission | Tools |
 | --- | --- |
 | `catalog.read` | `get_music_artist`, `get_music_artist_albums`, `get_music_album`, `get_music_song`, `get_music_lyrics`, `get_music_song_credits`, `search_music`, `get_music_search_suggestions` |

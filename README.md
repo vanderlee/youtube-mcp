@@ -38,6 +38,18 @@ No OpenAI API key is needed: the service exposes tools to ChatGPT and does not c
 
 ## Tools
 
+### Fewer API calls and smaller ChatGPT results
+
+Read tools return compact data by default: essential IDs, titles, positions, privacy/counts where applicable, and pagination. Request `response_detail: "full"` for available raw details. Mutation results summarize receipts, including completed-step IDs, errors, and any uncertain pending step; use `get_operation` with `response_detail: "full"` to inspect the full persisted receipt without a YouTube request. Compact presentation does not change stored receipts or permissions.
+
+MCP `content` contains a short summary, while the payload appears once in `structuredContent`. Music compact results omit thumbnails but retain action tokens, requested text, and truncation/bounds indicators. Refresh ChatGPT's tool definitions after deployment to pick up the changed schemas.
+
+`create_playlist` accepts optional `video_ids` (up to 20 IDs or HTTPS video URLs) and `duplicate_policy` (`skip`, the default, or `allow`). It creates and populates the playlist in one tool call, without a new-playlist scan or separate ownership read. Every video is validated before creation; all creation/insertion steps share one receipt. Partial resume reuses the created playlist and skips completed insertions; ambiguous writes remain blocked from automatic resume. This combines ChatGPT tool calls, not Google's per-entry write requests. Duplicate skipping here applies to repeated IDs in the initial input list.
+
+`search_tracks` returns IDs, titles, and channels using one uncached search call. Set `include_details: true` to fetch durations with an additional metadata call. `response_detail: "full"` changes presentation only; it does not implicitly enable enrichment. Prefer known video IDs and reuse returned IDs to avoid repeat search and read-back calls.
+
+Remove/move preflight fetches only the requested playlist-item IDs and verifies their playlist membership. Move bounds use fresh playlist metadata. Duplicate checks when adding to an existing playlist still require the bounded full scan; unrelated caching and transport behavior are unchanged.
+
 `get_connection_status`, `get_usage_status`, `get_operation`, `list_playlists`, `get_playlist`, `search_tracks`, `create_playlist`, `update_playlist`, `add_tracks`, `remove_tracks`, `move_track`, and `delete_playlist`.
 
 Likes and subscriptions: `list_liked_tracks`, `get_track_ratings`, `rate_track`, `list_subscriptions`, `subscribe_artist`, and `unsubscribe_artist`.

@@ -110,6 +110,8 @@ The application sends `Referrer-Policy: same-origin` and permits form redirects 
 
 ## Suggested first request
 
+Refresh tools after deploying the compact-result and create-with-tracks changes. Read results default to compact; use `response_detail: "full"` only when descriptions, raw fields, or full receipts are needed. Search enrichment is separately controlled by `include_details: true`. Ask ChatGPT to reuse returned IDs and combine creation with initial `video_ids` rather than issuing create, add, and read-back calls by habit.
+
 > Use the YouTube playlist integration to show my connected channel and observed usage. Create a private disposable playlist named MCP Test, add this known music video, list its entries, and show me the YouTube Music link. Use a stable operation key for each change.
 
 Then manually inspect Music playback, move/remove an entry, and delete only the disposable playlist. ChatGPT's own write confirmations are handled by ChatGPT; tool annotations do not replace permission checks on the server.

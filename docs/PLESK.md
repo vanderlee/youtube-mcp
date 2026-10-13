@@ -76,6 +76,8 @@ Run as the same subscription account with storage access. This cleans expired ca
 
 ## Smoke checks
 
+After deploying tool-schema changes, refresh the ChatGPT connection's tools. Verify compact `structuredContent` and short text summaries in a real ChatGPT conversation. Local payload-size tests demonstrate smaller serialized results; actual model-token savings depend on the client and are not inferred from PHP timings. No new environment settings or database migrations are required for these result-shaping and playlist workflow changes.
+
 - `/health/live` and `/health/ready` return JSON without credentials.
 - Root dashboard allows Google sign-in over HTTPS.
 - Metadata endpoints return the exact public URLs.
