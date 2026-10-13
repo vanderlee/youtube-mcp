@@ -156,5 +156,8 @@ final class MusicOAuth
     private function requireConfiguration(): void
     {
         if (!$this->configured()) { throw new ServiceError('MUSIC_OAUTH_SETUP_REQUIRED', 'Configure MUSIC_OAUTH_CLIENT_ID and MUSIC_OAUTH_CLIENT_SECRET for a TVs and Limited Input devices client.', [], 503); }
+        if (!$this->db->one("SELECT name FROM sqlite_master WHERE type='table' AND name='music_connections'")) {
+            throw new ServiceError('DEPLOYMENT_MIGRATION_REQUIRED', 'Music storage is not initialized. The operator must run php bin/console.php init from the deployed project root as the subscription user, then restart Music authorization.', [], 503);
+        }
     }
 }

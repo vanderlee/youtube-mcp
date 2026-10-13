@@ -32,6 +32,8 @@ Live Music access with this deployment's Google grant is **not established by lo
 
 ## Permissions and tools
 
+Music device authorization requires storage migration `003_music_connections.sql`. A missing Music table returns `DEPLOYMENT_MIGRATION_REQUIRED` before contacting Google; the operator must run `php bin/console.php init` from the deployed project root as the subscription user and restart authorization. See [Plesk database troubleshooting](PLESK.md#database-failure-during-music-device-authorization) for safe diagnostics and repair.
+
 Read tools accept `response_detail: "compact"` (default) or `"full"`. Compact Music results omit thumbnails while preserving account-bound action tokens, requested text, and explicit prefix/truncation indicators. This option is handled at the MCP presentation boundary; it does not broaden permissions or fetch additional upstream pages. MCP text contains a short summary and the actual payload is in `structuredContent`.
 
 | Permission | Tools |

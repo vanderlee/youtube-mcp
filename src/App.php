@@ -126,7 +126,7 @@ final class App
                         'error_class' => get_class($e),
                         'file' => basename($e->getFile()),
                         'line' => $e->getLine()
-                    ]
+                    ] + ($e instanceof \PDOException ? Database::errorDetails($e) : [])
                 )
             );
             $response = $this->json(

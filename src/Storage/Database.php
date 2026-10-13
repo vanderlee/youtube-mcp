@@ -6,10 +6,36 @@ namespace YouTubeMusicMcp\Storage;
 
 use PDO;
 use PDOStatement;
+use PDOException;
 use Throwable;
 
 final class Database
 {
+    /** Never include raw driver messages: they can contain paths or stored values. */
+    public static function errorDetails(PDOException $error): array
+    {
+        $message = strtolower($error->getMessage());
+        $reason = match (true) {
+            str_contains($message, 'no such table:') => 'missing_table',
+            str_contains($message, 'no such column:') => 'missing_column',
+            str_contains($message, 'readonly database') => 'readonly_database',
+            str_contains($message, 'database is locked') => 'database_locked',
+            str_contains($message, 'database or disk is full') => 'storage_full',
+            str_contains($message, 'constraint failed') => 'constraint_failed',
+            str_contains($message, 'columns but') => 'column_count_mismatch',
+            default => 'unclassified',
+        };
+        $details = ['database_reason' => $reason, 'database_sqlstate' => (string)($error->errorInfo[0] ?? $error->getCode())];
+        if (isset($error->errorInfo[1]) && is_numeric($error->errorInfo[1])) {
+            $details['database_driver_code'] = (int)$error->errorInfo[1];
+        }
+        if ($reason === 'missing_table' && preg_match('/no such table: ([a-z_]+)/', $message, $match)
+            && in_array($match[1], ['music_connections', 'google_connections', 'oauth_tokens', 'quota_windows', 'quota_requests'], true)) {
+            $details['database_table'] = $match[1];
+        }
+        return $details;
+    }
+
     public readonly PDO $pdo;
 
     public function __construct(string $path)

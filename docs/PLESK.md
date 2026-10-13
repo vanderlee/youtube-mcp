@@ -257,6 +257,14 @@ The initial implementation supports a single Plesk host with local SQLite and fi
 
 ## Troubleshooting browser authorization
 
+### Database failure during Music device authorization
+
+A `PDOException` during POST `/music/poll` is a local database failure; it does not establish a Google authorization rejection. Correlate the request ID with the operator log. Database errors now include safe `database_reason`, `database_sqlstate` and `database_driver_code` fields; recognized missing tables also include `database_table`. Raw driver messages, stored values and filesystem paths are not logged.
+
+Music authorization checks that `music_connections` exists before requesting or consuming a device grant. `DEPLOYMENT_MIGRATION_REQUIRED` means migration `003_music_connections.sql` has not initialized that storage. From the deployed project root, run `/opt/plesk/php/8.5/bin/php bin/console.php init` as the subscription user (select the domain's actual PHP CLI version), then restart Music authorization from the dashboard. The deployment hook already runs initialization; inspect `deploy.log` if a deployment did not complete. Initialization preserves existing credentials and keys and applies only unapplied migrations. Do not delete the database or regenerate `APP_KEY`.
+
+For `readonly_database`, check ownership and write permissions of both SQLite files and their private directory under the PHP-FPM user; for `database_locked`, investigate concurrent local writers. A generic `PDOException` without these fields is insufficient to distinguish these causes. Verify Music authorization and endpoint access separately after repair.
+
 ### Identify the failing layer
 
 Use Plesk's domain Logs view or HTTPS access/error logs. Common filenames are `access_ssl_log`, `proxy_access_ssl_log`, and `error_log`; locations vary by installation. Correlate endpoint, time, HTTP status, and application request ID. Keep authentication payloads and raw callback query strings private.
