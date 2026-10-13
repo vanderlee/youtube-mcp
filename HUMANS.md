@@ -8,6 +8,7 @@
 - Add full support for all YouTube Music API's.
 - Simply rollout on Plesk (Docker?).
 - Enable easy rollout on other platforms.
+- Use included PHP files as templates for the HTML in APP.php
 
 ## Ongoing
 

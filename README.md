@@ -1,5 +1,7 @@
 # YouTube Music MCP service
 
+The dashboard distinguishes saved Music authorization (**Reconnect YouTube Music**) from a missing current connection (**Connect YouTube Music**). Stored authorization and successful Music endpoint access remain separate checks.
+
 Music HTTP 400 troubleshooting: the OAuth transport uses a minimal request profile, reported as `music_request_profile=oauth_minimal_v1` in errors. Deploying this transport change needs no new consent; see [Music request details](docs/MUSIC.md#runtime-and-authorization).
 
 A multi-user PHP service for managing YouTube playlists and accessing YouTube Music from ChatGPT. Each user signs in with Google, authorizes their own YouTube channel, and grants ChatGPT separate service permissions. Google credentials stay on the server.

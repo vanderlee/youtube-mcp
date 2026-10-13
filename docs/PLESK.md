@@ -259,6 +259,8 @@ The initial implementation supports a single Plesk host with local SQLite and fi
 
 ### Database failure during Music device authorization
 
+After successful Music consent, the dashboard displays **Authorization saved** and **Reconnect YouTube Music** for a current channel-bound connection. **Connect YouTube Music** indicates that no matching current connection is stored. This dashboard status does not confirm successful Music endpoint access.
+
 If Music reads still return HTTP 400 after successful authorization, deploy the minimal OAuth request profile and retry `get_music_account` with the existing connection. Its errors include `music_request_profile=oauth_minimal_v1`; absence of that marker means the new profile was not used. This profile removes redundant client headers and body visitor context. It requires no new permissions, migration or consent and does not guarantee upstream acceptance. See [Music request details](MUSIC.md#runtime-and-authorization).
 
 After upgrading from the generic Google device flow to the YouTube-specific device flow, start **Connect YouTube Music** again and reconnect ChatGPT after consent. Previously saved tokens are not automatically replaced. A successful `/music/poll` response or `music_device_connected: true` confirms stored authorization, not Music endpoint compatibility; verify `get_music_account` and `get_music_history` separately. See [Music authorization](MUSIC.md#separate-music-device-oauth-for-rejected-web-client-tokens).

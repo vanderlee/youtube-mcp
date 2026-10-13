@@ -386,8 +386,7 @@ final class App
         }
         $body .= '</div></section>';
         if ($c && $this->musicOAuth->configured()) {
-            $body .= '<section class="card"><h2>YouTube Music authorization</h2><p class="muted">Authorize Music separately for the same channel. This uses a dedicated Google client and does not change playlist contents.</p>'
-                . $this->form('/music/connect', 'Connect YouTube Music') . $this->form('/music/disconnect', 'Disconnect Music') . '</section>';
+            $body .= $this->musicAuthorizationCard($user);
         }
         $usage = $this->budget->status($user);
         $body .= '<section class="card"><h2>Observed usage</h2><dl class="usage"><div><dt>General units</dt><dd>' . number_format(
@@ -419,6 +418,20 @@ final class App
             ['Content-Type' => 'application/json'],
             json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)
         );
+    }
+
+    private function musicAuthorizationCard(string $user): string
+    {
+        $connected = $this->musicOAuth->status($user, $this->google->connection($user))['music_device_connected'];
+        $body = '<section class="card"><h2>YouTube Music authorization</h2><p class="status' . ($connected ? ' connected' : '') . '">'
+            . ($connected ? 'Authorization saved' : 'Not connected') . '</p><p class="muted">'
+            . ($connected ? 'Music authorization is saved for your confirmed channel. Music endpoint access still needs to be verified.'
+                : 'Authorize YouTube Music for your confirmed channel.') . '</p><div class="actions">'
+            . $this->form('/music/connect', $connected ? 'Reconnect YouTube Music' : 'Connect YouTube Music');
+        if ($connected) {
+            $body .= $this->form('/music/disconnect', 'Disconnect Music');
+        }
+        return $body . '</div></section>';
     }
 
     private function musicAuthorizationPage(array $flow): ResponseInterface

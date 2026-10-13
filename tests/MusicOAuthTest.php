@@ -69,6 +69,37 @@ uses(MusicOAuthFixtures::class);
 beforeEach(function (): void { $this->dir = $this->tempDir(); });
 afterEach(function (): void { gc_collect_cycles(); $this->removeDir($this->dir); });
 
+test('dashboard music actions follow the current users bound authorization state', function (): void {
+    [$provider, $db, $http, $youtube, $cfg, $google] = $this->environment([$this->codeResponse(), $this->tokenResponse()]);
+    $reflection = new \ReflectionClass(\YouTubeMusicMcp\App::class);
+    $app = $reflection->newInstanceWithoutConstructor();
+    $reflection->getProperty('musicOAuth')->setValue($app, $provider);
+    $reflection->getProperty('google')->setValue($app, $google);
+    $render = $reflection->getMethod('musicAuthorizationCard');
+    $previousSession = $_SESSION ?? null;
+    $_SESSION = ['csrf' => 'dummy-csrf'];
+    try {
+        $html = $render->invoke($app, 'u1');
+        $this->assertStringContainsString('Connect YouTube Music', $html);
+        $this->assertStringNotContainsString('Disconnect Music', $html);
+        $flow = $provider->begin('u1');
+        $flow['next_poll_at'] = 0;
+        $this->assertTrue($provider->poll('u1', $flow));
+        $html = $render->invoke($app, 'u1');
+        $this->assertStringContainsString('Authorization saved', $html);
+        $this->assertStringContainsString('Reconnect YouTube Music', $html);
+        $this->assertStringContainsString('Disconnect Music', $html);
+        $this->assertStringContainsString('endpoint access still needs to be verified', $html);
+        $this->assertStringNotContainsString('Reconnect YouTube Music', $render->invoke($app, 'u2'));
+        $db->execute('UPDATE google_connections SET generation=? WHERE user_id=?', ['replacement', 'u1']);
+        $html = $render->invoke($app, 'u1');
+        $this->assertStringContainsString('Not connected', $html);
+        $this->assertStringNotContainsString('Disconnect Music', $html);
+    } finally {
+        if ($previousSession === null) { unset($_SESSION); } else { $_SESSION = $previousSession; }
+    }
+});
+
 test('missing music migration stops authorization before requesting or consuming a device grant', function (): void {
     [$provider, $db, $http] = $this->environment([]);
     $db->execute('DROP TABLE music_connections');
