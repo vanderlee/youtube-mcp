@@ -338,7 +338,28 @@ class Api
         return $results;
     }
 
-    private function request(string $endpoint, array $body, string $token, bool $write = false): array
+    public function compareHeaders(string $token): array
+    {
+        if ($token === '') { throw new ServiceError('MUSIC_CONNECT_REQUIRED', 'A Music token is required.'); }
+        $profile = $this->bootstrap->load($this->config);
+        $baseline = $this->headers($token, $profile);
+        $results = [];
+        foreach (['baseline' => null, 'without_origin' => 'Origin:', 'without_visitor' => 'X-Goog-Visitor-Id:',
+            'without_request_time' => 'X-Goog-Request-Time:', 'without_consent_cookie' => 'Cookie:'] as $name => $remove) {
+            $headers = $remove === null ? $baseline : array_values(array_filter($baseline,
+                static fn(string $header): bool => !str_starts_with($header, $remove)));
+            try {
+                $data = $this->request('browse', ['browseId' => 'FEmusic_home'], $token, false, $headers);
+                $results[$name] = ['accepted' => true, 'contents_present' => isset($data['contents'])];
+            } catch (ServiceError $error) {
+                $results[$name] = ['accepted' => false, 'code' => $error->reason] + Diagnostics::safe($error->details);
+                if (in_array($error->reason, ['MUSIC_UNAVAILABLE', 'MUSIC_RATE_LIMITED'], true)) { break; }
+            }
+        }
+        return $results;
+    }
+
+    private function request(string $endpoint, array $body, string $token, bool $write = false, ?array $probeHeaders = null): array
     {
         $profile = $this->bootstrap->load($this->config);
         $client = [
@@ -355,7 +376,7 @@ class Api
             $r = $this->http->request(
                 'POST',
                 'https://music.youtube.com/youtubei/v1/' . $endpoint . '?alt=json',
-                $this->headers($token, $profile),
+                  $probeHeaders ?? $this->headers($token, $profile),
                 json_encode($body, JSON_THROW_ON_ERROR)
             );
         } catch (ServiceError $error) {

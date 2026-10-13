@@ -144,6 +144,21 @@ trait MusicApiTestHelpers
 
 uses(MusicApiTestHelpers::class);
 
+test('header probe changes one header per read and preserves body and credentials', function (): void {
+    [$api, $http] = $this->api(array_fill(0, 5, $this->ok(['contents' => ['private' => 'hidden']])));
+    $report = $api->compareHeaders('dummy-token');
+    $this->assertCount(5, $http->calls);
+    foreach (array_slice($http->calls, 1) as $call) {
+        $this->assertSame($http->calls[0][3], $call[3]);
+        $this->assertSame($http->calls[0][1], $call[1]);
+        $this->assertContains('Authorization: Bearer dummy-token', $call[2]);
+        $this->assertCount(1, array_diff($http->calls[0][2], $call[2]));
+        $this->assertSame([], array_diff($call[2], $http->calls[0][2]));
+    }
+    $this->assertStringNotContainsString('hidden', json_encode($report));
+    $this->assertStringNotContainsString('dummy-token', json_encode($report));
+});
+
 test('operator comparison uses identical bounded reads with only authorization differing', function (): void {
     [$api, $http] = $this->api([
         $this->ok(['contents' => ['private-account-value' => 'do-not-print']]),

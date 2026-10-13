@@ -18,6 +18,8 @@ if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 $channel = $argv[1] ?? '';
+$headerProbe = ($argv[2] ?? '') === '--headers';
+if (isset($argv[2]) && !$headerProbe) { fwrite(STDERR, "Unknown option. Use --headers.\n"); exit(2); }
 if (!preg_match('/^UC[A-Za-z0-9_-]{22}$/D', $channel)) {
     fwrite(STDERR, "Usage: php bin/music-probe.php CHANNEL_ID\nRun as the subscription user from the deployed project. No secrets belong in arguments.\n");
     exit(2);
@@ -43,11 +45,12 @@ try {
     if (!$music->configured()) {
         throw new ServiceError('MUSIC_OAUTH_SETUP_REQUIRED', 'Separate Music OAuth must be configured.');
     }
-    $report = $locks->run('account:' . $user, function () use ($music, $google, $user, $config, $http) {
+    $report = $locks->run('account:' . $user, function () use ($music, $google, $user, $config, $http, $headerProbe) {
         $connection = $music->connection($user, $google->connection($user));
         $token = $music->accessToken($user, $connection);
         return ['token_check' => (new MusicTokenDiagnostics($config, $http))->inspect($token)]
-            + (new MusicApi($config))->compareHome($token);
+            + ($headerProbe ? ['header_comparison' => (new MusicApi($config))->compareHeaders($token)]
+                : (new MusicApi($config))->compareHome($token));
     });
     echo json_encode($report, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
 } catch (Throwable $error) {

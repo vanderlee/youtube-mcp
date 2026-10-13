@@ -1,5 +1,7 @@
 # YouTube Music MCP service
 
+Use `php bin/music-probe.php CHANNEL_ID --headers` as the subscription user for a bounded authenticated header comparison. It reports sanitized results and does not change the normal request profile.
+
 The operator Music probe includes sanitized token-client, scope and expiry checks. Run it as the Plesk subscription user; credentials are never printed.
 
 Operators can compare anonymous and authenticated Music-home reads with `php bin/music-probe.php CHANNEL_ID`; see [safe diagnostic probe](docs/MUSIC.md#operator-comparison-for-persistent-http-400).
