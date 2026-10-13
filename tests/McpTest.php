@@ -37,7 +37,7 @@ final class McpTest extends TestCase
         $list=$this->rpc(['jsonrpc'=>'2.0','id'=>2,'method'=>'tools/list'],$session);
         self::assertSame(200,$list->getStatusCode(),(string)$list->getBody()); self::assertStringContainsString('add_tracks',(string)$list->getBody());
         $usage=$this->rpc(['jsonrpc'=>'2.0','id'=>3,'method'=>'tools/call','params'=>['name'=>'get_usage_status','arguments'=>new \stdClass()]],$session);
-        self::assertSame(200,$usage->getStatusCode(),(string)$usage->getBody()); self::assertStringContainsString('user_remaining',(string)$usage->getBody());
+        self::assertSame(200,$usage->getStatusCode(),(string)$usage->getBody()); self::assertStringContainsString('quota_enforced_by',(string)$usage->getBody());
     }
     public function testUnauthorizedEndpointReturnsDiscoveryChallenge(): void
     {
@@ -69,3 +69,4 @@ final class McpTest extends TestCase
         }
     }
 }
+

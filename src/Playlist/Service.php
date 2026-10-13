@@ -44,7 +44,6 @@ final class Service
         if ($tool === 'get_operation') {
             return $this->receipts->get($user, $a['operation_id']);
         }
-        $this->budget->rate($user);
         $c = $this->google->connection($user);
         if ($tool === 'get_connection_status') {
             return ['connected' => true, 'channel_id' => $c['channel_id'], 'channel_name' => $c['channel_name']];

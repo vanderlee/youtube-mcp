@@ -7,7 +7,7 @@ use YouTubeMcp\Storage\Database;
 final class ConcurrencyTest extends TestCase
 {
     use Fixture;
-    public function testSeparatePhpWorkersCannotOverReserveTheProject(): void
+    public function testSeparatePhpWorkersAreNotLocallyQuotaLimited(): void
     {
         $dir=$this->tempDir(); $db=new Database($dir.'/test.sqlite'); $db->migrate(dirname(__DIR__)); unset($db);
         $ini=php_ini_loaded_file(); $flags=[];
@@ -21,7 +21,8 @@ final class ConcurrencyTest extends TestCase
             }
             $results=[];
             foreach ($workers as [$process,$pipes]) { $results[]=stream_get_contents($pipes[1]); $error=stream_get_contents($pipes[2]); fclose($pipes[1]); fclose($pipes[2]); self::assertSame(0,proc_close($process),$error); }
-            $workers=[]; sort($results); self::assertSame(['SERVICE_BUDGET_EXCEEDED','admitted'],$results);
+            $workers=[]; sort($results); self::assertSame(['admitted','admitted'],$results);
         } finally { foreach ($workers as [$process,$pipes]) { foreach ($pipes as $p) { fclose($p); } proc_close($process); } $this->removeDir($dir); }
     }
 }
+

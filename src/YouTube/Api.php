@@ -77,20 +77,18 @@ class Api
             }
             $reason = (string)($data['error']['errors'][0]['reason'] ?? 'unknown');
             if (in_array($reason, ['quotaExceeded', 'dailyLimitExceeded'], true)) {
-                $this->budget->trip($bucket, true);
                 throw new ServiceError(
                     'YOUTUBE_QUOTA_EXHAUSTED',
                     'YouTube daily quota is exhausted.',
-                    ['bucket' => $bucket, 'retry_at' => gmdate('c', $this->budget->reset())],
+                    ['bucket' => $bucket, 'upstream_reason' => $reason],
                     429
                 );
             }
             if ($status === 429 || in_array($reason, ['rateLimitExceeded', 'userRateLimitExceeded'], true)) {
-                $this->budget->trip($bucket, false);
                 throw new ServiceError(
                     'YOUTUBE_RATE_LIMITED',
-                    'YouTube is throttling requests. Retry after the cooldown.',
-                    ['upstream_reason' => $reason, 'retry_at' => gmdate('c', $this->budget->now() + 60)],
+                    'YouTube is throttling requests. Retry later.',
+                    ['upstream_reason' => $reason],
                     429
                 );
             }

@@ -67,11 +67,11 @@ final class PlaylistTest extends TestCase
         $r=$s->execute('u1',['playlists.write'],'remove_tracks',['playlist_id'=>'PLtest123456','playlist_item_ids'=>['second'],'operation_key'=>'key-1234']);
         self::assertSame('completed',$r['status']); self::assertSame(['id'=>'second'],$api->calls[2][1]);
     }
-    public function testOverBudgetBatchDispatchesNoWrites(): void
+    public function testLegacyBudgetDoesNotBlockBatchWrites(): void
     {
-        [$s,$api]=$this->service([$this->metadata()],['USER_QUOTA_GENERAL'=>'50']);
+        [$s,$api]=$this->service([$this->metadata(),[],[]],['USER_QUOTA_GENERAL'=>'50']);
         $r=$s->execute('u1',['playlists.write'],'add_tracks',['playlist_id'=>'PLtest123456','video_ids'=>['aaaaaaaaaaa','bbbbbbbbbbb'],'duplicate_policy'=>'allow','operation_key'=>'key-1234']);
-        self::assertSame('USER_BUDGET_EXCEEDED',$r['error']['code']); self::assertCount(1,$api->calls);
+        self::assertSame('completed',$r['status']); self::assertCount(3,$api->calls);
     }
     public function testSuccessfulMutationReplayConsumesNoApiRequests(): void
     {

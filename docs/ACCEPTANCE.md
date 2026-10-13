@@ -1,4 +1,4 @@
-# Live acceptance checklist
+﻿# Live acceptance checklist
 
 Automated tests cover local protocol, OAuth, isolation, accounting, and mocked upstream responses. These live checks are pending because no Google credentials, public deployment, or ChatGPT account connection has been configured in this workspace.
 
@@ -31,7 +31,7 @@ Do not expand to production users if this gate fails. Record the case and adjust
 - [ ] Remove exactly one duplicate occurrence using its playlist-item ID.
 - [ ] Move one entry and verify actual order.
 - [ ] Replay a completed operation key and confirm no duplicate mutation.
-- [ ] Reject an over-budget batch before new writes.
+- [ ] Verify legacy local quota settings do not block writes; return actual YouTube quota errors without automatic retries.
 - [ ] Verify a controlled partial failure/resume, using mocks or a dedicated test project rather than exhausting shared production quota.
 - [ ] Delete the disposable playlist.
 
@@ -47,3 +47,4 @@ Do not expand to production users if this gate fails. Record the case and adjust
 ## Release record
 
 Record date, operator, test account/channel IDs (privately), tested deployment/runtime, observed costs, Music availability exceptions, and unresolved issues. This file should remain explicit about pending checks until evidence exists.
+

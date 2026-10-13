@@ -1,4 +1,4 @@
-# Google and ChatGPT setup
+﻿# Google and ChatGPT setup
 
 ## Google Cloud
 
@@ -7,7 +7,7 @@
 3. Create OAuth credentials of type Web application.
 4. Register exactly `https://YOUR_DOMAIN/google/callback` as the authorized redirect URI.
 5. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in private `.env` configuration.
-6. Review the actual project quota buckets in Cloud Console and set `QUOTA_GENERAL`, `QUOTA_SEARCH`, and any method-cost overrides accordingly.
+6. Review actual project quotas in Cloud Console. YouTube enforces limits; local counters are informational.
 
 The app requests `openid email profile` for sign-in. Connecting YouTube additionally requests `https://www.googleapis.com/auth/youtube.force-ssl` with offline access. This is broader than playlist-only permission: Google has no separate playlist-only scope in this implementation. Explain this scope honestly in consent/setup materials.
 
@@ -55,3 +55,4 @@ Reference: [OpenAI custom MCP connection guide](https://developers.openai.com/ap
 > Use the YouTube playlist integration to show my connected channel and remaining usage. Create a private disposable playlist named MCP Test, add this known music video, list its entries, and show me the YouTube Music link. Use a stable operation key for each change.
 
 Then manually inspect Music playback, move/remove an entry, and delete only the disposable playlist. ChatGPT's own write confirmations are handled by ChatGPT; tool annotations do not replace permission checks on the server.
+

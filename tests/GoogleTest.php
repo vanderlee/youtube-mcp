@@ -14,7 +14,7 @@ final class GoogleTest extends TestCase
     private string $dir;
     protected function setUp(): void { $this->dir=$this->tempDir(); }
     protected function tearDown(): void { $this->removeDir($this->dir); }
-    public function testDeletingAndRecreatingUserDoesNotResetDailyUserBudget(): void
+    public function testDeletingAndRecreatingUserPreservesUsageHistory(): void
     {
         $db=$this->database(); $cfg=$this->config(['ALLOW_REGISTRATION'=>'true']);
         $g=new Google($cfg,$db,new Vault($cfg->get('APP_KEY')),new Client(),new Lock($this->dir));
@@ -40,3 +40,4 @@ final class GoogleTest extends TestCase
         $this->expectException(ServiceError::class); $g->signIn(['subject'=>'issuer|other','email'=>'other@example.test']);
     }
 }
+

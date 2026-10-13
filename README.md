@@ -1,4 +1,4 @@
-# YouTube playlist MCP service
+﻿# YouTube playlist MCP service
 
 A multi-user PHP service for managing YouTube playlists from ChatGPT. Each user signs in with Google, authorizes their own YouTube channel, and grants ChatGPT separate service permissions. Google credentials stay on the server.
 
@@ -10,7 +10,7 @@ This is an initial implementation with automated local verification. It has **no
 - Google sign-in, invite-only onboarding, explicit channel confirmation, offline token refresh, and encrypted credentials.
 - OAuth authorization code with PKCE S256, expiring service tokens, refresh rotation, revocation, and audience validation.
 - Playlist listing, inspection, search, creation, metadata updates, track addition/removal/movement, and deletion.
-- Separate daily search and general quota buckets, project and user budgets, persistent reservations, circuit breakers, cache-aware accounting, and operator threshold logs.
+- Informational, cache-aware daily usage estimates; YouTube enforces quotas and rate limits.
 - Mutation receipts, explicit partial resume, and protection against replay of completed operations.
 - PHP-FPM hosting in Plesk, SQLite storage, no Docker or background worker.
 
@@ -56,16 +56,11 @@ Use actual 11-character video IDs. Keep the same operation key and arguments whe
 
 Keys are scoped to the active connection generation. Reconnecting Google starts a new namespace: inspect previous receipts before submitting the same requested change again after reconnecting.
 
-## Usage limits
+## Usage reporting
 
-Defaults are 10,000 general project units and a separate 100 search calls daily, with 10% service headroom. Each user receives a service limit of 1,500 general units and 10 uncached searches; general writes also leave a 200-unit project reserve for reads/recovery. These values are configurable service policies and estimates, not guaranteed upstream allocations.
+YouTube enforces project quotas and rate limits. The app does not impose project/user budgets, headroom, reservation admission limits, local circuit breakers, or tool-call throttling. Legacy QUOTA_*, USER_QUOTA_*, and MCP_CALLS_PER_MINUTE settings are ignored.
 
-Adding 20 tracks costs 1,000 write units, plus preflight reads. Creating the playlist costs another 50. All users share the configured project's quotas. Bulk calls do not reduce costs, each page/retry counts, and small response fields reduce bandwidth rather than quota.
-
-Daily windows use `America/Los_Angeles`. On daily exhaustion, the affected bucket stops until reset; other eligible buckets remain available. No writes automatically resume after reset. Local accounting cannot see unrelated project usage; compare it with Google Cloud's quota console. The gateway emits threshold events at 70%, 85%, and 95% to the PHP error log.
-
-Configuration uses the defaults verified on 2026-10-13. Recheck Google's [method costs](https://developers.google.com/youtube/v3/determine_quota_cost) and your project's console before deployment. `QUOTA_METHOD_COSTS` can override individual positive integer method costs using JSON.
-
+Usage status reports estimates for requests observed by this installation, grouped by Pacific day. It cannot determine remaining YouTube quota or see other project traffic. Actual YouTube quota/rate-limit errors are returned to the caller without automatic retries. Operation receipts, ownership checks, bounded batches, and time limits remain active.
 ## Development and tests
 
 ```sh
@@ -95,3 +90,4 @@ For a local HTTP smoke test only, run `php -S 127.0.0.1:8080 -t public public/ro
 - Uncertain mutations require manual reconciliation. Exactly-once changes cannot be guaranteed by the upstream API.
 
 See [PLAN.md](PLAN.md) for the design and [operations guide](docs/OPERATIONS.md) for recovery and maintenance.
+

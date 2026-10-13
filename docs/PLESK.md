@@ -1,4 +1,4 @@
-# Direct PHP installation in Plesk
+﻿# Direct PHP installation in Plesk
 
 ## Domain and runtime
 
@@ -111,7 +111,7 @@ Complete these steps after uploading the application and setting the document ro
 - Create a Web application OAuth client.
 - Register exactly `https://YOUR_DOMAIN/google/callback` as its redirect URI.
 - Put its client ID and secret into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env`.
-- Check the actual project quota limits in Google Cloud Console. Set `QUOTA_GENERAL`, `QUOTA_SEARCH`, user budgets, and any method-cost overrides accordingly.
+- Check actual project quotas in Google Cloud Console. YouTube enforces limits; the app reports observed usage only. Legacy quota settings are ignored.
 - Decide whether Testing mode is sufficient. YouTube authorizations in Testing mode have refresh-token expiry restrictions; consult [CONNECTIONS.md](CONNECTIONS.md) before ongoing use or broader rollout.
 
 ### 3. Initialize storage and protect files
@@ -138,7 +138,7 @@ php bin/console.php init
 - Sign in through the dashboard using an invited Google identity.
 - Select Connect YouTube account and grant offline YouTube access.
 - Select the intended channel in Google's consent flow and confirm its displayed name/ID in the dashboard.
-- Verify the usage panel shows the expected user limits and reset time.
+- Verify the usage panel shows observed usage and `quota_enforced_by: youtube`. Remaining quota is unknown.
 - Keep the first tests restricted to disposable private playlists.
 
 ### 6. Connect ChatGPT
@@ -170,9 +170,9 @@ php bin/console.php client:create https://EXACT_CALLBACK_URI ChatGPT
 
 - Add the hourly Plesk scheduled cleanup task described above and run it once manually.
 - Confirm the task's CLI version, environment/configuration, permissions, and absolute paths are correct.
-- Monitor PHP error logs for quota threshold events, bootstrap errors, and request IDs associated with failures.
+- Monitor PHP error logs for bootstrap errors and request IDs associated with failures.
 - Compare estimated usage with Google Cloud Console after the first workflows.
-- Confirm unused reservations recover after interruption and no scheduled task replays pending writes.
+- Confirm no scheduled task replays pending writes; obsolete quota reservations are removed by cleanup.
 - Confirm PHP/proxy timeouts accommodate the bounded operations; reduce batch size if the hosting limits are shorter.
 - Set up consistent private-state backups and perform a test restore before depending on the service.
 
@@ -202,3 +202,4 @@ The initial implementation supports a single Plesk host with local SQLite and fi
 - Watch HTTPS access logs (`access_ssl_log` and, where present, `proxy_access_ssl_log`) along with `error_log`. An initial `/mcp` 401 is expected; discovery should return 200, registration 201, and the token exchange 200.
 - A reconnect revokes existing service tokens. Reconnect ChatGPT afterward. Without `playlists.write` consent the connection is read-only.
 - Google and service authorization state is stored in the browser session and expires after ten minutes. Complete one authorization flow at a time in a browser; starting another flow in a second tab replaces the pending state.
+

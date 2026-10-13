@@ -25,6 +25,7 @@ final class ApiTest extends TestCase
         $http=new class extends Client { public int $calls=0; public function request(string $method,string $url,array $headers=[],?string $body=null): array { $this->calls++; return ['status'=>403,'data'=>['error'=>['errors'=>[['reason'=>'quotaExceeded']]]]]; } };
         $api=new Api($http,$budget,$db);
         for ($n=0;$n<2;$n++) { try { $api->call('a','search.list',token:'test'); self::fail(); } catch (ServiceError $e) { self::assertSame('YOUTUBE_QUOTA_EXHAUSTED',$e->reason); } }
-        self::assertSame(1,$http->calls);
+        self::assertSame(2,$http->calls);
     }
 }
+

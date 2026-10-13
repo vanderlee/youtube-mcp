@@ -53,23 +53,6 @@ final class Config
         if ($key === false || strlen($key) !== 32) {
             throw new RuntimeException('APP_KEY must be a base64 encoded 32-byte key.');
         }
-        foreach (
-            [
-                'QUOTA_GENERAL' => 10000,
-                'QUOTA_SEARCH' => 100,
-                'USER_QUOTA_GENERAL' => 1500,
-                'USER_QUOTA_SEARCH' => 10,
-                'MCP_CALLS_PER_MINUTE' => 10
-            ] as $name => $default
-        ) {
-            if ($this->int($name, $default) < 1) {
-                throw new RuntimeException($name . ' must be positive.');
-            }
-        }
-        $headroom = (float)$this->get('QUOTA_HEADROOM', '0.10');
-        if ($headroom < 0 || $headroom >= 1) {
-            throw new RuntimeException('Invalid QUOTA_HEADROOM.');
-        }
     }
 
     public function url(): string

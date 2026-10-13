@@ -35,7 +35,7 @@ final class Tools
         $specs = [
             'get_connection_status' => ['Show the connected YouTube channel.', [], []],
             'get_usage_status' => [
-                'Show your estimated daily budget and service availability. Local only; use this before expensive tasks.',
+                'Show locally observed daily usage estimates. YouTube enforces quotas; remaining quota is not known to this service.',
                 [],
                 []
             ],

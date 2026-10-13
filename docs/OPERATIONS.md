@@ -1,17 +1,10 @@
-# Operations and recovery
+﻿# Operations and recovery
 
-## Quota administration
+## Usage reporting
 
-The configured Google project serves all users. Search calls and general units are tracked separately. Per-user daily limits, service headroom, and a read/recovery reserve bound ordinary traffic. Usage status exposes the user's counters and overall bucket availability, not other users' records.
+YouTube is the sole quota and rate-limit authority. The app records estimated usage but never rejects a request based on local counters, reservations, per-user limits, or a cached quota error. Each explicit request can reach YouTube; quota and rate-limit responses are returned without automatic retry. Safe GET requests may retry 5xx responses twice; ambiguous writes are never automatically retried.
 
-Method costs default to the table verified on 2026-10-13. Override changed costs through JSON, for example `QUOTA_METHOD_COSTS='{"playlistItems.insert":50}'`. Costs must be positive integers. Changing budgets does not reset charged usage.
-
-Each dispatched request is conservatively charged before networking. Failed, rejected, and ambiguous requests stay charged. A crash after accounting but before network dispatch can overestimate usage; this is preferable to silently over-admitting. Expired reservations release only their undispatched remainder; dispatch records remain charged. Reservations also refuse dispatch across their original Pacific day boundary.
-
-An upstream daily-limit response opens a bucket circuit breaker until the next Pacific midnight. A short-term rate-limit response applies a 60-second cooldown; there are no immediate retries of throttled requests. Safe GET requests can retry 5xx responses twice, with each retry charged. Writes are never automatically retried after ambiguous failures.
-
-Compare local estimates with Google Cloud Console because the project may have other traffic. Threshold events go to PHP's error log. To react to an approved upstream quota increase, update the configuration and carefully clear only the relevant breaker using operator database maintenance after confirming the new limit. No automatic override or project rotation is implemented.
-
+Compare usage estimates with Google Cloud Console. Remaining quota is unknown. Legacy quota environment settings are ignored. Cleanup removes obsolete reservations and circuit breakers while retaining request history.
 ## Mutation receipts
 
 - `completed`: repeated same key/arguments return the saved result without upstream calls.
@@ -41,7 +34,7 @@ Put the domain into maintenance mode, back up private state, deploy locked depen
 
 Audit events store user ID, action, target operation ID, outcome, and timestamp. Quota records store method/cost/state. They do not store authorization headers or Google secrets. Internal-error logs include request ID and source location without exception text, preventing an upstream payload or credential from entering logs.
 
-Deleting a service account removes its Google credentials, OAuth tokens, cached data, receipts, and audit records. Quota accounting retains anonymous internal identifiers for the daily budget/history period; it must not be reset to let account recreation evade the project cap. No plaintext email is kept in quota records. Browser-session files are private and governed by PHP session expiry/garbage collection; include them in the installation's private-storage retention policy.
+Deleting a service account removes its Google credentials, OAuth tokens, cached data, receipts, and audit records. Usage accounting retains anonymous internal identifiers for the daily history period. No plaintext email is kept in quota records. Browser-session files are private and governed by PHP session expiry/garbage collection; include them in the installation's private-storage retention policy.
 
 ## Troubleshooting
 
@@ -53,7 +46,7 @@ Deleting a service account removes its Google credentials, OAuth tokens, cached 
 | OAuth callback error | Check exact callback allowlist and resource URL, then restart authorization |
 | Google reconnect required | Re-grant offline YouTube access; inspect consent/testing configuration |
 | Wrong channel | Reconnect Google using the intended channel and then reconnect ChatGPT |
-| User/service budget exceeded | Check usage; use IDs rather than search, reduce planned changes, or wait for reset |
+| YouTube quota/rate-limit response | Inspect Google Cloud Console; retry later when upstream capacity is available |
 | Upstream quota exhausted despite local balance | Inspect Cloud Console for outside traffic and actual limits |
 | Busy operation | Retry shortly with the same operation key |
 | Uncertain/running receipt | Inspect actual YouTube state; do not blindly replay |
@@ -62,3 +55,4 @@ Deleting a service account removes its Google credentials, OAuth tokens, cached 
 ## Deferred features
 
 MariaDB support, multi-host locks, CIMD, automatic Cloud metrics reconciliation, automatic ambiguous-mutation reconciliation, background jobs, and automated key rotation are not included. Docker remains outside scope.
+
