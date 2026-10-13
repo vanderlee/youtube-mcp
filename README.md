@@ -1,5 +1,7 @@
 # YouTube Music MCP service
 
+The operator Music probe includes sanitized token-client, scope and expiry checks. Run it as the Plesk subscription user; credentials are never printed.
+
 Operators can compare anonymous and authenticated Music-home reads with `php bin/music-probe.php CHANNEL_ID`; see [safe diagnostic probe](docs/MUSIC.md#operator-comparison-for-persistent-http-400).
 
 The dashboard distinguishes saved Music authorization (**Reconnect YouTube Music**) from a missing current connection (**Connect YouTube Music**). Stored authorization and successful Music endpoint access remain separate checks.

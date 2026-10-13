@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use YouTubeMusicMcp\{Config, ServiceError};
-use YouTubeMusicMcp\Auth\{Google, MusicOAuth, Vault};
+use YouTubeMusicMcp\Auth\{Google, MusicOAuth, MusicTokenDiagnostics, Vault};
 use YouTubeMusicMcp\Http\Client;
 use YouTubeMusicMcp\Music\Api as MusicApi;
 use YouTubeMusicMcp\Quota\Budget;
@@ -11,6 +11,10 @@ use YouTubeMusicMcp\Storage\{Database, Lock};
 use YouTubeMusicMcp\YouTube\Api;
 
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
+if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+    fwrite(STDERR, "Run as the Plesk subscription user, not root.\n");
+    exit(2);
+}
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 $channel = $argv[1] ?? '';
@@ -39,10 +43,11 @@ try {
     if (!$music->configured()) {
         throw new ServiceError('MUSIC_OAUTH_SETUP_REQUIRED', 'Separate Music OAuth must be configured.');
     }
-    $report = $locks->run('account:' . $user, function () use ($music, $google, $user, $config) {
+    $report = $locks->run('account:' . $user, function () use ($music, $google, $user, $config, $http) {
         $connection = $music->connection($user, $google->connection($user));
         $token = $music->accessToken($user, $connection);
-        return (new MusicApi($config))->compareHome($token);
+        return ['token_check' => (new MusicTokenDiagnostics($config, $http))->inspect($token)]
+            + (new MusicApi($config))->compareHome($token);
     });
     echo json_encode($report, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL;
 } catch (Throwable $error) {

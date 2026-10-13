@@ -259,6 +259,8 @@ The initial implementation supports a single Plesk host with local SQLite and fi
 
 ### Database failure during Music device authorization
 
+The Music probe now prints a `token_check` section with client/audience matches, Music-scope presence and token expiry, without printing credentials or identities. Run it as the subscription user, not root. From an administrator shell, identify the subscription owner in Plesk (or inspect ownership with `stat -c '%U' /var/www/vhosts/toyls.com`), then use `sudo -u SUBSCRIPTION_USER /opt/plesk/php/8.5/bin/php bin/music-probe.php CHANNEL_ID` from the deployed project root. Replace the username, PHP version and channel ID. Unknown tokeninfo fields are `null`; a failed introspection is inconclusive. See [probe details](MUSIC.md#operator-comparison-for-persistent-http-400).
+
 For persistent Music HTTP 400 after authorization, run `/opt/plesk/php/8.5/bin/php bin/music-probe.php CHANNEL_ID` from the deployed project root as the subscription user, using the domain's actual PHP version. This compares anonymous and authenticated Music-home reads using the stored Music connection and prints sanitized JSON. It does not change playlists or history; an expired Music token may be refreshed normally. See [probe details](MUSIC.md#operator-comparison-for-persistent-http-400).
 
 After successful Music consent, the dashboard displays **Authorization saved** and **Reconnect YouTube Music** for a current channel-bound connection. **Connect YouTube Music** indicates that no matching current connection is stored. This dashboard status does not confirm successful Music endpoint access.

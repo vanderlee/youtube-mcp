@@ -36,6 +36,8 @@ Live Music access with this deployment's Google grant is **not established by lo
 
 ### Operator comparison for persistent HTTP 400
 
+The report also includes `token_check`: Google's tokeninfo endpoint is called once via a form-encoded POST, keeping the access token out of the URL. Only booleans comparing issued client and audience to `MUSIC_OAUTH_CLIENT_ID`, Music-scope presence and expiry are printed. Missing fields are `null` (unknown); non-200 tokeninfo responses report `checked: false` and status, not token invalidity. Client/subject/email identifiers and raw responses are discarded. Matching metadata does not guarantee Music endpoint support. The command refuses root execution when POSIX effective-user detection is available; run under the subscription user's identity.
+
 From the deployed project root, as the subscription user, run `php bin/music-probe.php CHANNEL_ID` with the domain's PHP CLI. The channel must match exactly one local connected service user; the probe validates the Music connection against that user's channel, connection generation and configured client under the account lock. It requires the separate Music device connection. The stored Music token may be refreshed through the existing isolated refresh mechanism.
 
 The probe sends one anonymous and one authenticated `FEmusic_home` read with the same body, client version and visitor context. It performs no playlist/library/history mutation and does not retry upstream calls. Public bootstrap is fetched once. Native transport timeouts and response-size limits apply. Output contains only acceptance/contents-presence flags and safe diagnostics, never tokens or account contents. No new environment settings are needed.
