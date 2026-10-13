@@ -204,7 +204,7 @@ final class App
                     [(string)parse_url($this->config->url(), PHP_URL_HOST), 'chatgpt.com'], $factory, $factory
                 )
             ];
-            return $server->run(
+            $response = $server->run(
                 new StreamableHttpTransport(
                     $r,
                     $factory,
@@ -213,6 +213,16 @@ final class App
                     maxBodyBytes: 65536
                 )
             );
+            if ($response->getStatusCode() === 403) {
+                $message = (string)$response->getBody();
+                error_log(json_encode([
+                    'event' => 'mcp_transport_forbidden',
+                    'host' => substr($r->getHeaderLine('Host'), 0, 512),
+                    'origin' => substr($r->getHeaderLine('Origin'), 0, 512),
+                    'reason' => in_array($message, ['Forbidden: Invalid Host header.', 'Forbidden: Invalid Origin header.'], true) ? $message : 'Other transport rejection',
+                ]));
+            }
+            return $response;
         }
         $this->session();
         if ($path === '/login') {
