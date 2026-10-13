@@ -41,12 +41,12 @@ Keep AI-facing repository instructions in `AGENTS.md`.
 ## Development and verification
 
 - Use `composer install` to install locked development dependencies. Do not edit `vendor/` or generated caches, or run a broad dependency update for an unrelated change.
-- Run `composer test` for PHP behavior changes; use a focused PHPUnit test while iterating. Add regression coverage for changed behavior, especially authorization, account isolation, receipts, and upstream failure handling.
+- Run `composer test` for PHP behavior changes; use a focused Pest test while iterating. Add regression coverage for changed behavior, especially authorization, account isolation, receipts, and upstream failure handling.
 - On the current Windows machine, the documented test invocation is:
 
   ```powershell
   $env:OPENSSL_CONF = 'C:/tools/php82/extras/ssl/openssl.cnf'
-  php -d extension=fileinfo -d extension=pdo_sqlite -d extension=sodium vendor/phpunit/phpunit/phpunit
+  php -d extension=fileinfo -d extension=pdo_sqlite -d extension=sodium vendor/bin/pest
   ```
 
   This path is machine-specific; check the installed PHP configuration if it is unavailable elsewhere.

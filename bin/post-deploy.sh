@@ -134,6 +134,9 @@ Server-side setup completed. Manual actions remaining:
   2. Complete Google Cloud API/consent/client registration if not already done.
   3. Sign in at the dashboard, grant YouTube access, and confirm your channel.
   4. Add the MCP endpoint to ChatGPT with OAuth and complete browser consent.
+     Music scope upgrade: reconnect Google with Manage your YouTube account,
+     then reconnect ChatGPT with history.read for listening history.
+     Deployment preserves existing grants; browser consent is still required.
   5. Run docs/ACCEPTANCE.md using disposable playlists and two accounts.
   6. Configure consistent backups and review actual Cloud quota usage.
 See docs/PLESK.md, docs/CONNECTIONS.md, and docs/OPERATIONS.md.

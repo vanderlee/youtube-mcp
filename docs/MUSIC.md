@@ -6,9 +6,11 @@ Catalog, Music search, discovery, personal library and listening history use a n
 
 Use the existing PHP/cURL runtime with outbound HTTPS access. Optional `MUSIC_LOCATION` is a two-letter country code such as `NL`. Optional `MUSIC_CLIENT_VERSION` overrides the default WEB_REMIX client version derived from the current UTC date.
 
-The adapter uses the calling user's server-managed Google OAuth access token; PHP continues to encrypt and refresh credentials. There is no shared Music account, browser-cookie import, separate credential file or device OAuth flow. The existing Google Web application client remains configured.
+The adapter uses the calling user's server-managed Google OAuth access token; PHP continues to encrypt and refresh credentials. Music requires the `https://www.googleapis.com/auth/youtube` grant used by the reference Music OAuth client. Earlier connections with only `youtube.force-ssl` return `GOOGLE_MUSIC_SCOPE_REQUIRED` before dispatching a Music request. Reconnect Google after deployment, grant Manage your YouTube account, confirm the selected channel and reconnect ChatGPT. Existing official API operations continue to work with the older grant.
 
-Live Music access with this deployment's Google grant is **not established by local tests**. Verify `get_music_account` against the intended Music account/channel, especially for brand accounts. `MUSIC_RECONNECT_REQUIRED` means Music rejected authorization; there is no fallback to another account. Google reconnect revokes old service tokens, so reconnect ChatGPT afterward. Unofficial endpoint and response formats can change independently of the Data API.
+There is no shared Music account, browser-cookie import, separate credential file or device OAuth flow. The existing Google Web application client remains configured. The reference Music setup uses a TVs and Limited Input devices OAuth client; matching its scope does not prove that this deployment's Web-client tokens will be accepted. Verify live Music access after fresh consent; do not repeatedly reconnect if safe diagnostics show a client/request rejection.
+
+Live Music access with this deployment's Google grant is **not established by local tests**. Verify `get_music_account` against the intended Music account/channel, especially for brand accounts. `MUSIC_RECONNECT_REQUIRED` denotes upstream 401; `MUSIC_ACCESS_DENIED` denotes 403 and does not promise that reconnecting will resolve it. There is no fallback to another account. Google reconnect revokes old service tokens, so reconnect ChatGPT afterward. Unofficial endpoint and response formats can change independently of the Data API.
 
 ## Permissions and tools
 

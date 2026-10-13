@@ -95,7 +95,7 @@ class Api
             );
             $trackingUrl = 'https://' . $parts['host'] . '/api/stats/playback?' . http_build_query($params);
             $response = $this->http->request('GET', $trackingUrl, $this->headers($accessToken));
-            $this->checkStatus($response['status'], true);
+            $this->checkStatus($response['status'], true, $response['data']);
             if ($response['status'] !== 204) {
                 throw new ServiceError('UPSTREAM_UNCERTAIN', 'Music did not confirm the history addition.', [], 502);
             }
@@ -342,10 +342,11 @@ class Api
             }
             throw $error;
         }
-        $this->checkStatus($r['status'], $write);
+        $this->checkStatus($r['status'], $write, $r['data']);
         $data = $r['data'];
         if (isset($data['error'])) {
-            throw new ServiceError('MUSIC_UPSTREAM_REJECTED', 'Music rejected the request.', [], 502);
+            throw new ServiceError('MUSIC_UPSTREAM_REJECTED', 'Music rejected the request.',
+                ['upstream_http_status' => $r['status']] + (Transport::safeError($data)['error'] ?? []), 502);
         }
         if ($write && Parser::first($data, 'showEngagementPanelEndpoint')) {
             throw new ServiceError(
@@ -371,29 +372,40 @@ class Api
         ];
     }
 
-    private function checkStatus(int $status, bool $write): void
+    private function checkStatus(int $status, bool $write, array $data = []): void
     {
-        if ($status === 401 || $status === 403) {
+        $safe = Transport::safeError($data)['error'] ?? [];
+        $details = ['upstream_http_status' => $status];
+        if (isset($safe['status'])) { $details['upstream_status'] = $safe['status']; }
+        if (isset($safe['reasons'])) { $details['upstream_reasons'] = $safe['reasons']; }
+        if (in_array('ACCESS_TOKEN_SCOPE_INSUFFICIENT', $safe['reasons'] ?? [], true)
+            || in_array('OAUTH_SCOPE_INVALID', $safe['reasons'] ?? [], true)) {
+            throw new ServiceError('GOOGLE_MUSIC_SCOPE_REQUIRED', 'Music rejected the Google token scope. Reconnect Google with the Music grant, then reconnect ChatGPT.', $details, 403);
+        }
+        if ($status === 401) {
             throw new ServiceError(
                 'MUSIC_RECONNECT_REQUIRED',
                 'Music rejected Google authorization. Reconnect and verify Music access.',
-                [],
+                $details,
                 401
             );
         }
+        if ($status === 403) {
+            throw new ServiceError('MUSIC_ACCESS_DENIED', 'Music denied access. Verify the Music account and OAuth client; reconnecting alone may not resolve this.', $details, 403);
+        }
         if ($status === 429) {
-            throw new ServiceError('MUSIC_RATE_LIMITED', 'Music is throttling requests. Retry later.', [], 429);
+            throw new ServiceError('MUSIC_RATE_LIMITED', 'Music is throttling requests. Retry later.', $details, 429);
         }
         if ($status >= 500 || ($status >= 300 && $status < 400)) {
             throw new ServiceError(
                 $write ? 'UPSTREAM_UNCERTAIN' : 'MUSIC_UNAVAILABLE',
                 'Music did not confirm the request.',
-                [],
+                $details,
                 502
             );
         }
         if ($status >= 400) {
-            throw new ServiceError('MUSIC_UPSTREAM_REJECTED', 'Music rejected the request.', [], 400);
+            throw new ServiceError('MUSIC_UPSTREAM_REJECTED', 'Music rejected the request. Use the safe upstream status/reasons to diagnose the client or request; extra MCP scopes will not fix this.', $details, 400);
         }
     }
 

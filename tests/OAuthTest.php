@@ -5,40 +5,12 @@ declare(strict_types=1);
 namespace YouTubeMusicMcp\Tests;
 
 use Nyholm\Psr7\{Response, ServerRequest};
-use PHPUnit\Framework\TestCase;
 use YouTubeMusicMcp\Auth\{OAuth, User};
 use YouTubeMusicMcp\ServiceError;
 
-final class OAuthTest extends TestCase
+trait OAuthTestHelpers
 {
-    use Fixture;
-
     private string $dir;
-
-    public function testCodePkceExchangeAudienceAndRevocation(): void
-    {
-        [$db, $oauth, $client] = $this->environment();
-        [$code, $verifier] = $this->code($oauth, $client);
-        $args = [
-            'grant_type' => 'authorization_code',
-            'client_id' => $client['client_id'],
-            'redirect_uri' => 'https://chatgpt.com/callback',
-            'code' => $code,
-            'code_verifier' => $verifier
-        ];
-        $request = (new ServerRequest('POST', 'https://music.example.test/oauth/token'))->withParsedBody($args);
-        $r = $oauth->server->respondToAccessTokenRequest($request, new Response());
-        $tokens = json_decode((string)$r->getBody(), true);
-        $bearer = (new ServerRequest('POST', 'https://music.example.test/mcp'))->withHeader(
-            'Authorization',
-            'Bearer ' . $tokens['access_token']
-        );
-        self::assertSame('u1', $oauth->authenticate($bearer)['id']);
-        self::assertContains('playlists.write', $oauth->authenticate($bearer)['scopes']);
-        $db->execute('UPDATE oauth_tokens SET revoked=1 WHERE user_id=?', ['u1']);
-        $this->expectException(ServiceError::class);
-        $oauth->authenticate($bearer);
-    }
 
     private function environment(): array
     {
@@ -76,95 +48,115 @@ final class OAuthTest extends TestCase
         self::assertSame('state-test', $out['state']);
         return [$out['code'], $verifier];
     }
-
-    public function testCodeCannotBeReplayed(): void
-    {
-        [$db, $oauth, $client] = $this->environment();
-        [$code, $verifier] = $this->code($oauth, $client);
-        $r = (new ServerRequest('POST', 'https://music.example.test/oauth/token'))->withParsedBody(
-            [
-                'grant_type' => 'authorization_code',
-                'client_id' => $client['client_id'],
-                'redirect_uri' => 'https://chatgpt.com/callback',
-                'code' => $code,
-                'code_verifier' => $verifier
-            ]
-        );
-        $oauth->server->respondToAccessTokenRequest($r, new Response());
-        $this->expectException(\League\OAuth2\Server\Exception\OAuthServerException::class);
-        $oauth->server->respondToAccessTokenRequest($r, new Response());
-    }
-
-    public function testWrongPkceRejected(): void
-    {
-        [$db, $oauth, $client] = $this->environment();
-        [$code, $verifier] = $this->code($oauth, $client);
-        $r = (new ServerRequest('POST', 'https://music.example.test/oauth/token'))->withParsedBody(
-            [
-                'grant_type' => 'authorization_code',
-                'client_id' => $client['client_id'],
-                'redirect_uri' => 'https://chatgpt.com/callback',
-                'code' => $code,
-                'code_verifier' => str_repeat('b', 64)
-            ]
-        );
-        $this->expectException(\League\OAuth2\Server\Exception\OAuthServerException::class);
-        $oauth->server->respondToAccessTokenRequest($r, new Response());
-    }
-
-    public function testUnapprovedRedirectRejected(): void
-    {
-        [$db, $oauth] = $this->environment();
-        $this->expectException(ServiceError::class);
-        $oauth->register(['redirect_uris' => ['https://attacker.test/callback']]);
-    }
-
-    public function testRefreshRotatesAndCannotBeReplayed(): void
-    {
-        [$db, $oauth, $client] = $this->environment();
-        [$code, $verifier] = $this->code($oauth, $client);
-        $r = (new ServerRequest('POST', 'https://music.example.test/oauth/token'))->withParsedBody(
-            [
-                'grant_type' => 'authorization_code',
-                'client_id' => $client['client_id'],
-                'redirect_uri' => 'https://chatgpt.com/callback',
-                'code' => $code,
-                'code_verifier' => $verifier
-            ]
-        );
-        $tokens = json_decode((string)$oauth->server->respondToAccessTokenRequest($r, new Response())->getBody(), true);
-        $refresh = $r->withParsedBody(
-            [
-                'grant_type' => 'refresh_token',
-                'client_id' => $client['client_id'],
-                'refresh_token' => $tokens['refresh_token']
-            ]
-        );
-        $next = json_decode(
-            (string)$oauth->server->respondToAccessTokenRequest($refresh, new Response())->getBody(),
-            true
-        );
-        self::assertNotSame($tokens['refresh_token'], $next['refresh_token']);
-        $bearer = (new ServerRequest('POST', 'https://music.example.test/mcp'))->withHeader(
-            'Authorization',
-            'Bearer ' . $next['access_token']
-        );
-        self::assertContains('playlists.write', $oauth->authenticate($bearer)['scopes']);
-        $this->expectException(\League\OAuth2\Server\Exception\OAuthServerException::class);
-        $oauth->server->respondToAccessTokenRequest($refresh, new Response());
-    }
-
-    protected function setUp(): void
-    {
-        $this->dir = $this->tempDir();
-        $key = openssl_pkey_new(['private_key_bits' => 2048]);
-        openssl_pkey_export($key, $private);
-        file_put_contents($this->dir . '/oauth-private.pem', $private);
-        file_put_contents($this->dir . '/oauth-public.pem', openssl_pkey_get_details($key)['key']);
-    }
-
-    protected function tearDown(): void
-    {
-        $this->removeDir($this->dir);
-    }
 }
+
+uses(OAuthTestHelpers::class);
+
+test('code pkce exchange audience and revocation', function (): void {
+    [$db, $oauth, $client] = $this->environment();
+    [$code, $verifier] = $this->code($oauth, $client);
+    $args = [
+        'grant_type' => 'authorization_code',
+        'client_id' => $client['client_id'],
+        'redirect_uri' => 'https://chatgpt.com/callback',
+        'code' => $code,
+        'code_verifier' => $verifier
+    ];
+    $request = (new ServerRequest('POST', 'https://music.example.test/oauth/token'))->withParsedBody($args);
+    $r = $oauth->server->respondToAccessTokenRequest($request, new Response());
+    $tokens = json_decode((string)$r->getBody(), true);
+    $bearer = (new ServerRequest('POST', 'https://music.example.test/mcp'))->withHeader(
+        'Authorization',
+        'Bearer ' . $tokens['access_token']
+    );
+    $this->assertSame('u1', $oauth->authenticate($bearer)['id']);
+    $this->assertContains('playlists.write', $oauth->authenticate($bearer)['scopes']);
+    $db->execute('UPDATE oauth_tokens SET revoked=1 WHERE user_id=?', ['u1']);
+    $this->expectException(ServiceError::class);
+    $oauth->authenticate($bearer);
+});
+
+test('code cannot be replayed', function (): void {
+    [$db, $oauth, $client] = $this->environment();
+    [$code, $verifier] = $this->code($oauth, $client);
+    $r = (new ServerRequest('POST', 'https://music.example.test/oauth/token'))->withParsedBody(
+        [
+            'grant_type' => 'authorization_code',
+            'client_id' => $client['client_id'],
+            'redirect_uri' => 'https://chatgpt.com/callback',
+            'code' => $code,
+            'code_verifier' => $verifier
+        ]
+    );
+    $oauth->server->respondToAccessTokenRequest($r, new Response());
+    $this->expectException(\League\OAuth2\Server\Exception\OAuthServerException::class);
+    $oauth->server->respondToAccessTokenRequest($r, new Response());
+});
+
+test('wrong pkce rejected', function (): void {
+    [$db, $oauth, $client] = $this->environment();
+    [$code, $verifier] = $this->code($oauth, $client);
+    $r = (new ServerRequest('POST', 'https://music.example.test/oauth/token'))->withParsedBody(
+        [
+            'grant_type' => 'authorization_code',
+            'client_id' => $client['client_id'],
+            'redirect_uri' => 'https://chatgpt.com/callback',
+            'code' => $code,
+            'code_verifier' => str_repeat('b', 64)
+        ]
+    );
+    $this->expectException(\League\OAuth2\Server\Exception\OAuthServerException::class);
+    $oauth->server->respondToAccessTokenRequest($r, new Response());
+});
+
+test('unapproved redirect rejected', function (): void {
+    [$db, $oauth] = $this->environment();
+    $this->expectException(ServiceError::class);
+    $oauth->register(['redirect_uris' => ['https://attacker.test/callback']]);
+});
+
+test('refresh rotates and cannot be replayed', function (): void {
+    [$db, $oauth, $client] = $this->environment();
+    [$code, $verifier] = $this->code($oauth, $client);
+    $r = (new ServerRequest('POST', 'https://music.example.test/oauth/token'))->withParsedBody(
+        [
+            'grant_type' => 'authorization_code',
+            'client_id' => $client['client_id'],
+            'redirect_uri' => 'https://chatgpt.com/callback',
+            'code' => $code,
+            'code_verifier' => $verifier
+        ]
+    );
+    $tokens = json_decode((string)$oauth->server->respondToAccessTokenRequest($r, new Response())->getBody(), true);
+    $refresh = $r->withParsedBody(
+        [
+            'grant_type' => 'refresh_token',
+            'client_id' => $client['client_id'],
+            'refresh_token' => $tokens['refresh_token']
+        ]
+    );
+    $next = json_decode(
+        (string)$oauth->server->respondToAccessTokenRequest($refresh, new Response())->getBody(),
+        true
+    );
+    $this->assertNotSame($tokens['refresh_token'], $next['refresh_token']);
+    $bearer = (new ServerRequest('POST', 'https://music.example.test/mcp'))->withHeader(
+        'Authorization',
+        'Bearer ' . $next['access_token']
+    );
+    $this->assertContains('playlists.write', $oauth->authenticate($bearer)['scopes']);
+    $this->expectException(\League\OAuth2\Server\Exception\OAuthServerException::class);
+    $oauth->server->respondToAccessTokenRequest($refresh, new Response());
+});
+
+beforeEach(function (): void {
+    $this->dir = $this->tempDir();
+    $key = openssl_pkey_new(['private_key_bits' => 2048]);
+    openssl_pkey_export($key, $private);
+    file_put_contents($this->dir . '/oauth-private.pem', $private);
+    file_put_contents($this->dir . '/oauth-public.pem', openssl_pkey_get_details($key)['key']);
+});
+
+afterEach(function (): void {
+    $this->removeDir($this->dir);
+});

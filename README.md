@@ -11,6 +11,7 @@ This is an initial implementation with automated local verification. It has **no
 - OAuth authorization code with PKCE S256, expiring service tokens, refresh rotation, revocation, and audience validation.
 - Playlist listing, inspection, search, creation, metadata updates, track addition/removal/movement, and deletion.
 - Native PHP YouTube Music catalog/search, discovery, saved library and listening-history tools using unofficial web endpoints.
+- Google connections request the additional `youtube` Music grant. After upgrading older connections, reconnect Google with fresh consent and then reconnect ChatGPT; deployment cannot expand existing grants. `get_connection_status` exposes granted scope names for troubleshooting.
 - Informational, cache-aware daily usage estimates; YouTube enforces quotas and rate limits.
 - Mutation receipts, explicit partial resume, and protection against replay of completed operations.
 - PHP-FPM hosting in Plesk, SQLite storage, no Docker or background worker.
@@ -88,6 +89,8 @@ YouTube enforces project quotas and rate limits. The app does not impose project
 Usage status reports estimates for requests observed by this installation, grouped by Pacific day. It cannot determine remaining YouTube quota or see other project traffic. Actual YouTube quota/rate-limit errors are returned to the caller without automatic retries. Operation receipts, ownership checks, bounded batches, and time limits remain active.
 ## Development and tests
 
+The suite uses Pest 3 for PHP 8.2 compatibility. `composer test` runs all tests; use `vendor/bin/pest tests/OAuthTest.php` or `--filter` for focused runs. Shared fixtures are registered in `tests/Pest.php`; `phpunit.xml` remains the runner configuration.
+
 ```sh
 composer install
 composer test
@@ -98,7 +101,7 @@ On the current Windows development machine, required DLLs exist but are not enab
 
 ```powershell
 $env:OPENSSL_CONF = 'C:/tools/php82/extras/ssl/openssl.cnf'
-php -d extension=fileinfo -d extension=pdo_sqlite -d extension=sodium vendor/phpunit/phpunit/phpunit
+php -d extension=fileinfo -d extension=pdo_sqlite -d extension=sodium vendor/bin/pest
 ```
 
 For a local HTTP smoke test only, run `php -S 127.0.0.1:8080 -t public public/router.php` with a temporary configuration, disabled secure cookies, and the configured Host header. Production configuration intentionally requires an HTTPS origin. Google callbacks and ChatGPT require a reachable HTTPS deployment; the PHP development server is not a production runtime.

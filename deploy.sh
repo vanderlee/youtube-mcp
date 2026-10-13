@@ -1,6 +1,8 @@
 #!/bin/bash
 
 # Plesk additional deployment action: bash ./deploy.sh
+# After upgrading Music scopes, reconnect Google in the dashboard, then ChatGPT.
+# Deployment preserves credentials and cannot expand an existing OAuth grant.
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 1
 
 # Protect the log before the delegated script starts.

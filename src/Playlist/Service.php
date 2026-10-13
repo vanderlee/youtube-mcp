@@ -60,7 +60,11 @@ final class Service
         }
         $c = $this->google->connection($user);
         if ($tool === 'get_connection_status') {
-            return ['connected' => true, 'channel_id' => $c['channel_id'], 'channel_name' => $c['channel_name']];
+            $googleScopes = array_values(array_filter(preg_split('/\s+/', trim($c['scopes']))));
+            return ['connected' => true, 'channel_id' => $c['channel_id'], 'channel_name' => $c['channel_name'],
+                'service_scopes' => array_values($scopes), 'google_scopes' => $googleScopes,
+                'music_google_scope_granted' => in_array(Google::MUSIC_SCOPE, $googleScopes, true),
+                'music_access_checked' => false];
         }
         if ($write) {
             return $this->locks->run('account:' . $user, function () use ($user, $tool, $a) {

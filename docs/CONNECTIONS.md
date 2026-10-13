@@ -22,7 +22,11 @@ Do not enter Google client credentials into ChatGPT's service OAuth fields or re
 5. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in private `.env` configuration.
 6. Review actual project quotas in Cloud Console. YouTube enforces limits; local counters are informational.
 
-The app requests `openid email profile` for sign-in. Connecting YouTube additionally requests `https://www.googleapis.com/auth/youtube.force-ssl` with offline access. This is broader than playlist-only permission: Google has no separate playlist-only scope in this implementation. Explain this scope honestly in consent/setup materials.
+The app requests `openid email profile` for sign-in. Connecting YouTube additionally requests `https://www.googleapis.com/auth/youtube.force-ssl` for official API operations and `https://www.googleapis.com/auth/youtube` (Manage your YouTube account) for the unofficial Music OAuth integration, with offline access. These are broader than playlist-only permissions. Google can return only the broader scope when collapsing overlapping grants; the service accepts that. Explain both permissions honestly in consent/setup materials.
+
+Connections created before the Music scope was requested need a fresh Google consent: deploy the updated server, reconnect Google in the dashboard, grant Manage your YouTube account, confirm the intended channel, then reconnect ChatGPT because Google reconnect revokes its old service tokens. Approve `history.read` for history reads and `history.write` only for history changes. Deployment and token refresh do not add permissions to an existing grant.
+
+Use `get_connection_status` to inspect `service_scopes`, `google_scopes`, and `music_google_scope_granted`. These are scope names, not credentials; `music_access_checked: false` means this status call does not probe live Music access. Then use `get_music_account` and `get_music_history` to verify the actual upstream behavior. More scopes do not make watch history available through the official Data API.
 
 Review current Google publishing and verification requirements for this scope and audience. Testing-mode authorizations can have restrictions, including token lifetime; do not assume a test consent configuration is suitable for ongoing public operation. Quota extensions are a separate process from OAuth app verification.
 
@@ -101,6 +105,10 @@ Use browser developer tools and private Plesk access/error logs together. Record
 | Authenticated MCP returns 403 | Inspect Origin/transport rejection logs and Host forwarding |
 | Reads work but writes fail for scope | Complete fresh consent with `playlists.write` |
 | MCP returns 401 after Google reconnect | Reconnect ChatGPT; old service tokens were revoked |
+| `INSUFFICIENT_SERVICE_SCOPE` on history | ChatGPT must request and receive `history.read` or `history.write` as appropriate |
+| `GOOGLE_MUSIC_SCOPE_REQUIRED` | Reconnect Google after deployment and grant Manage your YouTube account, then reconnect ChatGPT |
+| `MUSIC_ACCESS_DENIED` | Music returned 403; inspect safe `upstream_status`/`upstream_reasons` and verify account/client compatibility |
+| `MUSIC_UPSTREAM_REJECTED` | Inspect safe `upstream_http_status`, `upstream_status` and `upstream_reasons`; extra MCP scopes do not fix malformed or unsupported upstream requests |
 
 The application sends `Referrer-Policy: same-origin` and permits form redirects to Google Accounts and ChatGPT in its CSP. An additional restrictive CSP configured by the host is enforced alongside the app's policy and can still block redirects. Reload the dashboard after header changes and restart authorization. Do not remove Origin validation or disable the WAF globally to conceal a policy/routing problem.
 

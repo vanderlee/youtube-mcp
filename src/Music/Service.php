@@ -40,7 +40,7 @@ final class Service
                     $generation,
                     $tool,
                     $args,
-                    function ($step) use ($user, $generation, $tool, $args) {
+                    function ($step) use ($user, $generation, $tool, $args, $connection) {
                         // Verify action tokens only inside the receipt callback: completed replay stays local.
                         $arguments = $args;
                         unset($arguments['operation_key'], $arguments['resume']);
@@ -57,13 +57,13 @@ final class Service
                                 $arguments['feedback_tokens']
                             );
                         }
-                        $access = $this->google->accessToken($user);
+                        $access = $this->musicAccessToken($user, $connection);
                         $result = $step('music-change', fn() => $this->api->call($tool, $arguments, $access));
                         return ['changed' => true, 'upstream' => $result];
                     }
                 );
             }
-            $result = $this->api->call($tool, $args, $this->google->accessToken($user));
+            $result = $this->api->call($tool, $args, $this->musicAccessToken($user, $connection));
             $truncated = false;
             $result = $this->protect($result, $user, $generation, $truncated, $tool === 'get_music_history');
             return [
@@ -74,6 +74,16 @@ final class Service
                 'quota_accounting' => 'Music requests are not included in official Data API usage estimates.'
             ];
         });
+    }
+
+    private function musicAccessToken(string $user, array $connection): string
+    {
+        if (!in_array(Google::MUSIC_SCOPE, preg_split('/\s+/', trim($connection['scopes'])), true)) {
+            throw new ServiceError('GOOGLE_MUSIC_SCOPE_REQUIRED',
+                'This Google connection lacks Music authorization. Reconnect Google in the dashboard and grant Manage your YouTube account, then reconnect ChatGPT.',
+                ['required_google_scope' => Google::MUSIC_SCOPE], 403);
+        }
+        return $this->google->accessToken($user);
     }
 
     private function validate(array $args, array $props, array $required): void

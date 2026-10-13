@@ -4,38 +4,12 @@ declare(strict_types=1);
 
 namespace YouTubeMusicMcp\Tests;
 
-use PHPUnit\Framework\TestCase;
 use YouTubeMusicMcp\Http\Client;
 use YouTubeMusicMcp\Music\{Api};
 use YouTubeMusicMcp\ServiceError;
 
-final class MusicApiTest extends TestCase
+trait MusicApiTestHelpers
 {
-    use Fixture;
-
-    public function testNativeSearchContextTypedResultAndPrefixLimit(): void
-    {
-        [$api, $http] = $this->api([$this->ok($this->shelf())]);
-        $r = $api->call('search_music', ['query' => 'Song', 'filter' => 'songs', 'limit' => 1], 'user-token');
-        self::assertCount(1, $r['items']);
-        self::assertTrue($r['possibly_more']);
-        $item = $r['items'][0];
-        self::assertSame('song', $item['resultType']);
-        self::assertSame('aaaaaaaaaaa', $item['videoId']);
-        self::assertSame('Artist', $item['artists'][0]['name']);
-        self::assertSame('MPREtest', $item['album']['id']);
-        self::assertSame('3:21', $item['duration']);
-        self::assertSame(['add' => 'raw-add', 'remove' => 'raw-remove'], $item['feedbackTokens']);
-        self::assertSame('MPTCaaaaaaaaaaa', $item['creditsBrowseId']);
-        self::assertArrayNotHasKey('listenAgainFeedbackTokens', $item);
-        self::assertSame('https://music.youtube.com/youtubei/v1/search?alt=json', $http->calls[0][1]);
-        self::assertContains('Authorization: Bearer user-token', $http->calls[0][2]);
-        $body = $http->calls[0][3];
-        self::assertSame('EgWKAQIIAWoMEA4QChADEAQQCRAF', $body['params']);
-        self::assertSame('NL', $body['context']['client']['gl']);
-        self::assertSame('WEB_REMIX', $body['context']['client']['clientName']);
-    }
-
     private function api(array $responses): array
     {
         $http = new class($responses) extends Client {
@@ -161,308 +135,359 @@ final class MusicApiTest extends TestCase
             ]
         ];
     }
+}
 
-    public function testCatalogAlbumLyricsCreditsAndAccount(): void
-    {
-        $album = $this->shelf() + [
-                'header' => [
-                    'musicDetailHeaderRenderer' => [
-                        'title' => ['runs' => [['text' => 'Test Album']]],
-                        'buttons' => [['buttonRenderer' => ['navigationEndpoint' => ['watchPlaylistEndpoint' => ['playlistId' => 'OLAK5uy_test']]]]]
-                    ]
-                ]
-            ];
-        [$api, $http] = $this->api([
-            $this->ok($album),
-            $this->ok(
-                [
-                    'contents' => [
-                        'musicDescriptionShelfRenderer' => [
-                            'description' => ['runs' => [['text' => 'Lyrics text']]],
-                            'footer' => ['simpleText' => 'Source']
-                        ]
-                    ]
-                ]
-            ),
-            $this->ok(
-                [
-                    'contents' => [
-                        'dismissableDialogContentSectionRenderer' => [
-                            'title' => ['simpleText' => 'Written by'],
-                            'subtitle' => ['runs' => [['text' => 'Writer']]]
-                        ]
-                    ]
-                ]
-            ),
-            $this->ok(
-                [
-                    'actions' => [
-                        [
-                            'activeAccountHeaderRenderer' => [
-                                'accountName' => ['simpleText' => 'Account'],
-                                'channelHandle' => ['runs' => [['text' => '@account']]]
-                            ]
-                        ]
-                    ]
-                ]
-            )
-        ]);
-        $r = $api->call('get_music_album', ['browse_id' => 'MPREtest'], 'token');
-        self::assertSame('Test Album', $r['title']);
-        self::assertSame('OLAK5uy_test', $r['audioPlaylistId']);
-        self::assertCount(2, $r['tracks']);
-        self::assertSame('Lyrics text', $api->call('get_music_lyrics', ['browse_id' => 'MPLYtest'], 'token')['lyrics']);
-        self::assertSame(
-            'Writer',
-            $api->call('get_music_song_credits', ['browse_id' => 'MPTCtest'], 'token')['sections'][0]['text']
-        );
-        self::assertSame('@account', $api->call('get_music_account', [], 'token')['channelHandle']);
+uses(MusicApiTestHelpers::class);
+
+test('music error diagnostics retain safe codes but discard secrets and arbitrary details', function (): void {
+    $raw = ['error' => ['status' => 'PERMISSION_DENIED', 'message' => 'private-token', 'details' => [
+        ['reason' => 'ACCESS_TOKEN_SCOPE_INSUFFICIENT', 'metadata' => ['access_token' => 'private-token']],
+        ['reason' => 'private-token'],
+    ]]];
+    $safe = \YouTubeMusicMcp\Music\Transport::safeError($raw);
+    $this->assertSame(['error' => ['status' => 'PERMISSION_DENIED', 'reasons' => ['ACCESS_TOKEN_SCOPE_INSUFFICIENT']]], $safe);
+    $this->assertSame($safe, \YouTubeMusicMcp\Music\Transport::safeError($safe));
+    $this->assertStringNotContainsString('private-token', json_encode($safe));
+    $this->assertSame(['error' => []], \YouTubeMusicMcp\Music\Transport::safeError(['error' => ['details' => 'malformed']]));
+    [$api, $http] = $this->api([['status' => 403, 'data' => $raw]]);
+    try {
+        $api->call('get_music_history', [], 'dummy-token');
+        $this->fail();
+    } catch (ServiceError $error) {
+        $this->assertSame('GOOGLE_MUSIC_SCOPE_REQUIRED', $error->reason);
+        $this->assertSame(403, $error->details['upstream_http_status']);
+        $this->assertSame('PERMISSION_DENIED', $error->details['upstream_status']);
+        $this->assertStringNotContainsString('private-token', json_encode($error->payload()));
     }
+    $this->assertCount(1, $http->calls);
+});
 
-    public function testLibraryRequestsAllKindsAndHistoryOccurrenceToken(): void
-    {
-        [$api, $http] = $this->api(array_fill(0, 6, $this->ok($this->shelf())));
-        $kinds = [
-            'songs' => 'FEmusic_liked_videos',
-            'albums' => 'FEmusic_liked_albums',
-            'artists' => 'FEmusic_library_corpus_track_artists',
-            'playlists' => 'FEmusic_liked_playlists',
-            'subscriptions' => 'FEmusic_library_corpus_artists'
-        ];
-        foreach ($kinds as $kind => $browse) {
-            $api->call('get_music_library', ['kind' => $kind, 'limit' => 1], 'token');
-            self::assertSame($browse, $http->calls[count($http->calls) - 1][3]['browseId']);
-        }
-        $r = $api->call('get_music_history', ['limit' => 1], 'token');
-        self::assertSame('history-token', $r['items'][0]['feedbackToken']);
-        self::assertSame('Songs', $r['items'][0]['played']);
+test('music bad request retains a canonical diagnostic instead of suggesting more mcp scopes', function (): void {
+    [$api] = $this->api([['status' => 400, 'data' => ['error' => ['status' => 'INVALID_ARGUMENT', 'message' => 'private-secret']]]]);
+    try {
+        $api->call('get_music_history', [], 'dummy-token');
+        $this->fail();
+    } catch (ServiceError $error) {
+        $this->assertSame('MUSIC_UPSTREAM_REJECTED', $error->reason);
+        $this->assertSame('INVALID_ARGUMENT', $error->details['upstream_status']);
+        $this->assertSame(400, $error->details['upstream_http_status']);
+        $this->assertStringNotContainsString('private-secret', $error->getMessage());
     }
+});
 
-    public function testDiscoveryAndSuggestionsUseNativeEndpoints(): void
-    {
-        $radio = [
-            'contents' => [
-                'playlistPanelRenderer' => [
-                    'contents' => [
-                        [
-                            'playlistPanelVideoRenderer' => [
-                                'title' => ['simpleText' => 'Song'],
-                                'videoId' => 'aaaaaaaaaaa'
-                            ]
-                        ]
-                    ],
-                    'playlistId' => 'RDtest'
-                ],
-                'tabs' => [
-                    [
-                        'browseEndpoint' => [
-                            'browseId' => 'MPLYlyrics',
-                            'browseEndpointContextSupportedConfigs' => ['browseEndpointContextMusicConfig' => ['pageType' => 'MUSIC_PAGE_TYPE_TRACK_LYRICS']]
-                        ]
-                    ]
+test('native search context typed result and prefix limit', function (): void {
+    [$api, $http] = $this->api([$this->ok($this->shelf())]);
+    $r = $api->call('search_music', ['query' => 'Song', 'filter' => 'songs', 'limit' => 1], 'user-token');
+    $this->assertCount(1, $r['items']);
+    $this->assertTrue($r['possibly_more']);
+    $item = $r['items'][0];
+    $this->assertSame('song', $item['resultType']);
+    $this->assertSame('aaaaaaaaaaa', $item['videoId']);
+    $this->assertSame('Artist', $item['artists'][0]['name']);
+    $this->assertSame('MPREtest', $item['album']['id']);
+    $this->assertSame('3:21', $item['duration']);
+    $this->assertSame(['add' => 'raw-add', 'remove' => 'raw-remove'], $item['feedbackTokens']);
+    $this->assertSame('MPTCaaaaaaaaaaa', $item['creditsBrowseId']);
+    $this->assertArrayNotHasKey('listenAgainFeedbackTokens', $item);
+    $this->assertSame('https://music.youtube.com/youtubei/v1/search?alt=json', $http->calls[0][1]);
+    $this->assertContains('Authorization: Bearer user-token', $http->calls[0][2]);
+    $body = $http->calls[0][3];
+    $this->assertSame('EgWKAQIIAWoMEA4QChADEAQQCRAF', $body['params']);
+    $this->assertSame('NL', $body['context']['client']['gl']);
+    $this->assertSame('WEB_REMIX', $body['context']['client']['clientName']);
+});
+
+test('catalog album lyrics credits and account', function (): void {
+    $album = $this->shelf() + [
+            'header' => [
+                'musicDetailHeaderRenderer' => [
+                    'title' => ['runs' => [['text' => 'Test Album']]],
+                    'buttons' => [['buttonRenderer' => ['navigationEndpoint' => ['watchPlaylistEndpoint' => ['playlistId' => 'OLAK5uy_test']]]]]
                 ]
             ]
         ];
-        $moods = [
-            'contents' => [
-                'gridRenderer' => [
-                    'items' => [
-                        [
-                            'musicNavigationButtonRenderer' => [
-                                'buttonText' => ['simpleText' => 'Chill'],
-                                'clickCommand' => ['browseEndpoint' => ['params' => 'mood-param']]
-                            ]
-                        ]
-                    ]
-                ]
-            ]
-        ];
-        $suggestions = ['contents' => [['searchSuggestionsSectionRenderer' => ['contents' => [['searchSuggestionRenderer' => ['navigationEndpoint' => ['searchEndpoint' => ['query' => 'Suggested song']]]]]]]]];
-        [$api, $http] = $this->api(
+    [$api, $http] = $this->api([
+        $this->ok($album),
+        $this->ok(
             [
-                $this->ok($radio),
-                $this->ok($moods),
-                $this->ok($suggestions),
-                $this->ok($this->shelf()),
-                $this->ok($this->shelf())
+                'contents' => [
+                    'musicDescriptionShelfRenderer' => [
+                        'description' => ['runs' => [['text' => 'Lyrics text']]],
+                        'footer' => ['simpleText' => 'Source']
+                    ]
+                ]
             ]
-        );
-        $r = $api->call('get_music_radio', ['video_id' => 'aaaaaaaaaaa'], 'token');
-        self::assertSame('MPLYlyrics', $r['lyrics']);
-        self::assertCount(1, $r['tracks']);
-        self::assertSame('mood-param', $api->call('get_music_mood_categories', [], 'token')['categories'][0]['params']);
-        self::assertSame(['Suggested song'],
-            $api->call('get_music_search_suggestions', ['query' => 'Song'], 'token')['items']);
-        self::assertNotEmpty($api->call('get_music_home', [], 'token')['sections']);
-        $api->call('get_music_charts', ['country' => 'NL'], 'token');
-        self::assertSame(['NL'], $http->calls[4][3]['formData']['selectedValues']);
-    }
+        ),
+        $this->ok(
+            [
+                'contents' => [
+                    'dismissableDialogContentSectionRenderer' => [
+                        'title' => ['simpleText' => 'Written by'],
+                        'subtitle' => ['runs' => [['text' => 'Writer']]]
+                    ]
+                ]
+            ]
+        ),
+        $this->ok(
+            [
+                'actions' => [
+                    [
+                        'activeAccountHeaderRenderer' => [
+                            'accountName' => ['simpleText' => 'Account'],
+                            'channelHandle' => ['runs' => [['text' => '@account']]]
+                        ]
+                    ]
+                ]
+            ]
+        )
+    ]);
+    $r = $api->call('get_music_album', ['browse_id' => 'MPREtest'], 'token');
+    $this->assertSame('Test Album', $r['title']);
+    $this->assertSame('OLAK5uy_test', $r['audioPlaylistId']);
+    $this->assertCount(2, $r['tracks']);
+    $this->assertSame('Lyrics text', $api->call('get_music_lyrics', ['browse_id' => 'MPLYtest'], 'token')['lyrics']);
+    $this->assertSame(
+        'Writer',
+        $api->call('get_music_song_credits', ['browse_id' => 'MPTCtest'], 'token')['sections'][0]['text']
+    );
+    $this->assertSame('@account', $api->call('get_music_account', [], 'token')['channelHandle']);
+});
 
-    public function testMetadataNeverReturnsStreamingAndTracking(): void
-    {
-        [$api] = $this->api([
-            $this->ok([
-                'playabilityStatus' => ['status' => 'OK'],
-                'videoDetails' => ['title' => 'Song'],
-                'streamingData' => ['url' => 'secret'],
-                'playbackTracking' => ['url' => 'secret']
-            ])
-        ]);
-        $r = $api->call('get_music_song', ['video_id' => 'aaaaaaaaaaa'], 'token');
-        self::assertSame(['playabilityStatus' => ['status' => 'OK'], 'videoDetails' => ['title' => 'Song']], $r);
+test('library requests all kinds and history occurrence token', function (): void {
+    [$api, $http] = $this->api(array_fill(0, 6, $this->ok($this->shelf())));
+    $kinds = [
+        'songs' => 'FEmusic_liked_videos',
+        'albums' => 'FEmusic_liked_albums',
+        'artists' => 'FEmusic_library_corpus_track_artists',
+        'playlists' => 'FEmusic_liked_playlists',
+        'subscriptions' => 'FEmusic_library_corpus_artists'
+    ];
+    foreach ($kinds as $kind => $browse) {
+        $api->call('get_music_library', ['kind' => $kind, 'limit' => 1], 'token');
+        $this->assertSame($browse, $http->calls[count($http->calls) - 1][3]['browseId']);
     }
+    $r = $api->call('get_music_history', ['limit' => 1], 'token');
+    $this->assertSame('history-token', $r['items'][0]['feedbackToken']);
+    $this->assertSame('Songs', $r['items'][0]['played']);
+});
 
-    public function testArtistReleaseNavigationAndLibraryOrdering(): void
-    {
-        $artist = [
-            'header' => ['musicImmersiveHeaderRenderer' => ['title' => ['simpleText' => 'Artist']]],
-            'contents' => [
+test('discovery and suggestions use native endpoints', function (): void {
+    $radio = [
+        'contents' => [
+            'playlistPanelRenderer' => [
+                'contents' => [
+                    [
+                        'playlistPanelVideoRenderer' => [
+                            'title' => ['simpleText' => 'Song'],
+                            'videoId' => 'aaaaaaaaaaa'
+                        ]
+                    ]
+                ],
+                'playlistId' => 'RDtest'
+            ],
+            'tabs' => [
                 [
-                    'musicCarouselShelfRenderer' => [
-                        'header' => [
-                            'musicCarouselShelfBasicHeaderRenderer' => [
-                                'title' => [
-                                    'runs' => [
-                                        [
-                                            'text' => 'Albums',
-                                            'navigationEndpoint' => [
-                                                'browseEndpoint' => [
-                                                    'browseId' => 'UCartist',
-                                                    'params' => 'release-params'
-                                                ]
+                    'browseEndpoint' => [
+                        'browseId' => 'MPLYlyrics',
+                        'browseEndpointContextSupportedConfigs' => ['browseEndpointContextMusicConfig' => ['pageType' => 'MUSIC_PAGE_TYPE_TRACK_LYRICS']]
+                    ]
+                ]
+            ]
+        ]
+    ];
+    $moods = [
+        'contents' => [
+            'gridRenderer' => [
+                'items' => [
+                    [
+                        'musicNavigationButtonRenderer' => [
+                            'buttonText' => ['simpleText' => 'Chill'],
+                            'clickCommand' => ['browseEndpoint' => ['params' => 'mood-param']]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+    ];
+    $suggestions = ['contents' => [['searchSuggestionsSectionRenderer' => ['contents' => [['searchSuggestionRenderer' => ['navigationEndpoint' => ['searchEndpoint' => ['query' => 'Suggested song']]]]]]]]];
+    [$api, $http] = $this->api(
+        [
+            $this->ok($radio),
+            $this->ok($moods),
+            $this->ok($suggestions),
+            $this->ok($this->shelf()),
+            $this->ok($this->shelf())
+        ]
+    );
+    $r = $api->call('get_music_radio', ['video_id' => 'aaaaaaaaaaa'], 'token');
+    $this->assertSame('MPLYlyrics', $r['lyrics']);
+    $this->assertCount(1, $r['tracks']);
+    $this->assertSame('mood-param', $api->call('get_music_mood_categories', [], 'token')['categories'][0]['params']);
+    $this->assertSame(['Suggested song'],
+        $api->call('get_music_search_suggestions', ['query' => 'Song'], 'token')['items']);
+    $this->assertNotEmpty($api->call('get_music_home', [], 'token')['sections']);
+    $api->call('get_music_charts', ['country' => 'NL'], 'token');
+    $this->assertSame(['NL'], $http->calls[4][3]['formData']['selectedValues']);
+});
+
+test('metadata never returns streaming and tracking', function (): void {
+    [$api] = $this->api([
+        $this->ok([
+            'playabilityStatus' => ['status' => 'OK'],
+            'videoDetails' => ['title' => 'Song'],
+            'streamingData' => ['url' => 'secret'],
+            'playbackTracking' => ['url' => 'secret']
+        ])
+    ]);
+    $r = $api->call('get_music_song', ['video_id' => 'aaaaaaaaaaa'], 'token');
+    $this->assertSame(['playabilityStatus' => ['status' => 'OK'], 'videoDetails' => ['title' => 'Song']], $r);
+});
+
+test('artist release navigation and library ordering', function (): void {
+    $artist = [
+        'header' => ['musicImmersiveHeaderRenderer' => ['title' => ['simpleText' => 'Artist']]],
+        'contents' => [
+            [
+                'musicCarouselShelfRenderer' => [
+                    'header' => [
+                        'musicCarouselShelfBasicHeaderRenderer' => [
+                            'title' => [
+                                'runs' => [
+                                    [
+                                        'text' => 'Albums',
+                                        'navigationEndpoint' => [
+                                            'browseEndpoint' => [
+                                                'browseId' => 'UCartist',
+                                                'params' => 'release-params'
                                             ]
                                         ]
                                     ]
                                 ]
                             ]
-                        ],
-                        'contents' => [$this->row()]
-                    ]
+                        ]
+                    ],
+                    'contents' => [$this->row()]
                 ]
             ]
-        ];
-        [$api, $http] = $this->api(
-            [$this->ok($artist), $this->ok($this->shelf()), $this->ok($this->shelf()), $this->ok($this->shelf())]
-        );
-        $r = $api->call('get_music_artist', ['browse_id' => 'UCartist'], 'token');
-        self::assertSame('Artist', $r['title']);
-        self::assertSame(['browseId' => 'UCartist', 'params' => 'release-params'], $r['sections'][0]['navigation']);
-        $api->call('get_music_artist_albums', ['browse_id' => 'UCartist', 'params' => 'release-params'], 'token');
-        self::assertSame('release-params', $http->calls[1][3]['params']);
-        $api->call('get_music_library', ['kind' => 'albums', 'order' => 'recently_added'], 'token');
-        self::assertSame('ggMGKgQIABAB', $http->calls[2][3]['params']);
-        $api->call('get_music_mood_playlists', ['params' => 'mood-params'], 'token');
-        self::assertSame('FEmusic_moods_and_genres_category', $http->calls[3][3]['browseId']);
-    }
+        ]
+    ];
+    [$api, $http] = $this->api(
+        [$this->ok($artist), $this->ok($this->shelf()), $this->ok($this->shelf()), $this->ok($this->shelf())]
+    );
+    $r = $api->call('get_music_artist', ['browse_id' => 'UCartist'], 'token');
+    $this->assertSame('Artist', $r['title']);
+    $this->assertSame(['browseId' => 'UCartist', 'params' => 'release-params'], $r['sections'][0]['navigation']);
+    $api->call('get_music_artist_albums', ['browse_id' => 'UCartist', 'params' => 'release-params'], 'token');
+    $this->assertSame('release-params', $http->calls[1][3]['params']);
+    $api->call('get_music_library', ['kind' => 'albums', 'order' => 'recently_added'], 'token');
+    $this->assertSame('ggMGKgQIABAB', $http->calls[2][3]['params']);
+    $api->call('get_music_mood_playlists', ['params' => 'mood-params'], 'token');
+    $this->assertSame('FEmusic_moods_and_genres_category', $http->calls[3][3]['browseId']);
+});
 
-    public function testWriteBodiesFeedbackAcknowledgmentsAndInteractionGates(): void
-    {
-        [$api, $http] = $this->api([
-            $this->ok(['feedbackResponses' => [['isProcessed' => true]]]),
-            $this->ok([]),
-            $this->ok(['actions' => [['showEngagementPanelEndpoint' => ['identifier' => ['tag' => 'restricted']]]]])
-        ]);
-        self::assertSame(['changed' => 1],
-            $api->call('set_music_song_library_status', ['feedback_token' => 'issued-token'], 'token'));
-        self::assertSame(['issued-token'], $http->calls[0][3]['feedbackTokens']);
-        $api->call('set_music_playlist_library_status', ['playlist_id' => 'PLtest', 'in_library' => false], 'token');
-        self::assertStringContainsString('/like/removelike?', $http->calls[1][1]);
-        try {
-            $api->call('remove_music_history_items', ['feedback_tokens' => ['token']], 'token');
-            self::fail();
-        } catch (ServiceError $e) {
-            self::assertSame('MUSIC_INTERACTION_REQUIRED', $e->reason);
-        }
+test('write bodies feedback acknowledgments and interaction gates', function (): void {
+    [$api, $http] = $this->api([
+        $this->ok(['feedbackResponses' => [['isProcessed' => true]]]),
+        $this->ok([]),
+        $this->ok(['actions' => [['showEngagementPanelEndpoint' => ['identifier' => ['tag' => 'restricted']]]]])
+    ]);
+    $this->assertSame(['changed' => 1],
+        $api->call('set_music_song_library_status', ['feedback_token' => 'issued-token'], 'token'));
+    $this->assertSame(['issued-token'], $http->calls[0][3]['feedbackTokens']);
+    $api->call('set_music_playlist_library_status', ['playlist_id' => 'PLtest', 'in_library' => false], 'token');
+    $this->assertStringContainsString('/like/removelike?', $http->calls[1][1]);
+    try {
+        $api->call('remove_music_history_items', ['feedback_tokens' => ['token']], 'token');
+        $this->fail();
+    } catch (ServiceError $e) {
+        $this->assertSame('MUSIC_INTERACTION_REQUIRED', $e->reason);
     }
+});
 
-    public function testMissingFeedbackAcknowledgmentIsUncertain(): void
-    {
-        [$api] = $this->api([$this->ok(['feedbackResponses' => [['isProcessed' => false]]])]);
-        try {
-            $api->call('remove_music_history_items', ['feedback_tokens' => ['token']], 'token');
-            self::fail();
-        } catch (ServiceError $e) {
-            self::assertSame('UPSTREAM_UNCERTAIN', $e->reason);
-        }
+test('missing feedback acknowledgment is uncertain', function (): void {
+    [$api] = $this->api([$this->ok(['feedbackResponses' => [['isProcessed' => false]]])]);
+    try {
+        $api->call('remove_music_history_items', ['feedback_tokens' => ['token']], 'token');
+        $this->fail();
+    } catch (ServiceError $e) {
+        $this->assertSame('UPSTREAM_UNCERTAIN', $e->reason);
     }
+});
 
-    public function testHistoryAdditionAcceptsOnlyTheUpstreamPlaybackEndpoint(): void
-    {
-        foreach (
-            [
-                'https://evil.test/api/stats/playback',
-                'http://www.youtube.com/api/stats/playback',
-                'https://www.youtube.com:444/api/stats/playback'
-            ] as $url
-        ) {
-            [$api, $http] = $this->api(
-                [
-                    $this->ok(
-                        [
-                            'playabilityStatus' => ['status' => 'OK'],
-                            'playbackTracking' => ['videostatsPlaybackUrl' => ['baseUrl' => $url]]
-                        ]
-                    )
-                ]
-            );
-            try {
-                $api->call('add_music_history_item', ['video_id' => 'aaaaaaaaaaa'], 'token');
-                self::fail();
-            } catch (ServiceError $e) {
-                self::assertSame('MUSIC_HISTORY_UNAVAILABLE', $e->reason);
-            }
-            self::assertCount(1, $http->calls);
-        }
+test('history addition accepts only the upstream playback endpoint', function (): void {
+    foreach (
+        [
+            'https://evil.test/api/stats/playback',
+            'http://www.youtube.com/api/stats/playback',
+            'https://www.youtube.com:444/api/stats/playback'
+        ] as $url
+    ) {
         [$api, $http] = $this->api(
             [
                 $this->ok(
                     [
                         'playabilityStatus' => ['status' => 'OK'],
-                        'playbackTracking' => ['videostatsPlaybackUrl' => ['baseUrl' => 'https://www.youtube.com/api/stats/playback?ei=upstream']]
+                        'playbackTracking' => ['videostatsPlaybackUrl' => ['baseUrl' => $url]]
                     ]
-                ),
-                ['status' => 204, 'data' => []]
+                )
             ]
         );
-        self::assertSame(['changed' => 1],
-            $api->call('add_music_history_item', ['video_id' => 'aaaaaaaaaaa'], 'token')
-        );
-        self::assertSame('GET', $http->calls[1][0]);
-        self::assertStringContainsString('ei=upstream', $http->calls[1][1]);
-        self::assertStringContainsString('cpn=', $http->calls[1][1]);
-    }
-
-    public function testUpstreamErrorsDoNotRetryOrLeakDetails(): void
-    {
-        foreach (
-            [
-                401 => 'MUSIC_RECONNECT_REQUIRED',
-                403 => 'MUSIC_RECONNECT_REQUIRED',
-                429 => 'MUSIC_RATE_LIMITED',
-                500 => 'UPSTREAM_UNCERTAIN',
-                302 => 'UPSTREAM_UNCERTAIN'
-            ] as $status => $code
-        ) {
-            [$api, $http] = $this->api([['status' => $status, 'data' => ['error' => 'private-secret']]]);
-            try {
-                $api->call(
-                    'set_music_playlist_library_status',
-                    ['playlist_id' => 'PLtest', 'in_library' => true],
-                    'token'
-                );
-                self::fail();
-            } catch (ServiceError $e) {
-                self::assertSame($code, $e->reason);
-                self::assertStringNotContainsString('private-secret', $e->getMessage());
-            }
-            self::assertCount(1, $http->calls);
-        }
-        [$api] = $this->api([$this->ok(['unexpected' => 'layout'])]);
         try {
-            $api->call('get_music_library', ['kind' => 'songs'], 'token');
-            self::fail();
+            $api->call('add_music_history_item', ['video_id' => 'aaaaaaaaaaa'], 'token');
+            $this->fail();
         } catch (ServiceError $e) {
-            self::assertSame('MUSIC_FORMAT_CHANGED', $e->reason);
+            $this->assertSame('MUSIC_HISTORY_UNAVAILABLE', $e->reason);
         }
+        $this->assertCount(1, $http->calls);
     }
-}
+    [$api, $http] = $this->api(
+        [
+            $this->ok(
+                [
+                    'playabilityStatus' => ['status' => 'OK'],
+                    'playbackTracking' => ['videostatsPlaybackUrl' => ['baseUrl' => 'https://www.youtube.com/api/stats/playback?ei=upstream']]
+                ]
+            ),
+            ['status' => 204, 'data' => []]
+        ]
+    );
+    $this->assertSame(['changed' => 1],
+        $api->call('add_music_history_item', ['video_id' => 'aaaaaaaaaaa'], 'token')
+    );
+    $this->assertSame('GET', $http->calls[1][0]);
+    $this->assertStringContainsString('ei=upstream', $http->calls[1][1]);
+    $this->assertStringContainsString('cpn=', $http->calls[1][1]);
+});
+
+test('upstream errors do not retry or leak details', function (): void {
+    foreach (
+        [
+            401 => 'MUSIC_RECONNECT_REQUIRED',
+            403 => 'MUSIC_ACCESS_DENIED',
+            429 => 'MUSIC_RATE_LIMITED',
+            500 => 'UPSTREAM_UNCERTAIN',
+            302 => 'UPSTREAM_UNCERTAIN'
+        ] as $status => $code
+    ) {
+        [$api, $http] = $this->api([['status' => $status, 'data' => ['error' => 'private-secret']]]);
+        try {
+            $api->call(
+                'set_music_playlist_library_status',
+                ['playlist_id' => 'PLtest', 'in_library' => true],
+                'token'
+            );
+            $this->fail();
+        } catch (ServiceError $e) {
+            $this->assertSame($code, $e->reason);
+            $this->assertStringNotContainsString('private-secret', $e->getMessage());
+        }
+        $this->assertCount(1, $http->calls);
+    }
+    [$api] = $this->api([$this->ok(['unexpected' => 'layout'])]);
+    try {
+        $api->call('get_music_library', ['kind' => 'songs'], 'token');
+        $this->fail();
+    } catch (ServiceError $e) {
+        $this->assertSame('MUSIC_FORMAT_CHANGED', $e->reason);
+    }
+});

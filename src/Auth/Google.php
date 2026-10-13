@@ -11,6 +11,7 @@ use YouTubeMusicMcp\Storage\{Database, Lock};
 final class Google
 {
     public const YOUTUBE_SCOPE = 'https://www.googleapis.com/auth/youtube.force-ssl';
+    public const MUSIC_SCOPE = 'https://www.googleapis.com/auth/youtube';
 
     public function __construct(
         private Config $config,
@@ -30,7 +31,7 @@ final class Google
             'client_id' => $this->config->get('GOOGLE_CLIENT_ID'),
             'redirect_uri' => $this->config->url() . '/google/callback',
             'response_type' => 'code',
-            'scope' => 'openid email profile' . ($youtube ? ' ' . self::YOUTUBE_SCOPE : ''),
+            'scope' => 'openid email profile' . ($youtube ? ' ' . self::YOUTUBE_SCOPE . ' ' . self::MUSIC_SCOPE : ''),
             'state' => $state,
             'code_challenge' => $challenge,
             'code_challenge_method' => 'S256'
@@ -129,7 +130,7 @@ final class Google
     public function connect(string $user, array $tokens, array $channel): void
     {
         $scopes = preg_split('/\s+/', (string)($tokens['scope'] ?? ''));
-        if (!in_array(self::YOUTUBE_SCOPE, $scopes, true) || empty($tokens['refresh_token'])) {
+        if ((!in_array(self::YOUTUBE_SCOPE, $scopes, true) && !in_array(self::MUSIC_SCOPE, $scopes, true)) || empty($tokens['refresh_token'])) {
             throw new ServiceError(
                 'GOOGLE_RECONNECT_REQUIRED',
                 'Offline YouTube permission is required. Reconnect and grant access.'
