@@ -9,6 +9,28 @@ use YouTubeMusicMcp\Storage\Database;
 $root = dirname(__DIR__);
 $command = $argv[1] ?? 'help';
 try {
+    if ($command === 'mcp:check') {
+        if (!class_exists(\YouTubeMusicMcp\Mcp\Presentation::class)) {
+            throw new RuntimeException('MCP presentation class missing. Deploy the complete release and verify Composer autoloading.');
+        }
+        $tools = \YouTubeMusicMcp\Mcp\Tools::definitions();
+        $names = [];
+        $validator = new \Opis\JsonSchema\Validator();
+        foreach ($tools as $tool) {
+            if (isset($names[$tool->name])) { throw new RuntimeException('Duplicate tool name: ' . $tool->name); }
+            $names[$tool->name] = true;
+            $schema = json_decode(json_encode($tool->inputSchema, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
+            // Compiles each schema. Missing required arguments in this dummy value are expected.
+            $validator->validate(new stdClass(), $schema);
+            if (array_diff($tool->inputSchema['required'] ?? [], array_keys((array)$tool->inputSchema['properties']))) {
+                throw new RuntimeException('Tool has required arguments absent from its properties: ' . $tool->name);
+            }
+        }
+        echo 'MCP catalog check passed: ' . count($tools) . " tools.\n";
+        echo 'Catalog fingerprint: ' . hash('sha256', json_encode($tools, JSON_THROW_ON_ERROR)) . "\n";
+        echo "Offline check only; HTTPS, OAuth, PHP-FPM and ChatGPT refresh are not verified.\n";
+        exit(0);
+    }
     if ($command === 'key:generate') {
         echo base64_encode(random_bytes(32)) . PHP_EOL;
         exit(0);
@@ -91,7 +113,7 @@ try {
             ) . PHP_EOL;
         exit(0);
     }
-    echo "Commands: key:generate, init, migrate, cleanup, music:check, client:create CALLBACK_URI [NAME]\n";
+    echo "Commands: key:generate, init, migrate, cleanup, mcp:check, music:check, client:create CALLBACK_URI [NAME]\n";
 } catch (Throwable $e) {
     fwrite(STDERR, $e->getMessage() . PHP_EOL);
     exit(1);

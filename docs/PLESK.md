@@ -76,6 +76,16 @@ Run as the same subscription account with storage access. This cleans expired ca
 
 ## Smoke checks
 
+If ChatGPT cannot refresh the tools, run this read-only check on the deployed release as the subscription user, using the same PHP version as PHP-FPM:
+
+```sh
+/opt/plesk/php/8.3/bin/php bin/console.php mcp:check
+```
+
+It compiles the tool schemas, checks catalog consistency and the compact presentation class, and prints a non-secret catalog fingerprint. Compare fingerprints between the intended release and server to detect incomplete deployment. It does not read credentials, call YouTube, or verify the web worker. If CLI passes but the web catalog remains old, check whether PHP-FPM OPcache still serves an earlier release and reload that domain's PHP worker through the available Plesk/admin controls when appropriate.
+
+Reproduce one refresh and correlate its timestamp with `/mcp` and `/oauth/token` access/error logs. A 401 points to authorization/refresh, 403 to policy/WAF/transport, 404 to routing or session lookup, and 500/503 to application/bootstrap failure. These are starting points, not a diagnosis from status alone. Capture the exact error and request ID without authorization headers, cookies, or token/callback payloads. Do not delete keys, reset storage, or recreate OAuth clients merely because refresh failed.
+
 After deploying tool-schema changes, refresh the ChatGPT connection's tools. Verify compact `structuredContent` and short text summaries in a real ChatGPT conversation. Local payload-size tests demonstrate smaller serialized results; actual model-token savings depend on the client and are not inferred from PHP timings. No new environment settings or database migrations are required for these result-shaping and playlist workflow changes.
 
 - `/health/live` and `/health/ready` return JSON without credentials.
