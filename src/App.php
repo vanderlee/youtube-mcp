@@ -90,6 +90,9 @@ final class App
                 ),
                 true
             );
+            // Some proxy/client combinations supply duplicate Host values. The
+            // URI host was validated above; pass one canonical authority to the SDK.
+            $request = $request->withHeader('Host', (new Uri($this->config->url()))->getAuthority());
             $response = $this->route($request);
         } catch (OAuthServerException $e) {
             $response = $e->generateHttpResponse(new Response());

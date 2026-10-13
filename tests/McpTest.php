@@ -44,6 +44,16 @@ final class McpTest extends TestCase
         $r=$this->app->handle(new ServerRequest('POST','https://music.example.test/mcp',['Host'=>'music.example.test']));
         self::assertSame(401,$r->getStatusCode()); self::assertStringContainsString('oauth-protected-resource/mcp',$r->getHeaderLine('WWW-Authenticate'));
     }
+    public function testDuplicateHostHeadersDoNotBlockAuthenticatedInitialization(): void
+    {
+        $payload=['jsonrpc'=>'2.0','id'=>1,'method'=>'initialize','params'=>['protocolVersion'=>'2025-06-18','capabilities'=>new \stdClass(),'clientInfo'=>['name'=>'test','version'=>'1']]];
+        $headers=['Host'=>['music.example.test','music.example.test'],'Authorization'=>'Bearer '.$this->token,'Content-Type'=>'application/json','Accept'=>'application/json, text/event-stream'];
+        $r=$this->app->handle(new ServerRequest('POST','https://music.example.test/mcp',$headers,json_encode($payload)));
+        self::assertSame(200,$r->getStatusCode(),(string)$r->getBody());
+        $invalid=$this->app->handle(new ServerRequest('POST','https://attacker.test/mcp',$headers,json_encode($payload)));
+        self::assertSame(400,$invalid->getStatusCode());
+        self::assertStringContainsString('INVALID_HOST',(string)$invalid->getBody());
+    }
     public function testBrowserPoliciesPermitGoogleAndChatGptFormRedirects(): void
     {
         $r=$this->app->handle(new ServerRequest('GET','https://music.example.test/health/live'));
