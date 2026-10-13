@@ -346,7 +346,12 @@ class Api
             }
             throw $error;
         }
-        $this->checkStatus($r['status'], $write, $r['data'], $profile);
+        try {
+            $this->checkStatus($r['status'], $write, $r['data'], $profile);
+        } catch (ServiceError $error) {
+            Diagnostics::log($error, $endpoint);
+            throw $error;
+        }
         $data = $r['data'];
         if (isset($data['error'])) {
             throw new ServiceError('MUSIC_UPSTREAM_REJECTED', 'Music rejected the request.',

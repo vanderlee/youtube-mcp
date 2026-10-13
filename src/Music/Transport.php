@@ -70,6 +70,13 @@ final class Transport extends Client
             $safe['status'] = $error['status'];
         }
         $reasons = [];
+        $legacyErrors = is_array($error['errors'] ?? null) ? $error['errors'] : [];
+        foreach (array_slice($legacyErrors, 0, 20) as $entry) {
+            if (is_array($entry) && in_array($entry['reason'] ?? '', ['badRequest', 'authError', 'forbidden',
+                'insufficientPermissions', 'accessNotConfigured', 'quotaExceeded', 'rateLimitExceeded', 'keyInvalid'], true)) {
+                $reasons[] = $entry['reason'];
+            }
+        }
         $details = is_array($error['details'] ?? null) ? $error['details'] : [];
         foreach (array_slice($details, 0, 20) as $detail) {
             if (is_array($detail) && in_array($detail['reason'] ?? '', ['ACCESS_TOKEN_SCOPE_INSUFFICIENT',
@@ -80,7 +87,8 @@ final class Transport extends Client
         }
         foreach (is_array($error['reasons'] ?? null) ? array_slice($error['reasons'], 0, 20) : [] as $reason) {
             if (in_array($reason, ['ACCESS_TOKEN_SCOPE_INSUFFICIENT', 'API_KEY_INVALID', 'API_KEY_SERVICE_BLOCKED',
-                'SERVICE_DISABLED', 'OAUTH_SCOPE_INVALID', 'UNAUTHORIZED_CLIENT', 'CONSUMER_INVALID', 'CREDENTIALS_MISSING'], true)) {
+                'SERVICE_DISABLED', 'OAUTH_SCOPE_INVALID', 'UNAUTHORIZED_CLIENT', 'CONSUMER_INVALID', 'CREDENTIALS_MISSING',
+                'badRequest', 'authError', 'forbidden', 'insufficientPermissions', 'accessNotConfigured', 'quotaExceeded', 'rateLimitExceeded', 'keyInvalid'], true)) {
                 $reasons[] = $reason;
             }
         }

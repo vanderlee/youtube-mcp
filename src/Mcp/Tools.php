@@ -240,7 +240,7 @@ final class Tools
                         $r
                     );
                 } catch (ServiceError $e) {
-                    return new CallToolResult([new TextContent($e->reason . ': ' . $e->getMessage())],
+                    return new CallToolResult([new TextContent(\YouTubeMusicMcp\Music\Diagnostics::text($e))],
                         true,
                         $e->payload());
                 }

@@ -65,6 +65,10 @@ All writes use account locks and existing operation receipts. Reuse the same ope
 
 ## Verification
 
+Music upstream errors include safe diagnostics in both the MCP text error and `structuredContent`, so clients that display only the text do not hide the HTTP status. PHP's error log receives a `music_upstream_error` JSON event with the endpoint, HTTP status, allowlisted status/reasons and public client-version metadata. Credentials, raw upstream messages/bodies and visitor identifiers are excluded. Legacy Google `error.errors[].reason` values such as `badRequest` are supported alongside `error.details[].reason`.
+
+Successful `get_connection_status` identifies the official YouTube connection only; it does not establish Music authentication. Use `get_music_account` for the latter. If account-menu and history requests both return HTTP 400 `INVALID_ARGUMENT` with actual client metadata, more MCP permissions and repeated consent are not established remedies. The generic response does not prove whether Google rejects the OAuth client/token or another request field. The [reference Music OAuth setup](https://ytmusicapi.readthedocs.io/en/stable/setup/oauth.html) uses a TVs and Limited Input devices client; this application currently uses Web-client tokens, whose Music compatibility remains unverified. Do not claim that the history integration works on the basis of official account status alone.
+
 ```sh
 composer test
 php bin/console.php music:check
