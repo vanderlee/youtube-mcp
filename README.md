@@ -1,5 +1,7 @@
 # YouTube Music MCP service
 
+For persistent Music OAuth rejection, the dashboard supports an optional encrypted, channel-verified browser session with a seven-day local expiry. Apply storage migration `004` and see [setup and credential handling](docs/MUSIC.md#music-browser-session-when-oauth-is-rejected). Live compatibility must be verified.
+
 Use `php bin/music-probe.php CHANNEL_ID --headers` as the subscription user for a bounded authenticated header comparison. It reports sanitized results and does not change the normal request profile.
 
 The operator Music probe includes sanitized token-client, scope and expiry checks. Run it as the Plesk subscription user; credentials are never printed.

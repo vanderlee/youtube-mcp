@@ -144,6 +144,24 @@ trait MusicApiTestHelpers
 
 uses(MusicApiTestHelpers::class);
 
+test('browser api signs cookie requests without leaking credentials into the original oauth client', function (): void {
+    $account = ['activeAccountHeaderRenderer' => ['accountName' => ['simpleText' => 'Fixture'], 'channelHandle' => ['simpleText' => '@fixture']]];
+    [$api, $http] = $this->api([$this->ok($account), $this->ok($account)]);
+    $browser = $api->withBrowser(['cookie' => 'SAPISID=dummy-secret; SID=dummy-session', 'account_index' => '0']);
+    $browser->call('get_music_account', []);
+    $headers = $http->calls[0][2];
+    $this->assertContains('Cookie: SAPISID=dummy-secret; SID=dummy-session', $headers);
+    $this->assertContains('X-Goog-AuthUser: 0', $headers);
+    $this->assertNotContains('Cookie: SOCS=CAI', $headers);
+    $authorization = array_values(array_filter($headers, fn($header) => str_starts_with($header, 'Authorization:')));
+    $this->assertCount(1, $authorization);
+    $this->assertStringStartsWith('Authorization: SAPISIDHASH ', $authorization[0]);
+    $this->assertStringNotContainsString('dummy-secret', $authorization[0]);
+    $api->call('get_music_account', [], 'dummy-oauth');
+    $this->assertContains('Authorization: Bearer dummy-oauth', $http->calls[1][2]);
+    $this->assertStringNotContainsString('dummy-session', implode(' ', $http->calls[1][2]));
+});
+
 test('header probe changes one header per read and preserves body and credentials', function (): void {
     [$api, $http] = $this->api(array_fill(0, 5, $this->ok(['contents' => ['private' => 'hidden']])));
     $report = $api->compareHeaders('dummy-token');

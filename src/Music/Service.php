@@ -17,7 +17,8 @@ final class Service
         private Receipts $receipts,
         private Lock $locks,
         private Config $config,
-        private ?\YouTubeMusicMcp\Auth\MusicOAuth $musicOAuth = null
+        private ?\YouTubeMusicMcp\Auth\MusicOAuth $musicOAuth = null,
+        private ?\YouTubeMusicMcp\Auth\MusicBrowser $musicBrowser = null
     ) {
     }
 
@@ -34,15 +35,16 @@ final class Service
         // Use the same account lock for reads and writes, so reconnect cannot swap identity mid-call.
         return $this->locks->run('account:' . $user, function () use ($user, $tool, $args) {
             $connection = $this->google->connection($user);
-            $musicConnection = $this->musicOAuth?->configured() ? $this->musicOAuth->connection($user, $connection) : null;
-            $generation = $connection['generation'] . ($musicConnection ? ':music:' . $musicConnection['generation'] : '');
+            $browserConnection = $this->musicBrowser?->connection($user, $connection);
+            $musicConnection = !$browserConnection && $this->musicOAuth?->configured() ? $this->musicOAuth->connection($user, $connection) : null;
+            $generation = $connection['generation'] . ($browserConnection ? ':browser:' . $browserConnection['generation'] : ($musicConnection ? ':music:' . $musicConnection['generation'] : ''));
             if (in_array($tool, Tools::WRITES, true)) {
                 return $this->receipts->run(
                     $user,
                     $generation,
                     $tool,
                     $args,
-                    function ($step) use ($user, $generation, $tool, $args, $connection, $musicConnection) {
+                    function ($step) use ($user, $generation, $tool, $args, $connection, $musicConnection, $browserConnection) {
                         // Verify action tokens only inside the receipt callback: completed replay stays local.
                         $arguments = $args;
                         unset($arguments['operation_key'], $arguments['resume']);
@@ -59,14 +61,16 @@ final class Service
                                 $arguments['feedback_tokens']
                             );
                         }
-                        $access = $musicConnection ? $this->musicOAuth->accessToken($user, $musicConnection) : $this->musicAccessToken($user, $connection);
-                        $result = $step('music-change', fn() => $this->api->call($tool, $arguments, $access));
+                        $api = $browserConnection ? $this->musicBrowser->client($browserConnection) : $this->api;
+                        $access = $browserConnection ? null : ($musicConnection ? $this->musicOAuth->accessToken($user, $musicConnection) : $this->musicAccessToken($user, $connection));
+                        $result = $step('music-change', fn() => $api->call($tool, $arguments, $access));
                         return ['changed' => true, 'upstream' => $result];
                     }
                 );
             }
-            $result = $this->api->call($tool, $args,
-                $musicConnection ? $this->musicOAuth->accessToken($user, $musicConnection) : $this->musicAccessToken($user, $connection));
+            $api = $browserConnection ? $this->musicBrowser->client($browserConnection) : $this->api;
+            $result = $api->call($tool, $args, $browserConnection ? null :
+                ($musicConnection ? $this->musicOAuth->accessToken($user, $musicConnection) : $this->musicAccessToken($user, $connection)));
             $truncated = false;
             $result = $this->protect($result, $user, $generation, $truncated, $tool === 'get_music_history');
             return [

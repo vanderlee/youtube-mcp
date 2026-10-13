@@ -23,8 +23,8 @@ final class Diagnostics
         if (is_bool($details['music_visitor_context_present'] ?? null)) {
             $safe['music_visitor_context_present'] = $details['music_visitor_context_present'];
         }
-        if (($details['music_request_profile'] ?? '') === 'oauth_minimal_v1') {
-            $safe['music_request_profile'] = 'oauth_minimal_v1';
+        if (in_array($details['music_request_profile'] ?? '', ['oauth_minimal_v1', 'browser_session_v1'], true)) {
+            $safe['music_request_profile'] = $details['music_request_profile'];
         }
         return $safe;
     }

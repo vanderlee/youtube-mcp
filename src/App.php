@@ -34,6 +34,7 @@ final class App
     private Api $api;
     private Service $playlists;
     private \YouTubeMusicMcp\Auth\MusicOAuth $musicOAuth;
+    private \YouTubeMusicMcp\Auth\MusicBrowser $musicBrowser;
 
     public function __construct(private Config $config)
     {
@@ -47,6 +48,8 @@ final class App
         $this->oauth = new OAuth($this->db, $config);
         $this->musicOAuth = new \YouTubeMusicMcp\Auth\MusicOAuth($config, $this->db, $this->google,
             new Vault($config->get('APP_KEY')), $http, $this->api, $locks);
+        $this->musicBrowser = new \YouTubeMusicMcp\Auth\MusicBrowser($this->db, new Vault($config->get('APP_KEY')),
+            $this->google, $this->api, new \YouTubeMusicMcp\Music\Api($config), $locks);
         $this->playlists = new Service(
             $this->google, $this->api, $this->budget, new Receipts($this->db, $locks), $locks,
             new \YouTubeMusicMcp\Music\Service(
@@ -55,9 +58,11 @@ final class App
                 new Receipts($this->db, $locks),
                 $locks,
                 $config,
-                $this->musicOAuth
+                $this->musicOAuth,
+                $this->musicBrowser
             ),
-            $this->musicOAuth
+            $this->musicOAuth,
+            $this->musicBrowser
         );
     }
 
@@ -305,6 +310,24 @@ final class App
             );
         }
         $user = $_SESSION['user'];
+        if ($path === '/music/browser') {
+            if (!$this->db->one("SELECT name FROM sqlite_master WHERE type='table' AND name='music_browser_connections'")) {
+                throw new ServiceError('DEPLOYMENT_MIGRATION_REQUIRED', 'Run php bin/console.php init before connecting a Music browser session.', [], 503);
+            }
+            if ($method !== 'GET') {
+                $this->csrf($r);
+                $body = (array)$r->getParsedBody();
+                $this->musicBrowser->connect($user, (string)($body['cookie'] ?? ''), (string)($body['account_index'] ?? ''));
+                return $this->html('Music browser session saved', '<p>The browser session matches your confirmed channel. Reconnect ChatGPT, then test Music account and history access.</p><a href="/">Return to dashboard</a>');
+            }
+            return $this->html('Connect Music browser session', '<p>In Chrome Network, select a successful Music browse request. Copy only the Cookie header value and the X-Goog-AuthUser value into this form. Do not paste credentials into chat. This session can provide access to your Google account; store it only on a server you trust. It expires here after seven days and may stop working sooner.</p>'
+                . $this->form('/music/browser', 'Verify and save session', '<label>Cookie header value<textarea name="cookie" required maxlength="24000" autocomplete="off" spellcheck="false"></textarea></label><label>X-Goog-AuthUser<input name="account_index" required pattern="[0-9]{1,2}" maxlength="2" autocomplete="off"></label>'));
+        }
+        if ($path === '/music/browser/disconnect') {
+            $this->csrf($r);
+            $this->musicBrowser->disconnect($user);
+            return $this->redirect('/');
+        }
         if ($path === '/music/connect') {
             $this->csrf($r);
             $_SESSION['music_authorization'] = $this->musicOAuth->begin($user);
@@ -385,6 +408,16 @@ final class App
             $body .= $this->form('/google/disconnect', 'Disconnect');
         }
         $body .= '</div></section>';
+        if ($c) {
+            try { $browser = $this->musicBrowser->connection($user, $this->google->connection($user)); }
+            catch (ServiceError $error) {
+                if ($error->reason !== 'MUSIC_BROWSER_RECONNECT_REQUIRED') { throw $error; }
+                $browser = ['expired' => true];
+            }
+            $body .= '<section class="card"><h2>Music browser session</h2><p>' . ($browser ? (isset($browser['expired']) ? 'Session needs reconnection' : 'Verified browser session saved') : 'No browser session connected')
+                . '</p><p class="muted">A saved browser session is used for Music instead of OAuth.</p><a href="/music/browser">' . ($browser ? 'Reconnect browser session' : 'Connect browser session') . '</a>'
+                . ($browser ? $this->form('/music/browser/disconnect', 'Remove browser session') : '') . '</section>';
+        }
         if ($c && $this->musicOAuth->configured()) {
             $body .= $this->musicAuthorizationCard($user);
         }

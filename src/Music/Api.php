@@ -12,6 +12,14 @@ class Api
 {
     private Client $http;
     private Bootstrap $bootstrap;
+    private ?array $browserCredentials = null;
+
+    public function withBrowser(array $credentials): self
+    {
+        $copy = clone $this;
+        $copy->browserCredentials = \YouTubeMusicMcp\Auth\MusicBrowserCredentials::parse($credentials['cookie'], $credentials['account_index']);
+        return $copy;
+    }
 
     public function __construct(private Config $config, ?Client $http = null, ?Bootstrap $bootstrap = null)
     {
@@ -24,9 +32,10 @@ class Api
         if (!isset(Tools::specs()[$tool])) {
             throw new ServiceError('UNKNOWN_TOOL', 'Unknown Music tool.');
         }
-        if (!$accessToken) {
+        if (!$accessToken && $this->browserCredentials === null) {
             throw new ServiceError('GOOGLE_RECONNECT_REQUIRED', 'Connect Google first.', [], 401);
         }
+        $accessToken ??= '';
         $limit = $a['limit'] ?? 25;
         if ($tool === 'set_music_song_library_status' || $tool === 'remove_music_history_items') {
             $tokens = $tool === 'set_music_song_library_status' ? [$a['feedback_token']] : $a['feedback_tokens'];
@@ -419,7 +428,10 @@ class Api
             'X-Goog-Request-Time: ' . time(),
             'User-Agent: ' . Bootstrap::USER_AGENT
         ];
-        if ($token !== '') {
+        if ($this->browserCredentials !== null) {
+            $headers = array_values(array_filter($headers, static fn(string $header): bool => !str_starts_with($header, 'Cookie:')));
+            $headers = array_merge($headers, \YouTubeMusicMcp\Auth\MusicBrowserCredentials::headers($this->browserCredentials, time()));
+        } elseif ($token !== '') {
             $headers[] = 'Authorization: Bearer ' . $token;
         }
         if ($profile !== null) {
@@ -438,7 +450,7 @@ class Api
             $details['music_client_name'] = 'WEB_REMIX';
             $details['music_client_version'] = $profile['clientVersion'];
             $details['music_visitor_context_present'] = true;
-            $details['music_request_profile'] = 'oauth_minimal_v1';
+            $details['music_request_profile'] = $this->browserCredentials === null ? 'oauth_minimal_v1' : 'browser_session_v1';
         }
         if (isset($safe['status'])) { $details['upstream_status'] = $safe['status']; }
         if (isset($safe['reasons'])) { $details['upstream_reasons'] = $safe['reasons']; }

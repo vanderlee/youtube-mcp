@@ -32,7 +32,8 @@ final class Service
         private Receipts $receipts,
         private Lock $locks,
         private ?\YouTubeMusicMcp\Music\Service $music = null,
-        private ?\YouTubeMusicMcp\Auth\MusicOAuth $musicOAuth = null
+        private ?\YouTubeMusicMcp\Auth\MusicOAuth $musicOAuth = null,
+        private ?\YouTubeMusicMcp\Auth\MusicBrowser $musicBrowser = null
     ) {
     }
 
@@ -63,6 +64,13 @@ final class Service
         if ($tool === 'get_connection_status') {
             $googleScopes = array_values(array_filter(preg_split('/\s+/', trim($c['scopes']))));
             $musicStatus = $this->musicOAuth?->status($user, $c) ?? ['music_authentication' => 'google_web_oauth', 'music_device_connected' => false];
+            try { $browser = $this->musicBrowser?->connection($user, $c); }
+            catch (ServiceError $error) {
+                if ($error->reason !== 'MUSIC_BROWSER_RECONNECT_REQUIRED') { throw $error; }
+                $browser = null;
+            }
+            $musicStatus['music_browser_connected'] = $browser !== null;
+            if ($browser !== null) { $musicStatus['music_authentication'] = 'browser_session'; }
             return ['connected' => true, 'channel_id' => $c['channel_id'], 'channel_name' => $c['channel_name'],
                 'service_scopes' => array_values($scopes), 'google_scopes' => $googleScopes,
                 'music_google_scope_granted' => $musicStatus['music_device_connected'] || in_array(Google::MUSIC_SCOPE, $googleScopes, true),

@@ -4,6 +4,21 @@ Catalog, Music search, discovery, personal library and listening history use a n
 
 ## Runtime and authorization
 
+### Music browser session when OAuth is rejected
+
+The dashboard supports a separate browser session authenticated with a freshly computed `SAPISIDHASH`. This route is native PHP and requires migration `004_music_browser_connections.sql`; run the existing deployment initialization. No additional runtime or environment setting is required.
+
+1. Sign into the service dashboard with the confirmed Google account. Select **Connect browser session**.
+2. In Chrome, open Music under that same account, inspect a successful `youtubei/v1/browse` request in Network, and copy the **Cookie header value** into the dashboard form. Copy the numeric **X-Goog-AuthUser** value into its account-index field. Do not submit the Authorization header, a HAR, or a cURL command. Never paste cookies into chat or command-line arguments.
+3. Select **Verify and save session**. The service obtains the active Music handle and resolves it through official `channels.list(forHandle=...)`. Exactly one result must match the already confirmed channel; a missing handle or mismatch rejects storage. Account names alone are never used as identity proof.
+4. Reconnect ChatGPT because storing/replacing/removing a session revokes service tokens. Test `get_music_account` and `get_music_history`. Live compatibility remains unverified by local tests.
+
+Cookie credentials may grant broader Google account access than Music alone. Use this only on a trusted HTTPS deployment with private storage and protected backups. Credentials are encrypted with `APP_KEY`, scoped by user/channel/Google generation, and locally expire after seven days; Google may invalidate them sooner. A connected session takes precedence over Music OAuth, with no silent fallback on expiration or identity mismatch. Each Music operation verifies the active handle again before accessing data or dispatching a write. Browser generations isolate action tokens and operation receipts. Normal service scopes and mutation receipts/locks remain enforced.
+
+Google reconnect/disconnect removes the local browser session; account deletion cascades it. **Remove browser session** deletes local credentials and revokes service tokens, but does not sign out the browser or revoke Google cookies remotely. Browser credentials are never refreshed automatically. Reconnect through the private form if necessary. Errors identify this transport as `browser_session_v1` and expose only existing safe diagnostics. Official playlist/likes/subscription tools retain their Google OAuth credentials. `get_connection_status` reports `music_authentication: browser_session` and `music_browser_connected`; those stored-state fields do not perform a live access check.
+
+The SAPISID signing approach follows the [reference implementation](https://github.com/sigma67/ytmusicapi/blob/main/ytmusicapi/helpers.py); unofficial behavior can change independently of the official YouTube API.
+
 ### Separate Music device OAuth for rejected Web-client tokens
 
 The same minimal anonymous home request was accepted while authenticated Music reads returned HTTP 400 `INVALID_ARGUMENT`/`badRequest`. A matching public web profile therefore does not establish compatibility of the Web OAuth token. The application supports a separate native PHP Music device flow matching the [reference OAuth setup](https://ytmusicapi.readthedocs.io/en/stable/setup/oauth.html). It requests device codes from `https://www.youtube.com/o/oauth2/device/code`, uses the reference Cobalt user agent, and exchanges `code` at Google's token endpoint with grant type `http://oauth.net/grant_type/device/1.0`, matching the [reference implementation](https://github.com/sigma67/ytmusicapi/blob/main/ytmusicapi/auth/oauth/credentials.py).
