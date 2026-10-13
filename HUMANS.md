@@ -1,5 +1,7 @@
 # Human to do list
 - Add support for other LLM's besides ChatGTP.
+- Use Pest for testing.
+- Create full suite of unittests.
 - Add full support for all YouTube Music API's.
 - Reduce API calls as much as possible.
 - Reduce Chat token usage as much as possible.

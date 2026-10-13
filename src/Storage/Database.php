@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Storage;
+namespace YouTubeMusicMcp\Storage;
 
 use PDO;
 use PDOStatement;

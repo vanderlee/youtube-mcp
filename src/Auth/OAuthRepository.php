@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Auth;
+namespace YouTubeMusicMcp\Auth;
 
 use League\OAuth2\Server\Entities\{AccessTokenEntityInterface,
     AuthCodeEntityInterface,
@@ -14,7 +14,7 @@ use League\OAuth2\Server\Repositories\{AccessTokenRepositoryInterface,
     ClientRepositoryInterface,
     RefreshTokenRepositoryInterface,
     ScopeRepositoryInterface};
-use YouTubeMcp\Storage\Database;
+use YouTubeMusicMcp\Storage\Database;
 
 final class OAuthRepository implements ClientRepositoryInterface, AccessTokenRepositoryInterface,
                                        AuthCodeRepositoryInterface, RefreshTokenRepositoryInterface,
@@ -43,7 +43,7 @@ final class OAuthRepository implements ClientRepositoryInterface, AccessTokenRep
 
     public function getScopeEntityByIdentifier(string $identifier): ?ScopeEntityInterface
     {
-        return in_array($identifier, \YouTubeMcp\Auth\Scope::SUPPORTED, true) ? new Scope($identifier) : null;
+        return in_array($identifier, \YouTubeMusicMcp\Auth\Scope::SUPPORTED, true) ? new Scope($identifier) : null;
     }
 
     public function finalizeScopes(

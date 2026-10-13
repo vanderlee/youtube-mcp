@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Operations;
+namespace YouTubeMusicMcp\Operations;
 
-use YouTubeMcp\{ServiceError};
-use YouTubeMcp\Storage\{Database, Lock};
 use Throwable;
+use YouTubeMusicMcp\{ServiceError};
+use YouTubeMusicMcp\Storage\{Database, Lock};
 
 final class Receipts
 {

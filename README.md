@@ -1,6 +1,6 @@
-﻿# YouTube playlist MCP service
+# YouTube Music MCP service
 
-A multi-user PHP service for managing YouTube playlists from ChatGPT. Each user signs in with Google, authorizes their own YouTube channel, and grants ChatGPT separate service permissions. Google credentials stay on the server.
+A multi-user PHP service for managing YouTube playlists and accessing YouTube Music from ChatGPT. Each user signs in with Google, authorizes their own YouTube channel, and grants ChatGPT separate service permissions. Google credentials stay on the server.
 
 This is an initial implementation with automated local verification. It has **not yet been validated against a live Google account, YouTube Music, ChatGPT, or a Plesk installation**. Complete the [live acceptance checklist](docs/ACCEPTANCE.md) before treating the deployment as ready for personal playlists.
 

@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Auth;
+namespace YouTubeMusicMcp\Auth;
 
-use YouTubeMcp\{Config, ServiceError};
-use YouTubeMcp\Http\Client;
-use YouTubeMcp\Storage\{Database, Lock};
+use YouTubeMusicMcp\{Config, ServiceError};
+use YouTubeMusicMcp\Http\Client;
+use YouTubeMusicMcp\Storage\{Database, Lock};
 
 final class Google
 {

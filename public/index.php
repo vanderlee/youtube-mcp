@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7Server\ServerRequestCreator;
-use YouTubeMcp\App;
-use YouTubeMcp\Config;
+use YouTubeMusicMcp\App;
+use YouTubeMusicMcp\Config;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -29,7 +29,7 @@ try {
     error_log(
         json_encode(
             [
-                'event' => 'youtube_mcp_bootstrap',
+                'event' => 'youtube_music_mcp_bootstrap',
                 'error_class' => get_class($e),
                 'file' => basename($e->getFile()),
                 'line' => $e->getLine()

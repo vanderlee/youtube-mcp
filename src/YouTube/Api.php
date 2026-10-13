@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\YouTube;
+namespace YouTubeMusicMcp\YouTube;
 
-use YouTubeMcp\Auth\Google;
-use YouTubeMcp\Http\Client;
-use YouTubeMcp\Quota\Budget;
-use YouTubeMcp\ServiceError;
-use YouTubeMcp\Storage\Database;
+use YouTubeMusicMcp\Auth\Google;
+use YouTubeMusicMcp\Http\Client;
+use YouTubeMusicMcp\Quota\Budget;
+use YouTubeMusicMcp\ServiceError;
+use YouTubeMusicMcp\Storage\Database;
 
 class Api
 {
@@ -32,7 +32,14 @@ class Api
     ): array {
         [$resource, $action] = explode('.', $method);
         [$bucket] = $this->budget->method($method);
-        $verb = ['list' => 'GET', 'getRating' => 'GET', 'rate' => 'POST', 'insert' => 'POST', 'update' => 'PUT', 'delete' => 'DELETE'][$action];
+        $verb = [
+            'list' => 'GET',
+            'getRating' => 'GET',
+            'rate' => 'POST',
+            'insert' => 'POST',
+            'update' => 'PUT',
+            'delete' => 'DELETE'
+        ][$action];
         $path = in_array($action, ['rate', 'getRating'], true) ? $resource . '/' . $action : $resource;
         $key = hash('sha256', $user . '|' . $method . '|' . json_encode($params));
         if ($verb === 'GET' && $ttl > 0) {

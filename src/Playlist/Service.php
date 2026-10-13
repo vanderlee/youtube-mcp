@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Playlist;
+namespace YouTubeMusicMcp\Playlist;
 
-use YouTubeMcp\Auth\Google;
-use YouTubeMcp\Operations\Receipts;
-use YouTubeMcp\Quota\Budget;
-use YouTubeMcp\ServiceError;
-use YouTubeMcp\Storage\Lock;
-use YouTubeMcp\YouTube\Api;
+use YouTubeMusicMcp\Auth\Google;
+use YouTubeMusicMcp\Operations\Receipts;
+use YouTubeMusicMcp\Quota\Budget;
+use YouTubeMusicMcp\ServiceError;
+use YouTubeMusicMcp\Storage\Lock;
+use YouTubeMusicMcp\YouTube\Api;
 
 final class Service
 {
@@ -25,36 +25,31 @@ final class Service
         'delete_playlist'
     ];
 
-    public static function scope(string $tool): string
-    {
-        if (isset(\YouTubeMcp\Music\Tools::specs()[$tool])) { return \YouTubeMcp\Music\Tools::scope($tool); }
-        $group = match ($tool) {
-            'list_liked_tracks', 'get_track_ratings', 'rate_track' => 'likes',
-            'list_subscriptions', 'subscribe_artist', 'unsubscribe_artist' => 'subscriptions',
-            default => 'playlists'
-        };
-        return $group . (in_array($tool, self::WRITES, true) ? '.write' : '.read');
-    }
-
     public function __construct(
         private Google $google,
         private Api $api,
         private Budget $budget,
         private Receipts $receipts,
         private Lock $locks,
-        private ?\YouTubeMcp\Music\Service $music = null
+        private ?\YouTubeMusicMcp\Music\Service $music = null
     ) {
     }
 
     public function execute(string $user, array $scopes, string $tool, array $a): array
     {
-        if (isset(\YouTubeMcp\Music\Tools::specs()[$tool])) {
-            if (!$this->music) { throw new ServiceError('MUSIC_SETUP_REQUIRED', 'Music integration is not configured.', [], 503); }
+        if (isset(\YouTubeMusicMcp\Music\Tools::specs()[$tool])) {
+            if (!$this->music) {
+                throw new ServiceError('MUSIC_SETUP_REQUIRED', 'Music integration is not configured.', [], 503);
+            }
             return $this->music->execute($user, $scopes, $tool, $a);
         }
         $write = in_array($tool, self::WRITES, true);
         if (!in_array(self::scope($tool), $scopes, true)) {
-            throw new ServiceError('INSUFFICIENT_SERVICE_SCOPE', 'Authorize the required permission: ' . self::scope($tool), [], 403
+            throw new ServiceError(
+                'INSUFFICIENT_SERVICE_SCOPE',
+                'Authorize the required permission: ' . self::scope($tool),
+                [],
+                403
             );
         }
         if ($tool === 'get_usage_status') {
@@ -95,7 +90,12 @@ final class Service
             );
         }
         if ($tool === 'list_liked_tracks') {
-            $r = $this->api->call($user, 'videos.list', ['part' => 'snippet,contentDetails', 'myRating' => 'like'] + $page, ttl: 30);
+            $r = $this->api->call(
+                $user,
+                'videos.list',
+                ['part' => 'snippet,contentDetails', 'myRating' => 'like'] + $page,
+                ttl: 30
+            );
             return $r + ['music_availability' => 'YouTube liked videos; may include non-music content. Music playback is not guaranteed.'];
         }
         if ($tool === 'get_track_ratings') {
@@ -103,7 +103,12 @@ final class Service
             return $this->api->call($user, 'videos.getRating', ['id' => implode(',', array_unique($ids))], ttl: 15);
         }
         if ($tool === 'list_subscriptions') {
-            return $this->api->call($user, 'subscriptions.list', ['part' => 'snippet', 'mine' => 'true'] + $page, ttl: 30);
+            return $this->api->call(
+                $user,
+                'subscriptions.list',
+                ['part' => 'snippet', 'mine' => 'true'] + $page,
+                ttl: 30
+            );
         }
         if ($tool === 'get_playlist') {
             $metadata = $this->metadata($user, $a['playlist_id']);
@@ -151,6 +156,19 @@ final class Service
             ];
         }
         throw new ServiceError('UNKNOWN_TOOL', 'Unknown tool.');
+    }
+
+    public static function scope(string $tool): string
+    {
+        if (isset(\YouTubeMusicMcp\Music\Tools::specs()[$tool])) {
+            return \YouTubeMusicMcp\Music\Tools::scope($tool);
+        }
+        $group = match ($tool) {
+            'list_liked_tracks', 'get_track_ratings', 'rate_track' => 'likes',
+            'list_subscriptions', 'subscribe_artist', 'unsubscribe_artist' => 'subscriptions',
+            default => 'playlists'
+        };
+        return $group . (in_array($tool, self::WRITES, true) ? '.write' : '.read');
     }
 
     private function mutate(
@@ -305,24 +323,14 @@ final class Service
         return ['playlist_id' => $id, 'changed' => count($planned), 'links' => $id ? $this->links($id) : []];
     }
 
-    private function metadata(string $user, string $id): array
-    {
-        $r = $this->api->call(
-            $user,
-            'playlists.list',
-            ['part' => 'snippet,status,contentDetails', 'id' => $id],
-            ttl: 0
-        );
-        return $r['items'][0] ?? throw new ServiceError(
-            'PLAYLIST_NOT_FOUND',
-            'Playlist not found or not accessible.',
-            [],
-            404
-        );
-    }
-
-    private function mutatePreference(string $user, string $tool, array $a, callable $step, string $op, array $done): array
-    {
+    private function mutatePreference(
+        string $user,
+        string $tool,
+        array $a,
+        callable $step,
+        string $op,
+        array $done
+    ): array {
         if (array_key_exists('change', $done)) {
             return ['changed' => 0];
         }
@@ -341,7 +349,10 @@ final class Service
             }
             // Resolve only subscriptions owned by the authenticated channel. Never accept an arbitrary subscription ID.
             $r = $this->api->call($user, 'subscriptions.list', [
-                'part' => 'snippet', 'mine' => 'true', 'forChannelId' => $target, 'maxResults' => 50
+                'part' => 'snippet',
+                'mine' => 'true',
+                'forChannelId' => $target,
+                'maxResults' => 50
             ]);
             $subscription = $r['items'][0]['id'] ?? null;
             if (($tool === 'subscribe_artist' && $subscription !== null) || ($tool === 'unsubscribe_artist' && $subscription === null)) {
@@ -383,6 +394,22 @@ final class Service
             throw new ServiceError('INVALID_VIDEO', 'Unsupported YouTube video URL.');
         }
         return $id;
+    }
+
+    private function metadata(string $user, string $id): array
+    {
+        $r = $this->api->call(
+            $user,
+            'playlists.list',
+            ['part' => 'snippet,status,contentDetails', 'id' => $id],
+            ttl: 0
+        );
+        return $r['items'][0] ?? throw new ServiceError(
+            'PLAYLIST_NOT_FOUND',
+            'Playlist not found or not accessible.',
+            [],
+            404
+        );
     }
 
     private function entries(string $user, string $id): array
