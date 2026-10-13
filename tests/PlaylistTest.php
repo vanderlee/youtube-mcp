@@ -302,12 +302,17 @@ final class PlaylistTest extends TestCase
     public function testCreateWithTracksUsesOneCreationAndOnlyNecessaryInsertions(): void
     {
         [$s, $api] = $this->service([['id' => 'PLtest123456'], ['id' => 'item1'], ['id' => 'item2']]);
-        $a = ['title' => 'Test', 'video_ids' => ['aaaaaaaaaaa', 'aaaaaaaaaaa', 'bbbbbbbbbbb'], 'operation_key' => 'create-1234'];
+        $a = [
+            'title' => 'Test',
+            'video_ids' => ['aaaaaaaaaaa', 'aaaaaaaaaaa', 'bbbbbbbbbbb'],
+            'operation_key' => 'create-1234'
+        ];
         $r = $s->execute('u1', ['playlists.write'], 'create_playlist', $a);
         self::assertSame('completed', $r['status']);
         self::assertSame(2, $r['result']['added']);
         self::assertSame(1, $r['result']['skipped']);
-        self::assertSame(['playlists.insert', 'playlistItems.insert', 'playlistItems.insert'], array_column($api->calls, 0));
+        self::assertSame(['playlists.insert', 'playlistItems.insert', 'playlistItems.insert'],
+            array_column($api->calls, 0));
         self::assertSame('private', $api->calls[0][2]['status']['privacyStatus']);
         self::assertSame($r, $s->execute('u1', ['playlists.write'], 'create_playlist', $a));
         self::assertCount(3, $api->calls);
@@ -316,15 +321,25 @@ final class PlaylistTest extends TestCase
     public function testCreateValidatesAllTracksBeforeCreatingPlaylist(): void
     {
         [$s, $api] = $this->service([]);
-        $r = $s->execute('u1', ['playlists.write'], 'create_playlist', ['title' => 'Test', 'video_ids' => ['aaaaaaaaaaa', 'bad'], 'operation_key' => 'create-1234']);
+        $r = $s->execute(
+            'u1',
+            ['playlists.write'],
+            'create_playlist',
+            ['title' => 'Test', 'video_ids' => ['aaaaaaaaaaa', 'bad'], 'operation_key' => 'create-1234']
+        );
         self::assertSame('partial', $r['status']);
         self::assertSame([], $api->calls);
     }
 
     public function testCreateResumeDoesNotRecreatePlaylistOrReplayInsertedTracks(): void
     {
-        [$s, $api] = $this->service([['id' => 'PLtest123456'], ['id' => 'item1'],
-            new ServiceError('YOUTUBE_QUOTA_EXHAUSTED', 'wait'), $this->metadata(), ['id' => 'item2']]);
+        [$s, $api] = $this->service([
+            ['id' => 'PLtest123456'],
+            ['id' => 'item1'],
+            new ServiceError('YOUTUBE_QUOTA_EXHAUSTED', 'wait'),
+            $this->metadata(),
+            ['id' => 'item2']
+        ]);
         $a = ['title' => 'Test', 'video_ids' => ['aaaaaaaaaaa', 'bbbbbbbbbbb'], 'operation_key' => 'create-1234'];
         $r = $s->execute('u1', ['playlists.write'], 'create_playlist', $a);
         self::assertSame('partial', $r['status']);
@@ -336,8 +351,20 @@ final class PlaylistTest extends TestCase
 
     public function testMoveUsesTargetedLookupEvenOnLargePlaylist(): void
     {
-        [$s, $api] = $this->service([$this->metadata(), ['items' => [$this->entry('entry1', 'aaaaaaaaaaa')]], ['id' => 'entry1']]);
-        $r = $s->execute('u1', ['playlists.write'], 'move_track', ['playlist_id' => 'PLtest123456', 'playlist_item_id' => 'entry1', 'position' => 900, 'operation_key' => 'move-1234']);
+        [$s, $api] = $this->service(
+            [$this->metadata(), ['items' => [$this->entry('entry1', 'aaaaaaaaaaa')]], ['id' => 'entry1']]
+        );
+        $r = $s->execute(
+            'u1',
+            ['playlists.write'],
+            'move_track',
+            [
+                'playlist_id' => 'PLtest123456',
+                'playlist_item_id' => 'entry1',
+                'position' => 900,
+                'operation_key' => 'move-1234'
+            ]
+        );
         self::assertSame('completed', $r['status']);
         self::assertSame('entry1', $api->calls[1][1]['id']);
         self::assertArrayNotHasKey('playlistId', $api->calls[1][1]);
@@ -346,21 +373,52 @@ final class PlaylistTest extends TestCase
 
     public function testForeignEntryRejectedBeforeRemoval(): void
     {
-        $entry = $this->entry('entry1', 'aaaaaaaaaaa'); $entry['snippet']['playlistId'] = 'PLanother123';
+        $entry = $this->entry('entry1', 'aaaaaaaaaaa');
+        $entry['snippet']['playlistId'] = 'PLanother123';
         [$s, $api] = $this->service([$this->metadata(), ['items' => [$entry]]]);
-        $r = $s->execute('u1', ['playlists.write'], 'remove_tracks', ['playlist_id' => 'PLtest123456', 'playlist_item_ids' => ['entry1'], 'operation_key' => 'remove-1234']);
-        self::assertSame('ITEM_NOT_IN_PLAYLIST', $r['error']['code']); self::assertCount(2, $api->calls);
+        $r = $s->execute(
+            'u1',
+            ['playlists.write'],
+            'remove_tracks',
+            ['playlist_id' => 'PLtest123456', 'playlist_item_ids' => ['entry1'], 'operation_key' => 'remove-1234']
+        );
+        self::assertSame('ITEM_NOT_IN_PLAYLIST', $r['error']['code']);
+        self::assertCount(2, $api->calls);
     }
 
     public function testSearchEnrichmentIsOptional(): void
     {
-        $search = ['items' => [['id' => ['videoId' => 'aaaaaaaaaaa'], 'snippet' => ['title' => 'Song', 'channelTitle' => 'Artist']]], 'nextPageToken' => 'next'];
-        [$s, $api] = $this->service([$search, $search, ['items' => [['id' => 'aaaaaaaaaaa', 'snippet' => ['title' => 'Song', 'channelTitle' => 'Artist'], 'contentDetails' => ['duration' => 'PT3M']]]]]);
+        $search = [
+            'items' => [
+                [
+                    'id' => ['videoId' => 'aaaaaaaaaaa'],
+                    'snippet' => ['title' => 'Song', 'channelTitle' => 'Artist']
+                ]
+            ],
+            'nextPageToken' => 'next'
+        ];
+        [$s, $api] = $this->service(
+            [
+                $search,
+                $search,
+                [
+                    'items' => [
+                        [
+                            'id' => 'aaaaaaaaaaa',
+                            'snippet' => ['title' => 'Song', 'channelTitle' => 'Artist'],
+                            'contentDetails' => ['duration' => 'PT3M']
+                        ]
+                    ]
+                ]
+            ]
+        );
         $r = $s->execute('u1', ['playlists.read'], 'search_tracks', ['query' => 'song']);
-        self::assertCount(1, $api->calls); self::assertSame('next', $r['next_page_token']);
+        self::assertCount(1, $api->calls);
+        self::assertSame('next', $r['next_page_token']);
         self::assertArrayNotHasKey('duration', $r['candidates'][0]);
         $r = $s->execute('u1', ['playlists.read'], 'search_tracks', ['query' => 'song', 'include_details' => true]);
-        self::assertCount(3, $api->calls); self::assertSame('PT3M', $r['candidates'][0]['duration']);
+        self::assertCount(3, $api->calls);
+        self::assertSame('PT3M', $r['candidates'][0]['duration']);
     }
 
     public function testUncertainCreateWithTracksCannotResume(): void
@@ -368,8 +426,12 @@ final class PlaylistTest extends TestCase
         [$s, $api] = $this->service([['id' => 'PLtest123456'], new ServiceError('UPSTREAM_UNCERTAIN', 'timeout')]);
         $a = ['title' => 'Test', 'video_ids' => ['aaaaaaaaaaa'], 'operation_key' => 'create-1234'];
         self::assertSame('uncertain', $s->execute('u1', ['playlists.write'], 'create_playlist', $a)['status']);
-        try { $s->execute('u1', ['playlists.write'], 'create_playlist', $a + ['resume' => true]); self::fail(); }
-        catch (ServiceError $e) { self::assertSame('RECONCILIATION_REQUIRED', $e->reason); }
+        try {
+            $s->execute('u1', ['playlists.write'], 'create_playlist', $a + ['resume' => true]);
+            self::fail();
+        } catch (ServiceError $e) {
+            self::assertSame('RECONCILIATION_REQUIRED', $e->reason);
+        }
         self::assertCount(2, $api->calls);
     }
 

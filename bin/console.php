@@ -9,6 +9,19 @@ use YouTubeMusicMcp\Storage\Database;
 $root = dirname(__DIR__);
 $command = $argv[1] ?? 'help';
 try {
+    if ($command === 'bootstrap:check') {
+        foreach ([\YouTubeMusicMcp\Config::class, \YouTubeMusicMcp\App::class, \YouTubeMusicMcp\Mcp\Tools::class, \YouTubeMusicMcp\Mcp\Presentation::class] as $class) {
+            if (!class_exists($class)) {
+                throw new RuntimeException('Cannot autoload ' . $class . '. Check source files and regenerate Composer autoloading from the current composer.json.');
+            }
+            echo 'Autoload OK: ' . $class . PHP_EOL;
+        }
+        if (!method_exists(\YouTubeMusicMcp\Config::class, 'load')) {
+            throw new RuntimeException('Config::load is missing. Application files are from different releases.');
+        }
+        echo "Application class checks passed; configuration, storage and PHP-FPM are not verified.\n";
+        exit(0);
+    }
     if ($command === 'mcp:check') {
         if (!class_exists(\YouTubeMusicMcp\Mcp\Presentation::class)) {
             throw new RuntimeException('MCP presentation class missing. Deploy the complete release and verify Composer autoloading.');
@@ -113,7 +126,7 @@ try {
             ) . PHP_EOL;
         exit(0);
     }
-    echo "Commands: key:generate, init, migrate, cleanup, mcp:check, music:check, client:create CALLBACK_URI [NAME]\n";
+    echo "Commands: key:generate, init, migrate, cleanup, bootstrap:check, mcp:check, music:check, client:create CALLBACK_URI [NAME]\n";
 } catch (Throwable $e) {
     fwrite(STDERR, $e->getMessage() . PHP_EOL);
     exit(1);

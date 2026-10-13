@@ -131,22 +131,70 @@ final class McpTest extends TestCase
 
     public function testFullReceiptIsAvailableOnDemandAndNotDuplicatedInText(): void
     {
-        $receipt = ['operation_id' => 'receipt-test', 'status' => 'partial', 'tool' => 'add_tracks',
-            'completed' => ['add:0' => ['id' => 'item1', 'snippet' => ['description' => 'raw detail', 'resourceId' => ['videoId' => 'aaaaaaaaaaa']]]],
-            'error' => ['code' => 'YOUTUBE_QUOTA_EXHAUSTED']];
+        $receipt = [
+            'operation_id' => 'receipt-test',
+            'status' => 'partial',
+            'tool' => 'add_tracks',
+            'completed' => [
+                'add:0' => [
+                    'id' => 'item1',
+                    'snippet' => ['description' => 'raw detail', 'resourceId' => ['videoId' => 'aaaaaaaaaaa']]
+                ]
+            ],
+            'error' => ['code' => 'YOUTUBE_QUOTA_EXHAUSTED']
+        ];
         $db = new Database($this->dir . '/service.sqlite');
-        $db->execute('INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)', ['receipt-test', 'u1', 'generation', 'add_tracks', 'receipt-key', 'hash', 'partial', json_encode($receipt), time(), time()]);
+        $db->execute(
+            'INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)',
+            [
+                'receipt-test',
+                'u1',
+                'generation',
+                'add_tracks',
+                'receipt-key',
+                'hash',
+                'partial',
+                json_encode($receipt),
+                time(),
+                time()
+            ]
+        );
         unset($db);
-        $init = $this->rpc(['jsonrpc' => '2.0', 'id' => 1, 'method' => 'initialize', 'params' => ['protocolVersion' => '2025-06-18', 'capabilities' => new \stdClass(), 'clientInfo' => ['name' => 'test', 'version' => '1']]]);
+        $init = $this->rpc(
+            [
+                'jsonrpc' => '2.0',
+                'id' => 1,
+                'method' => 'initialize',
+                'params' => [
+                    'protocolVersion' => '2025-06-18',
+                    'capabilities' => new \stdClass(),
+                    'clientInfo' => ['name' => 'test', 'version' => '1']
+                ]
+            ]
+        );
         $session = $init->getHeaderLine('Mcp-Session-Id');
         $this->rpc(['jsonrpc' => '2.0', 'method' => 'notifications/initialized'], $session);
         foreach (['compact', 'full'] as $n => $detail) {
-            $r = $this->rpc(['jsonrpc' => '2.0', 'id' => $n + 2, 'method' => 'tools/call', 'params' => ['name' => 'get_operation', 'arguments' => ['operation_id' => 'receipt-test', 'response_detail' => $detail]]], $session);
+            $r = $this->rpc(
+                [
+                    'jsonrpc' => '2.0',
+                    'id' => $n + 2,
+                    'method' => 'tools/call',
+                    'params' => [
+                        'name' => 'get_operation',
+                        'arguments' => ['operation_id' => 'receipt-test', 'response_detail' => $detail]
+                    ]
+                ],
+                $session
+            );
             $result = json_decode((string)$r->getBody(), true, 512, JSON_THROW_ON_ERROR)['result'];
             self::assertTrue($result['isError']);
             self::assertStringNotContainsString('raw detail', $result['content'][0]['text']);
-            if ($detail === 'full') { self::assertSame($receipt, $result['structuredContent']); }
-            else { self::assertArrayNotHasKey('completed', $result['structuredContent']); }
+            if ($detail === 'full') {
+                self::assertSame($receipt, $result['structuredContent']);
+            } else {
+                self::assertArrayNotHasKey('completed', $result['structuredContent']);
+            }
         }
     }
 

@@ -91,7 +91,10 @@ final class Tools
                 'Search video candidates; Music availability is uncertain. Prefer supplied IDs. One API call by default; include_details adds durations with another call.',
                 [
                     'query' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 200],
-                    'include_details' => ['type' => 'boolean', 'description' => 'Fetch durations with one additional API call. Default false.'],
+                    'include_details' => [
+                        'type' => 'boolean',
+                        'description' => 'Fetch durations with one additional API call. Default false.'
+                    ],
                     'region' => ['type' => 'string', 'pattern' => '^[A-Z]{2}$'],
                     'page_token' => $string,
                     'limit' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 50]
@@ -100,9 +103,17 @@ final class Tools
             ],
             'create_playlist' => [
                 'Create and optionally populate a playlist in one call; private by default. No search or read-back is needed for supplied video IDs.',
-                ['title' => $title, 'description' => $description, 'privacy' => $privacy,
-                    'video_ids' => ['type' => 'array', 'maxItems' => 20, 'items' => ['type' => 'string', 'minLength' => 11, 'maxLength' => 500]],
-                    'duplicate_policy' => ['type' => 'string', 'enum' => ['skip', 'allow']]] + $op,
+                [
+                    'title' => $title,
+                    'description' => $description,
+                    'privacy' => $privacy,
+                    'video_ids' => [
+                        'type' => 'array',
+                        'maxItems' => 20,
+                        'items' => ['type' => 'string', 'minLength' => 11, 'maxLength' => 500]
+                    ],
+                    'duplicate_policy' => ['type' => 'string', 'enum' => ['skip', 'allow']]
+                ] + $op,
                 ['title', 'operation_key']
             ],
             'update_playlist' => [
@@ -149,8 +160,11 @@ final class Tools
         foreach ($specs as $name => [$desc, $props, $required]) {
             $write = in_array($name, array_merge(Service::WRITES, \YouTubeMusicMcp\Music\Tools::WRITES), true);
             if (!$write) {
-                $props['response_detail'] = ['type' => 'string', 'enum' => ['compact', 'full'],
-                    'description' => 'Compact by default; full includes available upstream details or the complete local receipt.'];
+                $props['response_detail'] = [
+                    'type' => 'string',
+                    'enum' => ['compact', 'full'],
+                    'description' => 'Compact by default; full includes available upstream details or the complete local receipt.'
+                ];
             }
             $result[] = new Tool(
                 $name,
@@ -217,7 +231,11 @@ final class Tools
                     );
                     $r = $detail === 'full' ? $r : Presentation::compact($this->name, $r);
                     return new CallToolResult(
-                        [new TextContent('Result in structuredContent' . (isset($r['status']) ? ': ' . $r['status'] : '.') )],
+                        [
+                            new TextContent(
+                                'Result in structuredContent' . (isset($r['status']) ? ': ' . $r['status'] : '.')
+                            )
+                        ],
                         isset($r['status']) && $r['status'] !== 'completed',
                         $r
                     );

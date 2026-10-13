@@ -23,6 +23,8 @@ The implemented database backend is SQLite on local storage. MariaDB remains a f
 
 ## Setup
 
+Plesk's `deploy.sh` hook delegates dependency installation, initialization, and checks to `bin/post-deploy.sh --non-interactive` on every deployment. It defaults to `/opt/plesk/php/8.5/bin/php` and `/usr/lib/plesk-9.0/composer.phar`; override these with `PHP_BIN` and `COMPOSER_BIN` as needed. Configure the private `.env` before unattended deployment. A failed setup or HTTPS check fails the hook; details are in the private project-root `deploy.log`.
+
 For automated Plesk post-deployment setup, run `bash bin/post-deploy.sh --php /opt/plesk/php/8.3/bin/php` as the subscription user. It prompts for configuration, initializes storage, and checks HTTPS; see [script options](docs/PLESK.md#automated-server-side-setup). Google Cloud registration and browser authorizations remain manual.
 
 1. Install dependencies: `composer install --no-dev --prefer-dist --optimize-autoloader`.

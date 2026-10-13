@@ -259,9 +259,13 @@ final class Service
             }
         } elseif ($tool === 'remove_tracks' || $tool === 'move_track') {
             $targets = $tool === 'remove_tracks' ? $a['playlist_item_ids'] : [$a['playlist_item_id']];
-            $pending = array_values(array_filter($targets, fn($t) => !isset($done[($tool === 'remove_tracks' ? 'remove:' : 'move:') . $t])));
+            $pending = array_values(
+                array_filter($targets, fn($t) => !isset($done[($tool === 'remove_tracks' ? 'remove:' : 'move:') . $t]))
+            );
             $entries = $pending ? $this->api->call($user, 'playlistItems.list', [
-                'part' => 'snippet', 'id' => implode(',', $pending), 'maxResults' => 50,
+                'part' => 'snippet',
+                'id' => implode(',', $pending),
+                'maxResults' => 50,
                 'fields' => 'items(id,snippet(playlistId,position,resourceId))'
             ])['items'] ?? [] : [];
             $byId = array_column($entries, null, 'id');
@@ -283,7 +287,12 @@ final class Service
                 } else {
                     $length = $metadata['contentDetails']['itemCount'] ?? null;
                     if (!is_int($length)) {
-                        throw new ServiceError('YOUTUBE_RESPONSE_INVALID', 'YouTube did not return the playlist length; no move was dispatched.', [], 502);
+                        throw new ServiceError(
+                            'YOUTUBE_RESPONSE_INVALID',
+                            'YouTube did not return the playlist length; no move was dispatched.',
+                            [],
+                            502
+                        );
                     }
                     if ($a['position'] >= $length) {
                         throw new ServiceError('INVALID_POSITION', 'Position is outside the playlist.');
@@ -330,48 +339,6 @@ final class Service
             $this->budget->release($reservation);
         }
         return ['playlist_id' => $id, 'changed' => count($planned), 'links' => $id ? $this->links($id) : []];
-    }
-
-    private function create(string $user, array $connection, array $a, callable $step, string $op, array $done): array
-    {
-        $inputs = $a['video_ids'] ?? [];
-        if (!is_array($inputs) || count($inputs) > 20) {
-            throw new ServiceError('INVALID_ARGUMENT', 'Create accepts at most 20 initial tracks.');
-        }
-        // Validate every ID before creating anything. Preserve occurrence indexes for receipt replay.
-        $videos = array_map(fn($v) => $this->video($v), $inputs);
-        $policy = $a['duplicate_policy'] ?? 'skip';
-        if (!in_array($policy, ['skip', 'allow'], true)) {
-            throw new ServiceError('INVALID_ARGUMENT', 'Unsupported duplicate policy.');
-        }
-        $deadline = microtime(true) + 45;
-        $created = $step('create', fn() => $this->api->call($user, 'playlists.insert', ['part' => 'snippet,status'], [
-            'snippet' => ['title' => $a['title'], 'description' => $a['description'] ?? ''],
-            'status' => ['privacyStatus' => $a['privacy'] ?? 'private']
-        ], operation: $op));
-        $id = $created['id'] ?? null;
-        if (!is_string($id) || $id === '') {
-            throw new ServiceError('UPSTREAM_UNCERTAIN', 'Playlist creation did not return an ID. Inspect YouTube before retrying.', [], 502);
-        }
-        if (isset($done['create']) && count($done) < count($videos) + 1 && $videos) {
-            $metadata = $this->metadata($user, $id);
-            if (($metadata['snippet']['channelId'] ?? null) !== $connection['channel_id']) {
-                throw new ServiceError('NOT_PLAYLIST_OWNER', 'Created playlist is no longer owned by this channel.', [], 403);
-            }
-        }
-        $seen = []; $added = 0;
-        foreach ($videos as $n => $video) {
-            if ($policy === 'skip' && isset($seen[$video])) { continue; }
-            $seen[$video] = true;
-            if (microtime(true) > $deadline) {
-                throw new ServiceError('OPERATION_TIME_LIMIT', 'Inspect the receipt and explicitly resume pending tracks.', [], 409);
-            }
-            $step('add:' . $n, fn() => $this->api->call($user, 'playlistItems.insert', ['part' => 'snippet'], [
-                'snippet' => ['playlistId' => $id, 'resourceId' => ['kind' => 'youtube#video', 'videoId' => $video]]
-            ], operation: $op));
-            $added++;
-        }
-        return ['playlist_id' => $id, 'added' => $added, 'skipped' => count($videos) - $added, 'links' => $this->links($id)];
     }
 
     private function mutatePreference(
@@ -447,6 +414,71 @@ final class Service
         return $id;
     }
 
+    private function create(string $user, array $connection, array $a, callable $step, string $op, array $done): array
+    {
+        $inputs = $a['video_ids'] ?? [];
+        if (!is_array($inputs) || count($inputs) > 20) {
+            throw new ServiceError('INVALID_ARGUMENT', 'Create accepts at most 20 initial tracks.');
+        }
+        // Validate every ID before creating anything. Preserve occurrence indexes for receipt replay.
+        $videos = array_map(fn($v) => $this->video($v), $inputs);
+        $policy = $a['duplicate_policy'] ?? 'skip';
+        if (!in_array($policy, ['skip', 'allow'], true)) {
+            throw new ServiceError('INVALID_ARGUMENT', 'Unsupported duplicate policy.');
+        }
+        $deadline = microtime(true) + 45;
+        $created = $step('create', fn() => $this->api->call($user, 'playlists.insert', ['part' => 'snippet,status'], [
+            'snippet' => ['title' => $a['title'], 'description' => $a['description'] ?? ''],
+            'status' => ['privacyStatus' => $a['privacy'] ?? 'private']
+        ], operation: $op));
+        $id = $created['id'] ?? null;
+        if (!is_string($id) || $id === '') {
+            throw new ServiceError(
+                'UPSTREAM_UNCERTAIN',
+                'Playlist creation did not return an ID. Inspect YouTube before retrying.',
+                [],
+                502
+            );
+        }
+        if (isset($done['create']) && count($done) < count($videos) + 1 && $videos) {
+            $metadata = $this->metadata($user, $id);
+            if (($metadata['snippet']['channelId'] ?? null) !== $connection['channel_id']) {
+                throw new ServiceError(
+                    'NOT_PLAYLIST_OWNER',
+                    'Created playlist is no longer owned by this channel.',
+                    [],
+                    403
+                );
+            }
+        }
+        $seen = [];
+        $added = 0;
+        foreach ($videos as $n => $video) {
+            if ($policy === 'skip' && isset($seen[$video])) {
+                continue;
+            }
+            $seen[$video] = true;
+            if (microtime(true) > $deadline) {
+                throw new ServiceError(
+                    'OPERATION_TIME_LIMIT',
+                    'Inspect the receipt and explicitly resume pending tracks.',
+                    [],
+                    409
+                );
+            }
+            $step('add:' . $n, fn() => $this->api->call($user, 'playlistItems.insert', ['part' => 'snippet'], [
+                'snippet' => ['playlistId' => $id, 'resourceId' => ['kind' => 'youtube#video', 'videoId' => $video]]
+            ], operation: $op));
+            $added++;
+        }
+        return [
+            'playlist_id' => $id,
+            'added' => $added,
+            'skipped' => count($videos) - $added,
+            'links' => $this->links($id)
+        ];
+    }
+
     private function metadata(string $user, string $id): array
     {
         $r = $this->api->call(
@@ -461,6 +493,14 @@ final class Service
             [],
             404
         );
+    }
+
+    private function links(string $id): array
+    {
+        return [
+            'youtube' => 'https://www.youtube.com/playlist?list=' . $id,
+            'youtube_music' => 'https://music.youtube.com/playlist?list=' . $id
+        ];
     }
 
     private function entries(string $user, string $id): array
@@ -492,13 +532,5 @@ final class Service
             'PLAYLIST_SCAN_LIMIT',
             'Playlist is too large for a bounded preflight scan. No new changes have been dispatched.'
         );
-    }
-
-    private function links(string $id): array
-    {
-        return [
-            'youtube' => 'https://www.youtube.com/playlist?list=' . $id,
-            'youtube_music' => 'https://music.youtube.com/playlist?list=' . $id
-        ];
     }
 }

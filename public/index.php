@@ -10,6 +10,13 @@ use YouTubeMusicMcp\Config;
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 try {
+    foreach ([App::class, Config::class] as $applicationClass) {
+        if (!class_exists($applicationClass)) {
+            $bootstrapReason = 'application_class_missing';
+            $missingClass = $applicationClass;
+            throw new RuntimeException('Application autoloading is incomplete.');
+        }
+    }
     $factory = new Psr17Factory();
     $creator = new ServerRequestCreator($factory, $factory, $factory, $factory);
     $request = $creator->fromGlobals();
@@ -32,7 +39,9 @@ try {
                 'event' => 'youtube_music_mcp_bootstrap',
                 'error_class' => get_class($e),
                 'file' => basename($e->getFile()),
-                'line' => $e->getLine()
+                'line' => $e->getLine(),
+                'reason' => $bootstrapReason ?? 'initialization_failed',
+                'missing_class' => $missingClass ?? null
             ]
         )
     );

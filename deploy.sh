@@ -1,34 +1,11 @@
 #!/bin/bash
 
-## Plesk additional deployment actions:
-# chmod u+x ./deploy.sh
-# ./deploy.sh
+# Plesk additional deployment action: bash ./deploy.sh
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 1
 
-# Pre
-MYLOG="deploy.log"
-
-echo "Deploy start" > $MYLOG
-date --iso-8601='seconds' >> $MYLOG
-
-# Deploy
-#
-# Maintenance mode
-
-## Composer
-echo "Composer install" >> $MYLOG
-/opt/plesk/php/8.5/bin/php /usr/lib/plesk-9.0/composer.phar install --no-dev --prefer-dist --optimize-autoloader &>> deploy.log || exit 1
-
-# Post
-
-## Cleanup
-#rm -rf tests/
-#rm -rf docs/
-#rm .gitignore
-#rm .env.*
-#rm phpunit
-#rm phpunit.xml
-#rm README.md
-#rm deploy.sh
-
-echo "Deploy end." >> $MYLOG
-date --iso-8601='seconds' >> $MYLOG
+# Protect the log before the delegated script starts.
+umask 077
+exec bash "$ROOT/bin/post-deploy.sh" \
+  --php "${PHP_BIN:-/opt/plesk/php/8.5/bin/php}" \
+  --composer "${COMPOSER_BIN:-/usr/lib/plesk-9.0/composer.phar}" \
+  --non-interactive > "$ROOT/deploy.log" 2>&1

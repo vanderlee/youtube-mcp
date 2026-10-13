@@ -76,6 +76,23 @@ Run as the same subscription account with storage access. This cleans expired ca
 
 ## Smoke checks
 
+### Bootstrap failure after a namespace or release change
+
+If `/mcp` and all OAuth metadata endpoints return 503 with a bootstrap `Error` at the entry point's application-construction line, first check application autoloading. The project namespace is `YouTubeMusicMcp`; an older generated Composer map may still reference the previous namespace. Missing or mixed-release source files can cause the same symptom. This failure precedes OAuth, so changing callback allowlists or renewing Google consent will not repair it.
+
+From the deployed project root, as the subscription user, select the installed domain PHP version and run:
+
+```sh
+/opt/plesk/php/8.3/bin/php bin/console.php bootstrap:check
+/opt/plesk/php/8.3/bin/php /usr/lib/plesk-9.0/composer.phar dump-autoload --no-dev --optimize
+/opt/plesk/php/8.3/bin/php bin/console.php bootstrap:check
+/opt/plesk/php/8.3/bin/php bin/console.php mcp:check
+```
+
+Paths/versions are examples. `dump-autoload` regenerates maps from the current manifest without updating dependencies or touching keys/storage. Confirm the current `composer.json`, `src/Config.php`, `src/App.php`, and other application files were deployed together; regeneration cannot repair missing source files. If dependencies are missing, run the locked production `composer install` instead. The entry point now logs an explicit `application_class_missing` reason with the known class name, without logging secrets.
+
+If CLI checks pass but HTTPS still fails, verify PHP-FPM is serving that same project/release and reload its worker/OPcache through the appropriate Plesk/admin controls. Then verify health and metadata return 200 and unauthenticated MCP returns 401 before retrying ChatGPT refresh. Do not regenerate encryption keys or reset the database to fix autoloading.
+
 If ChatGPT cannot refresh the tools, run this read-only check on the deployed release as the subscription user, using the same PHP version as PHP-FPM:
 
 ```sh
@@ -101,6 +118,10 @@ Finish the live acceptance checklist before granting access to important playlis
 ## Post-deployment actions
 
 ### Automated server-side setup
+
+The root `deploy.sh` Plesk hook delegates all dependency installation, initialization, and checks to this script with `--non-interactive`. It supplies the Plesk PHP CLI (default `/opt/plesk/php/8.5/bin/php`, overridable with `PHP_BIN`) and Composer PHAR (default `/usr/lib/plesk-9.0/composer.phar`, overridable with `COMPOSER_BIN`). Prepare the private `.env` before unattended deployment and run the hook as the subscription user. Output goes to project-root `deploy.log`; failures return a nonzero status without rolling back already deployed files or applied migrations. Cron installation and static-client creation remain opt-in manual steps.
+
+This is suitable for every deployment with intact configuration and private storage. Existing keys and credentials are preserved; only unapplied migrations run. Cleanup removes expired data and completed/partial receipts beyond the configured retention period, without replaying upstream writes. Any exported `DEPLOY_*` overrides still update configuration, and HTTPS probe failures fail the hook even after local setup succeeds. Keep backups before deploying new migrations.
 
 Run the included Bash script as the Plesk subscription user from the deployed project. Do not run it as root. Select the same PHP CLI version as the domain's PHP-FPM runtime:
 
