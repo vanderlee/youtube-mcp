@@ -122,7 +122,7 @@ final class App
             'nosniff'
         )->withHeader('Referrer-Policy', 'same-origin')->withHeader(
             'Content-Security-Policy',
-            "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+            "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://accounts.google.com; frame-ancestors 'none'; base-uri 'none'"
         );
     }
 
