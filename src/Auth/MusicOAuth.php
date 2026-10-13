@@ -12,6 +12,7 @@ use YouTubeMusicMcp\YouTube\Api;
 /** Separate per-user Music device authorization; official Web OAuth remains unchanged. */
 final class MusicOAuth
 {
+    private const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:88.0) Gecko/20100101 Firefox/88.0 Cobalt/Version';
     public function __construct(private Config $config, private Database $db, private Google $google,
         private Vault $vault, private Client $http, private Api $youtube, private Lock $locks)
     {
@@ -27,8 +28,8 @@ final class MusicOAuth
         $this->requireConfiguration();
         return $this->locks->run('account:' . $user, function () use ($user) {
             $connection = $this->google->connection($user);
-            $r = $this->http->request('POST', 'https://oauth2.googleapis.com/device/code',
-                ['Content-Type: application/x-www-form-urlencoded'], http_build_query([
+            $r = $this->http->request('POST', 'https://www.youtube.com/o/oauth2/device/code',
+                ['Content-Type: application/x-www-form-urlencoded', 'User-Agent: ' . self::USER_AGENT], http_build_query([
                     'client_id' => $this->config->get('MUSIC_OAUTH_CLIENT_ID'), 'scope' => Google::MUSIC_SCOPE,
                 ]));
             $data = $r['data'];
@@ -41,7 +42,7 @@ final class MusicOAuth
                 throw new ServiceError('MUSIC_OAUTH_SETUP_REQUIRED', 'Google rejected Music device authorization. Configure a TVs and Limited Input devices OAuth client.', [], 502);
             }
             $interval = max(5, min(60, (int)($data['interval'] ?? 5)));
-            return ['user' => $user, 'google_generation' => $connection['generation'],
+            return ['authorization_protocol' => 'youtube_device_v1', 'user' => $user, 'google_generation' => $connection['generation'],
                 'client_id_hash' => $this->clientHash(), 'device' => $this->vault->encrypt(['device_code' => $data['device_code']]),
                 'user_code' => $data['user_code'], 'verification_url' => $url,
                 'expires_at' => time() + max(1, min(1800, (int)($data['expires_in'] ?? 0))),
@@ -55,14 +56,15 @@ final class MusicOAuth
         $this->requireConfiguration();
         return $this->locks->run('account:' . $user, function () use ($user, &$flow) {
             $google = $this->google->connection($user);
-            if (($flow['user'] ?? '') !== $user || ($flow['google_generation'] ?? '') !== $google['generation']
+            if (($flow['authorization_protocol'] ?? '') !== 'youtube_device_v1'
+                || ($flow['user'] ?? '') !== $user || ($flow['google_generation'] ?? '') !== $google['generation']
                 || ($flow['client_id_hash'] ?? '') !== $this->clientHash() || ($flow['expires_at'] ?? 0) <= time()) {
                 throw new ServiceError('MUSIC_AUTHORIZATION_EXPIRED', 'Restart Music authorization from the dashboard.', [], 409);
             }
             if (($flow['next_poll_at'] ?? 0) > time()) { return false; }
             $flow['next_poll_at'] = time() + $flow['interval'];
             $device = $this->vault->decrypt($flow['device']);
-            $r = $this->token(['device_code' => $device['device_code'], 'grant_type' => 'urn:ietf:params:oauth:grant-type:device_code']);
+            $r = $this->token(['code' => $device['device_code'], 'grant_type' => 'http://oauth.net/grant_type/device/1.0']);
             $data = $r['data'];
             if ($r['status'] !== 200) {
                 if (($data['error'] ?? '') === 'authorization_pending') { return false; }
@@ -139,7 +141,7 @@ final class MusicOAuth
 
     private function token(array $args): array
     {
-        return $this->http->request('POST', 'https://oauth2.googleapis.com/token', ['Content-Type: application/x-www-form-urlencoded'],
+        return $this->http->request('POST', 'https://oauth2.googleapis.com/token', ['Content-Type: application/x-www-form-urlencoded', 'User-Agent: ' . self::USER_AGENT],
             http_build_query($args + ['client_id' => $this->config->get('MUSIC_OAUTH_CLIENT_ID'), 'client_secret' => $this->config->get('MUSIC_OAUTH_CLIENT_SECRET')]));
     }
 

@@ -32,7 +32,7 @@ trait MusicOAuthFixtures
             public function __construct(private array $responses) {}
             public function request(string $method, string $url, array $headers = [], ?string $body = null): array {
                 parse_str($body ?? '', $params);
-                $this->calls[] = [$method, $url, $params];
+                $this->calls[] = [$method, $url, $params, $headers];
                 $response = array_shift($this->responses);
                 if ($response === null) { throw new \LogicException('Unexpected request'); }
                 return $response;
@@ -85,6 +85,21 @@ test('missing music migration stops authorization before requesting or consuming
     $this->assertSame([], $http->calls);
 });
 
+test('device codes from the earlier google protocol must be restarted before token exchange', function (): void {
+    [$provider, $db, $http] = $this->environment([$this->codeResponse()]);
+    $flow = $provider->begin('u1');
+    unset($flow['authorization_protocol']);
+    $flow['next_poll_at'] = 0;
+    try {
+        $provider->poll('u1', $flow);
+        $this->fail('Old device codes must not use the new exchange protocol.');
+    } catch (ServiceError $error) {
+        $this->assertSame('MUSIC_AUTHORIZATION_EXPIRED', $error->reason);
+    }
+    $this->assertCount(1, $http->calls);
+    $this->assertNull($db->one('SELECT user_id FROM music_connections WHERE user_id=?', ['u1']));
+});
+
 test('database diagnostics identify missing music storage without exposing driver messages', function (): void {
     $db = $this->database();
     try {
@@ -123,14 +138,18 @@ test('device polling verifies the channel through the real youtube transport and
 test('device flow encrypts codes respects poll intervals and binds consent to the selected channel', function (): void {
     [$provider, $db, $http, $youtube] = $this->environment([$this->codeResponse(), $this->tokenResponse()]);
     $flow = $provider->begin('u1');
-    $this->assertSame('https://oauth2.googleapis.com/device/code', $http->calls[0][1]);
+    $this->assertSame('https://www.youtube.com/o/oauth2/device/code', $http->calls[0][1]);
+    $this->assertStringContainsString('Cobalt/Version', implode('\n', $http->calls[0][3]));
     $this->assertSame(Google::MUSIC_SCOPE, $http->calls[0][2]['scope']);
     $this->assertStringNotContainsString('private-device-code', json_encode($flow));
     $this->assertFalse($provider->poll('u1', $flow));
     $this->assertCount(1, $http->calls);
     $flow['next_poll_at'] = 0;
     $this->assertTrue($provider->poll('u1', $flow));
-    $this->assertSame('urn:ietf:params:oauth:grant-type:device_code', $http->calls[1][2]['grant_type']);
+    $this->assertSame('http://oauth.net/grant_type/device/1.0', $http->calls[1][2]['grant_type']);
+    $this->assertSame('private-device-code', $http->calls[1][2]['code']);
+    $this->assertArrayNotHasKey('device_code', $http->calls[1][2]);
+    $this->assertStringContainsString('Cobalt/Version', implode('\n', $http->calls[1][3]));
     $this->assertSame(['u1', 'channels.list', 'device-access'], $youtube->calls[0]);
     $row = $db->one('SELECT * FROM music_connections WHERE user_id=?', ['u1']);
     $this->assertSame('channel-u1', $row['channel_id']);

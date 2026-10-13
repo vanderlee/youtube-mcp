@@ -259,6 +259,8 @@ The initial implementation supports a single Plesk host with local SQLite and fi
 
 ### Database failure during Music device authorization
 
+After upgrading from the generic Google device flow to the YouTube-specific device flow, start **Connect YouTube Music** again and reconnect ChatGPT after consent. Previously saved tokens are not automatically replaced. A successful `/music/poll` response or `music_device_connected: true` confirms stored authorization, not Music endpoint compatibility; verify `get_music_account` and `get_music_history` separately. See [Music authorization](MUSIC.md#separate-music-device-oauth-for-rejected-web-client-tokens).
+
 A `PDOException` during POST `/music/poll` is a local database failure; it does not establish a Google authorization rejection. Correlate the request ID with the operator log. Database errors now include safe `database_reason`, `database_sqlstate` and `database_driver_code` fields; recognized missing tables also include `database_table`. Raw driver messages, stored values and filesystem paths are not logged.
 
 Music authorization checks that `music_connections` exists before requesting or consuming a device grant. `DEPLOYMENT_MIGRATION_REQUIRED` means migration `003_music_connections.sql` has not initialized that storage. From the deployed project root, run `/opt/plesk/php/8.5/bin/php bin/console.php init` as the subscription user (select the domain's actual PHP CLI version), then restart Music authorization from the dashboard. The deployment hook already runs initialization; inspect `deploy.log` if a deployment did not complete. Initialization preserves existing credentials and keys and applies only unapplied migrations. Do not delete the database or regenerate `APP_KEY`.
