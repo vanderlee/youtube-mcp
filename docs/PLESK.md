@@ -259,6 +259,8 @@ The initial implementation supports a single Plesk host with local SQLite and fi
 
 ### Database failure during Music device authorization
 
+If Music reads still return HTTP 400 after successful authorization, deploy the minimal OAuth request profile and retry `get_music_account` with the existing connection. Its errors include `music_request_profile=oauth_minimal_v1`; absence of that marker means the new profile was not used. This profile removes redundant client headers and body visitor context. It requires no new permissions, migration or consent and does not guarantee upstream acceptance. See [Music request details](MUSIC.md#runtime-and-authorization).
+
 After upgrading from the generic Google device flow to the YouTube-specific device flow, start **Connect YouTube Music** again and reconnect ChatGPT after consent. Previously saved tokens are not automatically replaced. A successful `/music/poll` response or `music_device_connected: true` confirms stored authorization, not Music endpoint compatibility; verify `get_music_account` and `get_music_history` separately. See [Music authorization](MUSIC.md#separate-music-device-oauth-for-rejected-web-client-tokens).
 
 A `PDOException` during POST `/music/poll` is a local database failure; it does not establish a Google authorization rejection. Correlate the request ID with the operator log. Database errors now include safe `database_reason`, `database_sqlstate` and `database_driver_code` fields; recognized missing tables also include `database_table`. Raw driver messages, stored values and filesystem paths are not logged.

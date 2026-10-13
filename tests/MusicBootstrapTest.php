@@ -31,9 +31,9 @@ test('music requests use actual web metadata consistently and never send oauth t
     $this->assertSame('https://music.youtube.com/', $http->calls[0][1]);
     $this->assertStringNotContainsString('dummy-token', implode(' ', $http->calls[0][2]));
     $this->assertSame('1.20260820.01.00', $http->calls[1][3]['context']['client']['clientVersion']);
-    $this->assertSame('public-visitor', $http->calls[1][3]['context']['client']['visitorData']);
-    $this->assertContains('X-YouTube-Client-Name: 67', $http->calls[1][2]);
-    $this->assertContains('X-YouTube-Client-Version: 1.20260820.01.00', $http->calls[1][2]);
+    $this->assertArrayNotHasKey('visitorData', $http->calls[1][3]['context']['client']);
+    $this->assertNotContains('X-YouTube-Client-Name: 67', $http->calls[1][2]);
+    $this->assertNotContains('X-YouTube-Client-Version: 1.20260820.01.00', $http->calls[1][2]);
     $this->assertContains('X-Goog-Visitor-Id: public-visitor', $http->calls[1][2]);
     $this->assertContains('Authorization: Bearer dummy-token-two', $http->calls[2][2]);
     $this->assertNotContains('X-Goog-AuthUser: 0', $http->calls[1][2]);

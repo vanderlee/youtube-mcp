@@ -325,7 +325,6 @@ class Api
         $client = [
             'clientName' => 'WEB_REMIX',
             'clientVersion' => $profile['clientVersion'],
-            'visitorData' => $profile['visitorData'],
             'hl' => 'en'
         ];
         $country = $this->config->get('MUSIC_LOCATION');
@@ -374,6 +373,7 @@ class Api
         $headers = [
             'Authorization: Bearer ' . $token,
             'Content-Type: application/json',
+            'Accept: */*',
             'Origin: https://music.youtube.com',
             'Referer: https://music.youtube.com/',
             'Cookie: SOCS=CAI',
@@ -381,8 +381,8 @@ class Api
             'User-Agent: ' . Bootstrap::USER_AGENT
         ];
         if ($profile !== null) {
-            $headers[] = 'X-YouTube-Client-Name: 67';
-            $headers[] = 'X-YouTube-Client-Version: ' . $profile['clientVersion'];
+            // OAuth requests follow the reference profile: client identity belongs in
+            // context.client; the public visitor identifier is a separate header.
             $headers[] = 'X-Goog-Visitor-Id: ' . $profile['visitorData'];
         }
         return $headers;
@@ -396,6 +396,7 @@ class Api
             $details['music_client_name'] = 'WEB_REMIX';
             $details['music_client_version'] = $profile['clientVersion'];
             $details['music_visitor_context_present'] = true;
+            $details['music_request_profile'] = 'oauth_minimal_v1';
         }
         if (isset($safe['status'])) { $details['upstream_status'] = $safe['status']; }
         if (isset($safe['reasons'])) { $details['upstream_reasons'] = $safe['reasons']; }

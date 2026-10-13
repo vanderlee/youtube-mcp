@@ -22,6 +22,7 @@ test('plain mcp error text includes only safe upstream diagnostics', function ()
         'upstream_reasons' => ['badRequest', 'private-token'],
         'music_client_name' => 'WEB_REMIX', 'music_client_version' => '1.20261011.16.00',
         'music_visitor_context_present' => true, 'visitorData' => 'private-token',
+        'music_request_profile' => 'oauth_minimal_v1',
         'access_token' => 'private-token', 'response_body' => 'private-token',
     ]);
     $text = Diagnostics::text($error);
@@ -29,6 +30,7 @@ test('plain mcp error text includes only safe upstream diagnostics', function ()
     $this->assertStringContainsString('upstream_status=INVALID_ARGUMENT', $text);
     $this->assertStringContainsString('upstream_reasons=badRequest', $text);
     $this->assertStringContainsString('music_client_version=1.20261011.16.00', $text);
+    $this->assertStringContainsString('music_request_profile=oauth_minimal_v1', $text);
     $this->assertStringNotContainsString('private-token', $text);
     $this->assertArrayNotHasKey('response_body', Diagnostics::safe($error->details));
 });
