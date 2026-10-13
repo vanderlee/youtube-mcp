@@ -11,10 +11,12 @@ use YouTubeMusicMcp\Http\Client;
 class Api
 {
     private Client $http;
+    private Bootstrap $bootstrap;
 
-    public function __construct(private Config $config, ?Client $http = null)
+    public function __construct(private Config $config, ?Client $http = null, ?Bootstrap $bootstrap = null)
     {
         $this->http = $http ?? new Transport();
+        $this->bootstrap = $bootstrap ?? new Bootstrap($this->http);
     }
 
     public function call(string $tool, array $a, ?string $accessToken = null): mixed
@@ -319,9 +321,11 @@ class Api
 
     private function request(string $endpoint, array $body, string $token, bool $write = false): array
     {
+        $profile = $this->bootstrap->load($this->config);
         $client = [
             'clientName' => 'WEB_REMIX',
-            'clientVersion' => $this->config->get('MUSIC_CLIENT_VERSION') ?: '1.' . gmdate('Ymd') . '.01.00',
+            'clientVersion' => $profile['clientVersion'],
+            'visitorData' => $profile['visitorData'],
             'hl' => 'en'
         ];
         $country = $this->config->get('MUSIC_LOCATION');
@@ -333,7 +337,7 @@ class Api
             $r = $this->http->request(
                 'POST',
                 'https://music.youtube.com/youtubei/v1/' . $endpoint . '?alt=json',
-                $this->headers($token),
+                $this->headers($token, $profile),
                 json_encode($body, JSON_THROW_ON_ERROR)
             );
         } catch (ServiceError $error) {
@@ -342,7 +346,7 @@ class Api
             }
             throw $error;
         }
-        $this->checkStatus($r['status'], $write, $r['data']);
+        $this->checkStatus($r['status'], $write, $r['data'], $profile);
         $data = $r['data'];
         if (isset($data['error'])) {
             throw new ServiceError('MUSIC_UPSTREAM_REJECTED', 'Music rejected the request.',
@@ -359,23 +363,35 @@ class Api
         return $data;
     }
 
-    private function headers(string $token): array
+    private function headers(string $token, ?array $profile = null): array
     {
-        return [
+        $profile ??= $this->bootstrap->load($this->config);
+        $headers = [
             'Authorization: Bearer ' . $token,
             'Content-Type: application/json',
             'Origin: https://music.youtube.com',
             'Referer: https://music.youtube.com/',
             'X-Goog-AuthUser: 0',
             'X-Goog-Request-Time: ' . time(),
-            'User-Agent: Mozilla/5.0'
+            'User-Agent: ' . Bootstrap::USER_AGENT
         ];
+        if ($profile !== null) {
+            $headers[] = 'X-YouTube-Client-Name: 67';
+            $headers[] = 'X-YouTube-Client-Version: ' . $profile['clientVersion'];
+            $headers[] = 'X-Goog-Visitor-Id: ' . $profile['visitorData'];
+        }
+        return $headers;
     }
 
-    private function checkStatus(int $status, bool $write, array $data = []): void
+    private function checkStatus(int $status, bool $write, array $data = [], ?array $profile = null): void
     {
         $safe = Transport::safeError($data)['error'] ?? [];
         $details = ['upstream_http_status' => $status];
+        if ($profile !== null) {
+            $details['music_client_name'] = 'WEB_REMIX';
+            $details['music_client_version'] = $profile['clientVersion'];
+            $details['music_visitor_context_present'] = true;
+        }
         if (isset($safe['status'])) { $details['upstream_status'] = $safe['status']; }
         if (isset($safe['reasons'])) { $details['upstream_reasons'] = $safe['reasons']; }
         if (in_array('ACCESS_TOKEN_SCOPE_INSUFFICIENT', $safe['reasons'] ?? [], true)

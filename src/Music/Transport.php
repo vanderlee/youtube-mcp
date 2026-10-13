@@ -50,6 +50,9 @@ final class Transport extends Client
             $decoded = json_decode($raw, true);
             return ['status' => $status, 'data' => self::safeError(is_array($decoded) ? $decoded : [])];
         }
+        if ($method === 'GET' && $url === 'https://music.youtube.com/') {
+            return ['status' => $status, 'data' => Bootstrap::parse($raw)];
+        }
         $data = $raw === '' ? [] : json_decode($raw, true);
         if (!is_array($data)) {
             throw new ServiceError('UPSTREAM_UNCERTAIN', 'Music returned an invalid JSON response.', [], 502);

@@ -33,7 +33,12 @@ trait MusicApiTestHelpers
             }
         };
         return [
-            new Api($this->config(['MUSIC_LOCATION' => 'NL', 'MUSIC_CLIENT_VERSION' => '1.20261013.01.00']), $http),
+            new Api($this->config(['MUSIC_LOCATION' => 'NL', 'MUSIC_CLIENT_VERSION' => '1.20261013.01.00']), $http,
+                new class($http) extends \YouTubeMusicMcp\Music\Bootstrap {
+                    public function load(\YouTubeMusicMcp\Config $config): array {
+                        return ['clientVersion' => $config->get('MUSIC_CLIENT_VERSION'), 'visitorData' => 'fixture-visitor'];
+                    }
+                }),
             $http
         ];
     }

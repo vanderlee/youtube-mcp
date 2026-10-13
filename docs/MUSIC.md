@@ -4,7 +4,9 @@ Catalog, Music search, discovery, personal library and listening history use a n
 
 ## Runtime and authorization
 
-Use the existing PHP/cURL runtime with outbound HTTPS access. Optional `MUSIC_LOCATION` is a two-letter country code such as `NL`. Optional `MUSIC_CLIENT_VERSION` overrides the default WEB_REMIX client version derived from the current UTC date.
+Use the existing PHP/cURL runtime with outbound HTTPS access. Optional `MUSIC_LOCATION` is a two-letter country code such as `NL`. By default the adapter loads the public Music homepage to discover the actual WEB_REMIX client version and visitor context; it no longer invents a client version from the current date. `MUSIC_CLIENT_VERSION` is an explicit troubleshooting override, not normally needed. Leave it empty unless deliberately pinning a known compatible version.
+
+The metadata request is anonymous: no Google access token is sent to the homepage, and its public profile is reused only within the current PHP API instance. Both the account request body and client headers use the same version and visitor context. If metadata is incomplete or unreachable, `MUSIC_BOOTSTRAP_UNAVAILABLE` stops the operation before dispatching an account request. This preflight failure does not imply an uncertain write. Music redirects are not followed automatically.
 
 The adapter uses the calling user's server-managed Google OAuth access token; PHP continues to encrypt and refresh credentials. Music requires the `https://www.googleapis.com/auth/youtube` grant used by the reference Music OAuth client. Earlier connections with only `youtube.force-ssl` return `GOOGLE_MUSIC_SCOPE_REQUIRED` before dispatching a Music request. Reconnect Google after deployment, grant Manage your YouTube account, confirm the selected channel and reconnect ChatGPT. Existing official API operations continue to work with the older grant.
 
@@ -53,7 +55,7 @@ All writes use account locks and existing operation receipts. Reuse the same ope
 
 ## Limits and failure handling
 
-- Native requests have a 20-second timeout and a 5-second connection timeout. History addition uses a player preflight and a tracking request.
+- Native requests have a 20-second timeout and a 5-second connection timeout. A Music call first retrieves public client metadata, then makes its account request. History addition also makes a tracking request, giving at most three sequential requests (up to 60 seconds of request time).
 - MCP input remains capped at 64 KiB. Raw Music responses are capped at 4 MB; parsed nested lists at 50 items. Lists/searches return first-response prefixes, not complete exports. Full albums and discographies may exceed these bounds.
 - No automatic write retries, followed redirects, arbitrary upstream methods, user-provided tracking URLs or shared private caches.
 - Raw commands, streaming URLs and private upstream errors are not returned or logged. Only normalized data fields and signed action tokens are exposed.
