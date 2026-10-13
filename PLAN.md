@@ -6,7 +6,7 @@ Prepared: 2026-10-13.
 
 Implementation record (2026-10-13): the repository now contains the PHP application, official MCP SDK integration, League OAuth server, encrypted Google connections, SQLite migrations, playlist tools, quota gateway, receipts, CLI maintenance, tests, and deployment guides. See [README.md](README.md) and [live acceptance checklist](docs/ACCEPTANCE.md).
 
-Local verification: 30 automated tests and 73 assertions pass, Composer validates, installed dependencies report no security advisories, and HTTP readiness/metadata/authentication smoke checks pass. See [verification record](docs/VERIFICATION.md) for evidence and pending external checks.
+Local verification: 33 automated tests and 86 assertions pass, Composer validates, installed dependencies report no security advisories, and HTTP readiness/metadata/authentication smoke checks pass. A Bash post-deployment script and tested configuration helper automate local setup. See [verification record](docs/VERIFICATION.md) for evidence and pending external checks.
 
 Current implementation choices and limits: SQLite only; one host using local file locks; OAuth-only MCP transport with DCR or static clients and allowlisted redirects; no CIMD; no background worker or Docker. MariaDB and automated Cloud metrics reconciliation remain deferred. Unknown/ambiguous writes are deliberately blocked from automatic resume and require manual reconciliation. Full entry scans are bounded to 1,000 items and 45 seconds; write batches contain at most 20 entries and have a 45-second dispatch window. Live prerequisites in Milestone 0 cannot be considered passed without configured accounts and deployment.
 

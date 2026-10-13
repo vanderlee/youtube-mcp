@@ -22,6 +22,8 @@ The implemented database backend is SQLite on local storage. MariaDB remains a f
 
 ## Setup
 
+For automated Plesk post-deployment setup, run `bash bin/post-deploy.sh --php /opt/plesk/php/8.3/bin/php` as the subscription user. It prompts for configuration, initializes storage, and checks HTTPS; see [script options](docs/PLESK.md#automated-server-side-setup). Google Cloud registration and browser authorizations remain manual.
+
 1. Install dependencies: `composer install --no-dev --prefer-dist --optimize-autoloader`.
 2. Copy `.env.example` to `.env` outside the web root.
 3. Set `APP_URL` to the exact HTTPS origin, your Google client credentials, and invited email addresses.

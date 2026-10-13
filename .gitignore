@@ -1,5 +1,8 @@
 /vendor/
 /.env
+/.env.backup.*
+/.env.tmp.*
+/.post-deploy.lock
 /var/*
 !/var/.gitkeep
 /.phpunit.cache/

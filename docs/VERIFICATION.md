@@ -5,7 +5,7 @@ Date: 2026-10-13.
 ## Passed
 
 - PHP syntax checks across application, CLI, entry points, and tests.
-- PHPUnit: **30 tests, 73 assertions**, no failures or warnings on the final run.
+- PHPUnit: **33 tests, 86 assertions**, no failures or warnings on the final run.
 - `composer validate --strict`: valid manifest and lockfile.
 - Dependency resolution/audit after updating Firebase JWT: no reported security advisories.
 - Actual loopback HTTP checks: readiness and OAuth metadata returned 200; unauthenticated MCP returned 401 with protected-resource metadata challenge.
@@ -24,6 +24,7 @@ Locked main packages: `mcp/sdk` 0.8.1, `league/oauth2-server` 9.4.1, `firebase/p
 - Owned-playlist checks, write scopes, metadata preservation, duplicate handling, occurrence removal, batch budget rejection, and completed-operation replay.
 - Separate search/general budgets, per-user isolation, circuit breakers, reservation expiry, Pacific daylight-saving reset, and cache hits.
 - Two independent PHP processes cannot reserve beyond the same project quota balance.
+- Post-deployment Bash syntax/help checks; configuration helper preserves encryption keys on rerun, correctly escapes special characters, rejects public storage, and refuses replacement keys when existing state has no configuration.
 - Partial receipt resume skips completed steps; uncertain changes cannot automatically resume; cross-user receipts are inaccessible.
 
 ## Pending external evidence
