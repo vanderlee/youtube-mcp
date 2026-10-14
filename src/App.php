@@ -647,7 +647,7 @@ final class App
             ['Content-Type' => 'text/html; charset=utf-8'],
             '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="dark"><title>' . htmlspecialchars(
                 $title
-            ) . ' · toyls</title><link rel="stylesheet" href="/assets/app.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="header-inner"><a class="brand" href="/" aria-label="Toyls YouTube home"><span><strong>toyls</strong><span class="brand-divider">/</span><span class="brand-product">youtube</span></span><small>tools, toys &amp; toils</small></a>' . (!empty($_SESSION['user']) ? $this->form(
+            ) . ' · toyls</title><link rel="icon" type="image/png" sizes="256x256" href="/assets/favicon.png"><link rel="stylesheet" href="/assets/app.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="header-inner"><a class="brand" href="/" aria-label="Toyls YouTube home"><span><strong>toyls</strong><span class="brand-divider">/</span><span class="brand-product">youtube</span></span><small>tools, toys &amp; toils</small></a>' . (!empty($_SESSION['user']) ? $this->form(
                 '/logout',
                 'Sign out',
                 '',
