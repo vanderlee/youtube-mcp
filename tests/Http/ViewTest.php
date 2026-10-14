@@ -53,17 +53,20 @@ test('template names cannot escape the views directory', function (): void {
 test('browser branding keeps its defaults and escapes configured values everywhere', function (): void {
     $directory = dirname(__DIR__, 2) . '/views';
     $default = (string) (new View($directory, $this->config()))->page('Welcome', 'welcome')->getBody();
+    expect($default)->toContain('class="brand" href="https://toyls.com" aria-label="Toyls home"');
     expect($default)->toContain('<title>Welcome · Toyls</title>', '<strong>Toyls</strong>', '<small>tools, toys &amp; toils</small>', '<footer>Toyls · tools, toys &amp; toils</footer>');
 
     $config = $this->config([
         'BRAND_NAME' => 'Brand "<&',
+        'BRAND_URL' => 'https://brand.example.test/?a=1&b="value"',
         'BRAND_TAGLINE' => '<script>alert("tagline")</script>',
     ]);
     $custom = (string) (new View($directory, $config))->page('Welcome', 'welcome')->getBody();
     expect($custom)->toContain(
         '<title>Welcome · Brand &quot;&lt;&amp;</title>',
         '<strong>Brand &quot;&lt;&amp;</strong>',
-        'aria-label="Brand &quot;&lt;&amp; YouTube home"',
+        'href="https://brand.example.test/?a=1&amp;b=&quot;value&quot;"',
+        'aria-label="Brand &quot;&lt;&amp; home"',
         '<small>&lt;script&gt;alert(&quot;tagline&quot;)&lt;/script&gt;</small>',
         '<footer>Brand &quot;&lt;&amp; · &lt;script&gt;alert(&quot;tagline&quot;)&lt;/script&gt;</footer>',
     )->not->toContain('<script>', 'Toyls', 'tools, toys');

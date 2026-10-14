@@ -17,7 +17,7 @@ declare(strict_types=1);
 <a class="skip-link" href="#main">Skip to content</a>
 <header class="site-header">
     <div class="header-inner">
-        <a class="brand" href="/" aria-label="<?= $escape($brandName) ?> YouTube home">
+        <a class="brand" href="<?= $escape($brandUrl) ?>" aria-label="<?= $escape($brandName) ?> home">
             <span><strong><?= $escape($brandName) ?></strong><span class="brand-divider">/</span><span class="brand-product">youtube</span></span>
             <small><?= $escape($brandTagline) ?></small>
         </a>
