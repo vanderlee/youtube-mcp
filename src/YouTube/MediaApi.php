@@ -33,7 +33,6 @@ final class MediaApi
         array $asset,
         callable $step,
     ): array {
-        $resource = explode('.', $method)[0];
         if (
             !in_array(
                 $method,
@@ -46,75 +45,14 @@ final class MediaApi
 
         $session = $step(
             'upload-session',
-            function () use ($user, $method, $resource, $params, $metadata, $asset) {
-                $url = 'https://www.googleapis.com/upload/youtube/v3/' . $resource
-                    . ($method === 'thumbnails.set' ? '/set' : ($method === 'channelBanners.insert' ? '/insert' : ''))
-                    . '?' . http_build_query(['uploadType' => 'resumable'] + $params);
-                $id = $this->budget->dispatch($user, $method);
-                try {
-                    $response = $this->http->exchange(
-                        $method === 'captions.update' ? 'PUT' : 'POST',
-                        $url,
-                        [
-                            'Authorization: Bearer ' . $this->google->accessToken($user),
-                            'Content-Type: application/json',
-                            'X-Upload-Content-Type: ' . $asset['mime'],
-                            'X-Upload-Content-Length: ' . $asset['bytes'],
-                        ],
-                        json_encode((object) $metadata, JSON_THROW_ON_ERROR),
-                    );
-                } catch (ServiceError $error) {
-                    $this->budget->outcome($id, 'uncertain');
-                    throw $error;
-                }
-
-                $this->budget->outcome($id, $response['status'] < 300 ? 'success' : 'rejected');
-                $this->assertSuccessfulResponse($response['status']);
-                $location = $response['headers']['location'] ?? '';
-                self::validateLocation($location);
-
-                return ['session' => $this->vault->encrypt(['location' => $location])];
-            },
+            fn() => $this->beginUploadSession($user, $method, $params, $metadata, $asset),
         );
         $location = $this->vault->decrypt($session['session'])['location'];
         self::validateLocation($location);
 
         return $step(
             'upload-content',
-            function () use ($user, $location, $asset, $method, $params, $metadata) {
-                $access = $this->google->accessToken($user);
-                $this->cache?->invalidate($user, $method, $params, $metadata, null);
-                try {
-                    $response = $this->http->exchange(
-                        'PUT',
-                        $location,
-                        [
-                            'Authorization: Bearer ' . $access,
-                            'Content-Type: ' . $asset['mime'],
-                            'Content-Length: ' . $asset['bytes'],
-                        ],
-                        path: $asset['path'],
-                    );
-                } finally {
-                    $this->cache?->invalidate($user, $method, $params, $metadata, null);
-                }
-                if ($response['status'] === 308) {
-                    throw new ServiceError(
-                        'UPSTREAM_UNCERTAIN',
-                        'Upload is incomplete. Reconcile its saved receipt; automatic retransmission is disabled.',
-                        [],
-                        502,
-                    );
-                }
-
-                $this->assertSuccessfulResponse($response['status']);
-                $data = json_decode($response['raw'], true);
-                if (!is_array($data) || isset($data['error'])) {
-                    throw new ServiceError('UPSTREAM_UNCERTAIN', 'Upload response was not valid success JSON.', [], 502);
-                }
-                // Only identifiers and the banner image URL are required by subsequent steps.
-                return array_intersect_key($data, array_flip(['id', 'url']));
-            },
+            fn() => $this->sendUploadContent($user, $method, $params, $metadata, $asset, $location),
         );
     }
 
@@ -177,5 +115,96 @@ final class MediaApi
                 400,
             );
         }
+    }
+
+    /**
+     * @param array<string, mixed> $params
+     * @param array<string, mixed> $metadata
+     * @param array<string, mixed> $asset
+     * @return array<string, mixed>
+     */
+    private function beginUploadSession(
+        string $user,
+        string $method,
+        array $params,
+        array $metadata,
+        array $asset,
+    ): array {
+        $resource = explode('.', $method)[0];
+        $url = 'https://www.googleapis.com/upload/youtube/v3/' . $resource
+            . ($method === 'thumbnails.set' ? '/set' : ($method === 'channelBanners.insert' ? '/insert' : ''))
+            . '?' . http_build_query(['uploadType' => 'resumable'] + $params);
+        $id = $this->budget->dispatch($user, $method);
+        try {
+            $response = $this->http->exchange(
+                $method === 'captions.update' ? 'PUT' : 'POST',
+                $url,
+                [
+                    'Authorization: Bearer ' . $this->google->accessToken($user),
+                    'Content-Type: application/json',
+                    'X-Upload-Content-Type: ' . $asset['mime'],
+                    'X-Upload-Content-Length: ' . $asset['bytes'],
+                ],
+                json_encode((object) $metadata, JSON_THROW_ON_ERROR),
+            );
+        } catch (ServiceError $error) {
+            $this->budget->outcome($id, 'uncertain');
+            throw $error;
+        }
+
+        $this->budget->outcome($id, $response['status'] < 300 ? 'success' : 'rejected');
+        $this->assertSuccessfulResponse($response['status']);
+        $location = $response['headers']['location'] ?? '';
+        self::validateLocation($location);
+
+        return ['session' => $this->vault->encrypt(['location' => $location])];
+    }
+
+    /**
+     * @param array<string, mixed> $params
+     * @param array<string, mixed> $metadata
+     * @param array<string, mixed> $asset
+     * @return array<string, mixed>
+     */
+    private function sendUploadContent(
+        string $user,
+        string $method,
+        array $params,
+        array $metadata,
+        array $asset,
+        string $location,
+    ): array {
+        $access = $this->google->accessToken($user);
+        $this->cache?->invalidate($user, $method, $params, $metadata, null);
+        try {
+            $response = $this->http->exchange(
+                'PUT',
+                $location,
+                [
+                    'Authorization: Bearer ' . $access,
+                    'Content-Type: ' . $asset['mime'],
+                    'Content-Length: ' . $asset['bytes'],
+                ],
+                path: $asset['path'],
+            );
+        } finally {
+            $this->cache?->invalidate($user, $method, $params, $metadata, null);
+        }
+        if ($response['status'] === 308) {
+            throw new ServiceError(
+                'UPSTREAM_UNCERTAIN',
+                'Upload is incomplete. Reconcile its saved receipt; automatic retransmission is disabled.',
+                [],
+                502,
+            );
+        }
+
+        $this->assertSuccessfulResponse($response['status']);
+        $data = json_decode($response['raw'], true);
+        if (!is_array($data) || isset($data['error'])) {
+            throw new ServiceError('UPSTREAM_UNCERTAIN', 'Upload response was not valid success JSON.', [], 502);
+        }
+        // Only identifiers and the banner image URL are required by subsequent steps.
+        return array_intersect_key($data, array_flip(['id', 'url']));
     }
 }

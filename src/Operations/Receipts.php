@@ -86,75 +86,10 @@ final class Receipts
                         );
                     }
                 } else {
-                    $receipt = [
-                        'operation_id' => bin2hex(random_bytes(16)),
-                        'tool' => $tool,
-                        'status' => 'running',
-                        'completed' => [],
-                    ];
-                    $this->db->execute(
-                        'INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)',
-                        [
-                            $receipt['operation_id'],
-                            $user,
-                            $generation,
-                            $tool,
-                            $key,
-                            $hash,
-                            'running',
-                            json_encode($receipt),
-                            time(),
-                            time(),
-                        ],
-                    );
+                    $receipt = $this->createReceipt($user, $generation, $tool, $key, $hash);
                 }
 
-                $save = function () use (&$receipt) {
-                    $this->saveReceipt($receipt);
-                };
-                $step = function (string $id, callable $fn) use (&$receipt, $save) {
-                    if (array_key_exists($id, $receipt['completed'])) {
-                        return $receipt['completed'][$id];
-                    }
-
-                    $receipt['status'] = 'running';
-                    $receipt['pending_step'] = $id;
-                    unset($receipt['error']);
-                    $save();
-                    $result = $fn();
-                    $receipt['completed'][$id] = $result;
-                    unset($receipt['pending_step']);
-                    $save();
-
-                    return $result;
-                };
-                try {
-                    $receipt['result'] = $work($step, $receipt['operation_id'], $receipt['completed']);
-                    $receipt['status'] = 'completed';
-                    unset($receipt['error'], $receipt['pending_step']);
-                } catch (ServiceError $e) {
-                    $receipt['status'] = $e->reason === 'UPSTREAM_UNCERTAIN' ? 'uncertain' : 'partial';
-                    $receipt['error'] = $e->payload();
-                    if ($receipt['status'] !== 'uncertain') {
-                        unset($receipt['pending_step']);
-                    }
-                } catch (Throwable $e) {
-                    $receipt['status'] = 'uncertain';
-                    $receipt['error'] = [
-                        'code' => 'INTERNAL_ERROR',
-                        'message' => 'Operation interrupted. Inspect the receipt and playlist before retrying.',
-                    ];
-                    $save();
-                    throw $e;
-                }
-
-                $save();
-                $this->db->execute(
-                    'INSERT INTO audit_events(user_id,action,target,outcome,created_at) VALUES (?,?,?,?,?)',
-                    [$user, $tool, $receipt['operation_id'], $receipt['status'], time()],
-                );
-
-                return $receipt;
+                return $this->executeReceipt($user, $tool, $receipt, $work);
             },
         );
     }
@@ -185,5 +120,96 @@ final class Receipts
         }
 
         return array_map(fn($item) => $this->normalized($item), $value);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function createReceipt(string $user, string $generation, string $tool, string $key, string $hash): array
+    {
+        $receipt = [
+            'operation_id' => bin2hex(random_bytes(16)),
+            'tool' => $tool,
+            'status' => 'running',
+            'completed' => [],
+        ];
+        $this->db->execute(
+            'INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)',
+            [
+                $receipt['operation_id'],
+                $user,
+                $generation,
+                $tool,
+                $key,
+                $hash,
+                'running',
+                json_encode($receipt),
+                time(),
+                time(),
+            ],
+        );
+
+        return $receipt;
+    }
+
+    /**
+     * @param array<string, mixed> $receipt
+     * @return array<string, mixed>
+     */
+    private function executeReceipt(string $user, string $tool, array $receipt, callable $work): array
+    {
+        $step = $this->receiptStep($receipt);
+        try {
+            $receipt['result'] = $work($step, $receipt['operation_id'], $receipt['completed']);
+            $receipt['status'] = 'completed';
+            unset($receipt['error'], $receipt['pending_step']);
+        } catch (ServiceError $e) {
+            $receipt['status'] = $e->reason === 'UPSTREAM_UNCERTAIN' ? 'uncertain' : 'partial';
+            $receipt['error'] = $e->payload();
+            if ($receipt['status'] !== 'uncertain') {
+                unset($receipt['pending_step']);
+            }
+        } catch (Throwable $e) {
+            $receipt['status'] = 'uncertain';
+            $receipt['error'] = [
+                'code' => 'INTERNAL_ERROR',
+                'message' => 'Operation interrupted. Inspect the receipt and playlist before retrying.',
+            ];
+            $this->saveReceipt($receipt);
+            throw $e;
+        }
+
+        $this->saveReceipt($receipt);
+        $this->db->execute(
+            'INSERT INTO audit_events(user_id,action,target,outcome,created_at) VALUES (?,?,?,?,?)',
+            [$user, $tool, $receipt['operation_id'], $receipt['status'], time()],
+        );
+
+        return $receipt;
+    }
+
+    /**
+     * The callback updates the current receipt and saves each step before and after its effect.
+     *
+     * @param array<string, mixed> $receipt
+     */
+    private function receiptStep(array &$receipt): callable
+    {
+        return function (string $id, callable $work) use (&$receipt) {
+            if (array_key_exists($id, $receipt['completed'])) {
+                return $receipt['completed'][$id];
+            }
+
+            $receipt['status'] = 'running';
+            $receipt['pending_step'] = $id;
+            unset($receipt['error']);
+            $this->saveReceipt($receipt);
+            $result = $work();
+            $receipt['completed'][$id] = $result;
+            unset($receipt['pending_step']);
+            $this->saveReceipt($receipt);
+
+            return $result;
+        };
     }
 }

@@ -98,26 +98,35 @@ final class Service
             ];
         }
         if ($write) {
-            return $this->locks->run(
-                'account:' . $user,
-                function () use ($user, $tool, $a) {
-                    $connection = $this->google->connection($user);
-
-                    return $this->locks->run(
-                        'playlist:' . $user . ':' . ($a['playlist_id'] ?? 'create'),
-                        fn() => $this->receipts->run(
-                            $user,
-                            $connection['generation'],
-                            $tool,
-                            $a,
-                            fn($step, $id, $done) => $this->mutate($user, $connection, $tool, $a, $step, $id, $done),
-                        ),
-                    );
-                },
-            );
+            return $this->mutateWithLocks($user, $tool, $a);
         }
 
         return $this->read($user, $tool, $a);
+    }
+
+    /**
+     * @param array<string, mixed> $arguments
+     * @return array<string, mixed>
+     */
+    private function mutateWithLocks(string $user, string $tool, array $arguments): array
+    {
+        return $this->locks->run(
+            'account:' . $user,
+            function () use ($user, $tool, $arguments) {
+                $connection = $this->google->connection($user);
+
+                return $this->locks->run(
+                    'playlist:' . $user . ':' . ($arguments['playlist_id'] ?? 'create'),
+                    fn() => $this->receipts->run(
+                        $user,
+                        $connection['generation'],
+                        $tool,
+                        $arguments,
+                        fn($step, $id, $done) => $this->mutate($user, $connection, $tool, $arguments, $step, $id, $done),
+                    ),
+                );
+            },
+        );
     }
 
     public static function scope(string $tool): string
@@ -196,54 +205,7 @@ final class Service
             ];
         }
         if ($tool === 'search_tracks') {
-            $filterArguments = array_intersect_key($a, YouTubeTools::searchFilters());
-            Arguments::validate($filterArguments, YouTubeTools::searchFilters(), []);
-            $query = ['part' => 'snippet', 'type' => 'video', 'q' => $a['query'], 'maxResults' => $a['limit'] ?? 10];
-            $query += YouTubeService::searchParameters($a);
-            foreach (['region' => 'regionCode', 'page_token' => 'pageToken'] as $arg => $param) {
-                if (!empty($a[$arg])) {
-                    $query[$param] = $a[$arg];
-                }
-            }
-
-            $results = $this->api->call($user, 'search.list', $query, ttl: 300);
-            if (!($a['include_details'] ?? false)) {
-                return [
-                    'candidates' => array_map(
-                        fn($v) => [
-                            'video_id' => $v['id']['videoId'],
-                            'title' => $v['snippet']['title'],
-                            'channel' => $v['snippet']['channelTitle'],
-                        ],
-                        $results['items'] ?? [],
-                    ),
-                    'next_page_token' => $results['nextPageToken'] ?? null,
-                    'music_availability' => 'YouTube candidates; Music playback is not guaranteed.',
-                ];
-            }
-
-            $ids = array_column(array_column($results['items'] ?? [], 'id'), 'videoId');
-            $videos = $ids ? $this->api->call(
-                $user,
-                'videos.list',
-                ['part' => 'snippet,contentDetails,status', 'id' => implode(',', $ids)],
-                ttl: 300,
-            ) : ['items' => []];
-
-            return [
-                'candidates' => array_map(
-                    fn($v) => [
-                        'video_id' => $v['id'],
-                        'title' => $v['snippet']['title'],
-                        'channel' => $v['snippet']['channelTitle'],
-                        'duration' => $v['contentDetails']['duration'] ?? null,
-                        'url' => 'https://www.youtube.com/watch?v=' . $v['id'],
-                    ],
-                    $videos['items'] ?? [],
-                ),
-                'next_page_token' => $results['nextPageToken'] ?? null,
-                'music_availability' => 'These are YouTube video candidates; YouTube Music playback is not guaranteed.',
-            ];
+            return $this->searchTracks($user, $a);
         }
         throw new ServiceError('UNKNOWN_TOOL', 'Unknown tool.');
     }
@@ -326,115 +288,13 @@ final class Service
             }
         }
         if ($tool === 'update_playlist') {
-            $snippet = $metadata['snippet'];
-            unset($snippet['thumbnails'], $snippet['channelId'], $snippet['channelTitle'], $snippet['publishedAt'], $snippet['localized']);
-            $snippet = array_intersect_key($snippet, array_flip(['title', 'description', 'tags', 'defaultLanguage']));
-            foreach (['title', 'description'] as $field) {
-                if (array_key_exists($field, $arguments)) {
-                    $snippet[$field] = $arguments[$field];
-                }
-            }
-
-            $body = [
-                'id' => $id,
-                'snippet' => $snippet,
-                'status' => ['privacyStatus' => $arguments['privacy'] ?? $metadata['status']['privacyStatus']],
-            ];
-            $planned[] = ['update', 'playlists.update', ['part' => 'snippet,status'], $body];
+            $planned = $this->planMetadataUpdate($id, $metadata, $arguments);
         } elseif ($tool === 'delete_playlist') {
             $planned[] = ['delete', 'playlists.delete', ['id' => $id], null];
         } elseif ($tool === 'add_tracks') {
-            $videos = array_map(fn($v) => $this->video($v), $arguments['video_ids']);
-            $policy = $arguments['duplicate_policy'] ?? 'skip';
-            $present = $policy === 'skip' ? array_column(
-                array_column($this->entries($user, $id), 'snippet'),
-                'resourceId',
-            ) : [];
-            $seen = array_fill_keys(array_column($present, 'videoId'), true);
-            foreach ($videos as $n => $video) {
-                if (isset($done['add:' . $n])) {
-                    continue;
-                }
-                if ($policy === 'skip' && isset($seen[$video])) {
-                    continue;
-                }
-
-                $seen[$video] = true;
-                $planned[] = [
-                    'add:' . $n,
-                    'playlistItems.insert',
-                    ['part' => 'snippet'],
-                    [
-                        'snippet' => [
-                            'playlistId' => $id,
-                            'resourceId' => ['kind' => 'youtube#video', 'videoId' => $video],
-                        ],
-                    ],
-                ];
-            }
+            $planned = $this->planTrackAdditions($user, $id, $arguments, $done);
         } elseif ($tool === 'remove_tracks' || $tool === 'move_track') {
-            $targets = $tool === 'remove_tracks' ? $arguments['playlist_item_ids'] : [$arguments['playlist_item_id']];
-            $pending = array_values(
-                array_filter($targets, fn($t) => !isset($done[($tool === 'remove_tracks' ? 'remove:' : 'move:') . $t])),
-            );
-            $entries = $pending ? $this->api->call(
-                $user,
-                'playlistItems.list',
-                [
-                    'part' => 'snippet',
-                    'id' => implode(',', $pending),
-                    'maxResults' => 50,
-                    'fields' => 'items(id,snippet(playlistId,position,resourceId))',
-                ],
-            )['items'] ?? [] : [];
-            $byId = array_column($entries, null, 'id');
-            foreach ($targets as $target) {
-                $label = ($tool === 'remove_tracks' ? 'remove:' : 'move:') . $target;
-                if (isset($done[$label])) {
-                    continue;
-                }
-                if (!isset($byId[$target]) || ($byId[$target]['snippet']['playlistId'] ?? null) !== $id) {
-                    throw new ServiceError(
-                        'ITEM_NOT_IN_PLAYLIST',
-                        'An entry is missing from this playlist. Refresh before retrying.',
-                        [],
-                        409,
-                    );
-                }
-                if ($tool === 'remove_tracks') {
-                    $planned[] = [$label, 'playlistItems.delete', ['id' => $target], null];
-                } else {
-                    $length = $metadata['contentDetails']['itemCount'] ?? null;
-                    if (!is_int($length)) {
-                        throw new ServiceError(
-                            'YOUTUBE_RESPONSE_INVALID',
-                            'YouTube did not return the playlist length; no move was dispatched.',
-                            [],
-                            502,
-                        );
-                    }
-                    if ($arguments['position'] >= $length) {
-                        throw new ServiceError('INVALID_POSITION', 'Position is outside the playlist.');
-                    }
-                    if ($byId[$target]['snippet']['position'] === $arguments['position']) {
-                        continue;
-                    }
-
-                    $planned[] = [
-                        $label,
-                        'playlistItems.update',
-                        ['part' => 'snippet'],
-                        [
-                            'id' => $target,
-                            'snippet' => [
-                                'playlistId' => $id,
-                                'position' => $arguments['position'],
-                                'resourceId' => $byId[$target]['snippet']['resourceId'],
-                            ],
-                        ],
-                    ];
-                }
-            }
+            $planned = $this->planOccurrenceChanges($user, $id, $tool, $arguments, $metadata, $done);
         }
 
         $planned = array_values(array_filter($planned, fn($p) => !array_key_exists($p[0], $done)));
@@ -565,28 +425,7 @@ final class Service
         }
 
         $deadline = microtime(true) + 45;
-        $created = $step(
-            'create',
-            fn() => $this->api->call(
-                $user,
-                'playlists.insert',
-                ['part' => 'snippet,status'],
-                [
-                    'snippet' => ['title' => $arguments['title'], 'description' => $arguments['description'] ?? ''],
-                    'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private'],
-                ],
-                operation: $operation,
-            ),
-        );
-        $id = $created['id'] ?? null;
-        if (!is_string($id) || $id === '') {
-            throw new ServiceError(
-                'UPSTREAM_UNCERTAIN',
-                'Playlist creation did not return an ID. Inspect YouTube before retrying.',
-                [],
-                502,
-            );
-        }
+        $id = $this->createPlaylist($user, $arguments, $step, $operation);
         if (isset($done['create']) && count($done) < count($videos) + 1 && $videos) {
             $metadata = $this->metadata($user, $id);
             if (($metadata['snippet']['channelId'] ?? null) !== $connection['channel_id']) {
@@ -599,37 +438,7 @@ final class Service
             }
         }
 
-        $seen = [];
-        $added = 0;
-        foreach ($videos as $n => $video) {
-            if ($policy === 'skip' && isset($seen[$video])) {
-                continue;
-            }
-
-            $seen[$video] = true;
-            if (microtime(true) > $deadline) {
-                throw new ServiceError(
-                    'OPERATION_TIME_LIMIT',
-                    'Inspect the receipt and explicitly resume pending tracks.',
-                    [],
-                    409,
-                );
-            }
-
-            $step(
-                'add:' . $n,
-                fn() => $this->api->call(
-                    $user,
-                    'playlistItems.insert',
-                    ['part' => 'snippet'],
-                    [
-                        'snippet' => ['playlistId' => $id, 'resourceId' => ['kind' => 'youtube#video', 'videoId' => $video]],
-                    ],
-                    operation: $operation,
-                ),
-            );
-            $added++;
-        }
+        $added = $this->populateCreatedPlaylist($user, $id, $videos, $policy, $step, $operation, $deadline);
 
         return [
             'playlist_id' => $id,
@@ -702,5 +511,304 @@ final class Service
             'PLAYLIST_SCAN_LIMIT',
             'Playlist is too large for a bounded preflight scan. No new changes have been dispatched.',
         );
+    }
+
+    /**
+     * @param array<string, mixed> $a
+     * @return array<string, mixed>
+     */
+    private function searchTracks(string $user, array $a): array
+    {
+        $filterArguments = array_intersect_key($a, YouTubeTools::searchFilters());
+        Arguments::validate($filterArguments, YouTubeTools::searchFilters(), []);
+        $query = ['part' => 'snippet', 'type' => 'video', 'q' => $a['query'], 'maxResults' => $a['limit'] ?? 10];
+        $query += YouTubeService::searchParameters($a);
+        foreach (['region' => 'regionCode', 'page_token' => 'pageToken'] as $arg => $param) {
+            if (!empty($a[$arg])) {
+                $query[$param] = $a[$arg];
+            }
+        }
+
+        $results = $this->api->call($user, 'search.list', $query, ttl: 300);
+        if (!($a['include_details'] ?? false)) {
+            return [
+                'candidates' => array_map(
+                    fn($v) => [
+                        'video_id' => $v['id']['videoId'],
+                        'title' => $v['snippet']['title'],
+                        'channel' => $v['snippet']['channelTitle'],
+                    ],
+                    $results['items'] ?? [],
+                ),
+                'next_page_token' => $results['nextPageToken'] ?? null,
+                'music_availability' => 'YouTube candidates; Music playback is not guaranteed.',
+            ];
+        }
+
+        $ids = array_column(array_column($results['items'] ?? [], 'id'), 'videoId');
+        $videos = $ids ? $this->api->call(
+            $user,
+            'videos.list',
+            ['part' => 'snippet,contentDetails,status', 'id' => implode(',', $ids)],
+            ttl: 300,
+        ) : ['items' => []];
+
+        return [
+            'candidates' => array_map(
+                fn($v) => [
+                    'video_id' => $v['id'],
+                    'title' => $v['snippet']['title'],
+                    'channel' => $v['snippet']['channelTitle'],
+                    'duration' => $v['contentDetails']['duration'] ?? null,
+                    'url' => 'https://www.youtube.com/watch?v=' . $v['id'],
+                ],
+                $videos['items'] ?? [],
+            ),
+            'next_page_token' => $results['nextPageToken'] ?? null,
+            'music_availability' => 'These are YouTube video candidates; YouTube Music playback is not guaranteed.',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed>|null $metadata
+     * @param array<string, mixed> $arguments
+     * @return list<array{string, string, array<string, mixed>, array<string, mixed>|null}>
+     */
+    private function planMetadataUpdate(?string $id, ?array $metadata, array $arguments): array
+    {
+        $snippet = $metadata['snippet'];
+        unset($snippet['thumbnails'], $snippet['channelId'], $snippet['channelTitle'], $snippet['publishedAt'], $snippet['localized']);
+        $snippet = array_intersect_key($snippet, array_flip(['title', 'description', 'tags', 'defaultLanguage']));
+        foreach (['title', 'description'] as $field) {
+            if (array_key_exists($field, $arguments)) {
+                $snippet[$field] = $arguments[$field];
+            }
+        }
+
+        $body = [
+            'id' => $id,
+            'snippet' => $snippet,
+            'status' => ['privacyStatus' => $arguments['privacy'] ?? $metadata['status']['privacyStatus']],
+        ];
+
+        return [['update', 'playlists.update', ['part' => 'snippet,status'], $body]];
+    }
+
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array<string, mixed> $done
+     * @return list<array{string, string, array<string, mixed>, array<string, mixed>|null}>
+     */
+    private function planTrackAdditions(string $user, ?string $id, array $arguments, array $done): array
+    {
+        $planned = [];
+        $videos = array_map(fn($v) => $this->video($v), $arguments['video_ids']);
+        $policy = $arguments['duplicate_policy'] ?? 'skip';
+        $present = $policy === 'skip' ? array_column(
+            array_column($this->entries($user, $id), 'snippet'),
+            'resourceId',
+        ) : [];
+        $seen = array_fill_keys(array_column($present, 'videoId'), true);
+        foreach ($videos as $n => $video) {
+            if (isset($done['add:' . $n])) {
+                continue;
+            }
+            if ($policy === 'skip' && isset($seen[$video])) {
+                continue;
+            }
+
+            $seen[$video] = true;
+            $planned[] = [
+                'add:' . $n,
+                'playlistItems.insert',
+                ['part' => 'snippet'],
+                [
+                    'snippet' => [
+                        'playlistId' => $id,
+                        'resourceId' => ['kind' => 'youtube#video', 'videoId' => $video],
+                    ],
+                ],
+            ];
+        }
+
+        return $planned;
+    }
+
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array<string, mixed>|null $metadata
+     * @param array<string, mixed> $done
+     * @return list<array{string, string, array<string, mixed>, array<string, mixed>|null}>
+     */
+    private function planOccurrenceChanges(
+        string $user,
+        ?string $id,
+        string $tool,
+        array $arguments,
+        ?array $metadata,
+        array $done,
+    ): array {
+        $planned = [];
+        $targets = $tool === 'remove_tracks' ? $arguments['playlist_item_ids'] : [$arguments['playlist_item_id']];
+        $pending = array_values(
+            array_filter($targets, fn($t) => !isset($done[($tool === 'remove_tracks' ? 'remove:' : 'move:') . $t])),
+        );
+        $entries = $pending ? $this->api->call(
+            $user,
+            'playlistItems.list',
+            [
+                'part' => 'snippet',
+                'id' => implode(',', $pending),
+                'maxResults' => 50,
+                'fields' => 'items(id,snippet(playlistId,position,resourceId))',
+            ],
+        )['items'] ?? [] : [];
+        $byId = array_column($entries, null, 'id');
+        foreach ($targets as $target) {
+            $label = ($tool === 'remove_tracks' ? 'remove:' : 'move:') . $target;
+            if (isset($done[$label])) {
+                continue;
+            }
+            if (!isset($byId[$target]) || ($byId[$target]['snippet']['playlistId'] ?? null) !== $id) {
+                throw new ServiceError(
+                    'ITEM_NOT_IN_PLAYLIST',
+                    'An entry is missing from this playlist. Refresh before retrying.',
+                    [],
+                    409,
+                );
+            }
+            if ($tool === 'remove_tracks') {
+                $planned[] = [$label, 'playlistItems.delete', ['id' => $target], null];
+            } else {
+                $move = $this->planOccurrenceMove($id, $target, $byId[$target], $metadata, $arguments);
+                if ($move !== null) {
+                    $planned[] = $move;
+                }
+            }
+        }
+
+        return $planned;
+    }
+
+    /**
+     * @param array<string, mixed> $entry
+     * @param array<string, mixed>|null $metadata
+     * @param array<string, mixed> $arguments
+     * @return array{string, string, array<string, mixed>, array<string, mixed>}|null
+     */
+    private function planOccurrenceMove(
+        ?string $id,
+        string $target,
+        array $entry,
+        ?array $metadata,
+        array $arguments,
+    ): ?array {
+        $length = $metadata['contentDetails']['itemCount'] ?? null;
+        if (!is_int($length)) {
+            throw new ServiceError(
+                'YOUTUBE_RESPONSE_INVALID',
+                'YouTube did not return the playlist length; no move was dispatched.',
+                [],
+                502,
+            );
+        }
+        if ($arguments['position'] >= $length) {
+            throw new ServiceError('INVALID_POSITION', 'Position is outside the playlist.');
+        }
+        if ($entry['snippet']['position'] === $arguments['position']) {
+            return null;
+        }
+
+        return [
+            'move:' . $target,
+            'playlistItems.update',
+            ['part' => 'snippet'],
+            [
+                'id' => $target,
+                'snippet' => [
+                    'playlistId' => $id,
+                    'position' => $arguments['position'],
+                    'resourceId' => $entry['snippet']['resourceId'],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @param array<array-key, string> $videos
+     */
+    private function populateCreatedPlaylist(
+        string $user,
+        string $id,
+        array $videos,
+        string $policy,
+        callable $step,
+        string $operation,
+        float $deadline,
+    ): int {
+        $seen = [];
+        $added = 0;
+        foreach ($videos as $n => $video) {
+            if ($policy === 'skip' && isset($seen[$video])) {
+                continue;
+            }
+
+            $seen[$video] = true;
+            if (microtime(true) > $deadline) {
+                throw new ServiceError(
+                    'OPERATION_TIME_LIMIT',
+                    'Inspect the receipt and explicitly resume pending tracks.',
+                    [],
+                    409,
+                );
+            }
+
+            $step(
+                'add:' . $n,
+                fn() => $this->api->call(
+                    $user,
+                    'playlistItems.insert',
+                    ['part' => 'snippet'],
+                    [
+                        'snippet' => ['playlistId' => $id, 'resourceId' => ['kind' => 'youtube#video', 'videoId' => $video]],
+                    ],
+                    operation: $operation,
+                ),
+            );
+            $added++;
+        }
+
+        return $added;
+    }
+
+    /**
+     * @param array<string, mixed> $arguments
+     */
+    private function createPlaylist(string $user, array $arguments, callable $step, string $operation): string
+    {
+        $created = $step(
+            'create',
+            fn() => $this->api->call(
+                $user,
+                'playlists.insert',
+                ['part' => 'snippet,status'],
+                [
+                    'snippet' => ['title' => $arguments['title'], 'description' => $arguments['description'] ?? ''],
+                    'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private'],
+                ],
+                operation: $operation,
+            ),
+        );
+        $id = $created['id'] ?? null;
+        if (!is_string($id) || $id === '') {
+            throw new ServiceError(
+                'UPSTREAM_UNCERTAIN',
+                'Playlist creation did not return an ID. Inspect YouTube before retrying.',
+                [],
+                502,
+            );
+        }
+
+        return $id;
     }
 }

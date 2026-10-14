@@ -21,6 +21,86 @@ final class Tools
      */
     public static function definitions(): array
     {
+        $specs = self::specs();
+        $result = [];
+        foreach ($specs as $name => [$toolDescription, $properties, $required]) {
+            $result[] = self::definition($name, $toolDescription, $properties, $required);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param array{
+     *     id: string,
+     *     scopes: list<string>,
+     *     token_id: string,
+     *     expires_at: int,
+     *     client_id: string,
+     *     generation: string|null
+     * } $identity
+     */
+    public static function handler(Service $service, array $identity, string $name, OAuth $oauth): ToolHandlerInterface
+    {
+        return new class ($service, $identity, $name, $oauth) implements ToolHandlerInterface {
+            /**
+             * @param array{
+             *     id: string,
+             *     scopes: list<string>,
+             *     token_id: string,
+             *     expires_at: int,
+             *     client_id: string,
+             *     generation: string|null
+             * } $identity
+             */
+            public function __construct(
+                private Service $service,
+                private array $identity,
+                private string $name,
+                private OAuth $oauth,
+            ) {}
+
+            public function execute(array $arguments, ClientGateway $gateway): mixed
+            {
+                try {
+                    $detail = $arguments['response_detail'] ?? 'compact';
+                    unset($arguments['response_detail']);
+                    $result = $this->oauth->runAuthenticated(
+                        $this->identity,
+                        fn() => $this->service->execute(
+                            $this->identity['id'],
+                            $this->identity['scopes'],
+                            $this->name,
+                            $arguments,
+                        ),
+                    );
+                    $result = $detail === 'full' ? $result : Presentation::compact($this->name, $result);
+
+                    return new CallToolResult(
+                        [
+                            new TextContent(
+                                'Result in structuredContent' . (isset($result['status']) ? ': ' . $result['status'] : '.'),
+                            ),
+                        ],
+                        isset($result['status']) && $result['status'] !== 'completed',
+                        $result,
+                    );
+                } catch (ServiceError $e) {
+                    return new CallToolResult(
+                        [new TextContent($e->reason . ': ' . $e->getMessage())],
+                        true,
+                        $e->payload(),
+                    );
+                }
+            }
+        };
+    }
+
+    /**
+     * @return array<string, array{string, array<string, array<string, mixed>>, list<string>}>
+     */
+    private static function specs(): array
+    {
         $string = ['type' => 'string', 'minLength' => 1, 'maxLength' => 256];
         $playlist = ['type' => 'string', 'pattern' => '^[A-Za-z0-9_-]{10,100}$'];
         $item = ['type' => 'string', 'minLength' => 1, 'maxLength' => 256, 'pattern' => '^[A-Za-z0-9_-]+$'];
@@ -161,140 +241,84 @@ final class Tools
         ];
         $specs['search_tracks'][1] += \YouTubeMcp\YouTube\Tools::searchFilters();
         $specs += \YouTubeMcp\YouTube\Tools::specs() + \YouTubeMcp\Playlist\WorkflowTools::specs() + \YouTubeMcp\YouTube\CreatorTools::specs();
-        $result = [];
-        foreach ($specs as $name => [$toolDescription, $properties, $required]) {
-            $write = in_array($name, Service::WRITES, true);
-            if (!$write) {
-                $properties['response_detail'] = [
-                    'type' => 'string',
-                    'enum' => ['compact', 'full'],
-                    'description' => 'Compact by default; full includes available upstream details or the complete local receipt.',
-                ];
-            }
 
-            $result[] = new Tool(
-                $name,
-                null,
-                [
-                    'type' => 'object',
-                    'properties' => $properties ?: new stdClass(),
-                    'required' => $required,
-                    'additionalProperties' => false,
-                ],
-                $toolDescription,
-                ToolAnnotations::fromArray(
-                    [
-                        'readOnlyHint' => !$write,
-                        'destructiveHint' => in_array(
-                            $name,
-                            [
-                                'remove_tracks',
-                                'delete_playlist',
-                                'update_playlist',
-                                'move_track',
-                                'rate_track',
-                                'unsubscribe_artist',
-                                'update_comment',
-                                'delete_comment',
-                                'moderate_comments',
-                                'sort_playlist',
-                                'remove_playlist_duplicates',
-                                'reorder_playlist',
-                                'transfer_tracks',
-                                'update_video',
-                                'delete_video',
-                                'set_video_thumbnail',
-                                'update_caption',
-                                'delete_caption',
-                                'update_channel_branding',
-                                'set_channel_banner',
-                                'update_channel_section',
-                                'delete_channel_section',
-                                'delete_media_asset',
-                            ],
-                            true,
-                        ),
-                        'idempotentHint' => !$write,
-                        'openWorldHint' => !in_array($name, ['get_usage_status', 'get_operation', 'list_media_assets', 'delete_media_asset'], true),
-                    ],
-                ),
-                meta: [
-                    'securitySchemes' => [
-                        [
-                            'type' => 'oauth2',
-                            'scopes' => $name === 'get_operation' ? [] : [Service::scope($name)],
-                        ],
-                    ],
-                ],
-            );
-        }
-
-        return $result;
+        return $specs;
     }
 
     /**
-     * @param array{
-     *     id: string,
-     *     scopes: list<string>,
-     *     token_id: string,
-     *     expires_at: int,
-     *     client_id: string,
-     *     generation: string|null
-     * } $identity
+     * @param array<string, array<string, mixed>> $properties
+     * @param list<string> $required
      */
-    public static function handler(Service $service, array $identity, string $name, OAuth $oauth): ToolHandlerInterface
+    private static function definition(string $name, string $toolDescription, array $properties, array $required): Tool
     {
-        return new class ($service, $identity, $name, $oauth) implements ToolHandlerInterface {
-            /**
-             * @param array{
-             *     id: string,
-             *     scopes: list<string>,
-             *     token_id: string,
-             *     expires_at: int,
-             *     client_id: string,
-             *     generation: string|null
-             * } $identity
-             */
-            public function __construct(
-                private Service $service,
-                private array $identity,
-                private string $name,
-                private OAuth $oauth,
-            ) {}
+        $write = in_array($name, Service::WRITES, true);
+        if (!$write) {
+            $properties['response_detail'] = [
+                'type' => 'string',
+                'enum' => ['compact', 'full'],
+                'description' => 'Compact by default; full includes available upstream details or the complete local receipt.',
+            ];
+        }
 
-            public function execute(array $arguments, ClientGateway $gateway): mixed
-            {
-                try {
-                    $detail = $arguments['response_detail'] ?? 'compact';
-                    unset($arguments['response_detail']);
-                    $result = $this->oauth->runAuthenticated(
-                        $this->identity,
-                        fn() => $this->service->execute(
-                            $this->identity['id'],
-                            $this->identity['scopes'],
-                            $this->name,
-                            $arguments,
-                        ),
-                    );
-                    $result = $detail === 'full' ? $result : Presentation::compact($this->name, $result);
+        return new Tool(
+            $name,
+            null,
+            [
+                'type' => 'object',
+                'properties' => $properties ?: new stdClass(),
+                'required' => $required,
+                'additionalProperties' => false,
+            ],
+            $toolDescription,
+            self::annotations($name, $write),
+            meta: [
+                'securitySchemes' => [
+                    [
+                        'type' => 'oauth2',
+                        'scopes' => $name === 'get_operation' ? [] : [Service::scope($name)],
+                    ],
+                ],
+            ],
+        );
+    }
 
-                    return new CallToolResult(
-                        [
-                            new TextContent(
-                                'Result in structuredContent' . (isset($result['status']) ? ': ' . $result['status'] : '.'),
-                            ),
-                        ],
-                        isset($result['status']) && $result['status'] !== 'completed',
-                        $result,
-                    );
-                } catch (ServiceError $e) {
-                    return new CallToolResult(
-                        [new TextContent($e->reason . ': ' . $e->getMessage())],
-                        true,
-                        $e->payload(),
-                    );
-                }
-            }
-        };
+    private static function annotations(string $name, bool $write): ToolAnnotations
+    {
+        return ToolAnnotations::fromArray(
+            [
+                'readOnlyHint' => !$write,
+                'destructiveHint' => in_array(
+                    $name,
+                    [
+                        'remove_tracks',
+                        'delete_playlist',
+                        'update_playlist',
+                        'move_track',
+                        'rate_track',
+                        'unsubscribe_artist',
+                        'update_comment',
+                        'delete_comment',
+                        'moderate_comments',
+                        'sort_playlist',
+                        'remove_playlist_duplicates',
+                        'reorder_playlist',
+                        'transfer_tracks',
+                        'update_video',
+                        'delete_video',
+                        'set_video_thumbnail',
+                        'update_caption',
+                        'delete_caption',
+                        'update_channel_branding',
+                        'set_channel_banner',
+                        'update_channel_section',
+                        'delete_channel_section',
+                        'delete_media_asset',
+                    ],
+                    true,
+                ),
+                'idempotentHint' => !$write,
+                'openWorldHint' => !in_array($name, ['get_usage_status', 'get_operation', 'list_media_assets', 'delete_media_asset'], true),
+            ],
+        );
     }
 }

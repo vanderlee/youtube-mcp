@@ -165,36 +165,7 @@ final class CreatorService
 
         $asset = isset($arguments['asset_id']) ? $this->assets->get($user, $connection, $arguments['asset_id']) : null;
         if ($tool === 'upload_video') {
-            $this->assertMime($asset, 'video/');
-            $current = $this->api->call($user, 'channels.list', ['part' => 'id', 'mine' => 'true']);
-            if (
-                count($current['items'] ?? []) !== 1
-                || ($current['items'][0]['id'] ?? '') !== $connection['channel_id']
-            ) {
-                throw new ServiceError('GOOGLE_ACCOUNT_MISMATCH', 'Google upload identity differs from your confirmed channel.', [], 403);
-            }
-
-            $result = $this->media->upload(
-                $user,
-                'videos.insert',
-                ['part' => 'snippet,status'],
-                [
-                    'snippet' => [
-                        'title' => $arguments['title'],
-                        'description' => $arguments['description'] ?? '',
-                        'categoryId' => $arguments['category_id'] ?? '22',
-                        'tags' => $arguments['tags'] ?? [],
-                    ],
-                    'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private'],
-                ],
-                $asset,
-                $step,
-            );
-            if (!is_string($result['id'] ?? null) || !preg_match('/^[A-Za-z0-9_-]{11}$/D', $result['id'])) {
-                throw new ServiceError('UPSTREAM_UNCERTAIN', 'Upload returned no valid video ID.', [], 502);
-            }
-
-            return ['video_id' => $result['id']];
+            return $this->uploadVideo($user, $connection, $arguments, $asset, $step);
         }
         if ($tool === 'set_video_thumbnail') {
             $this->assertMime($asset, 'image/');
@@ -329,19 +300,7 @@ final class CreatorService
             return ['deleted' => true];
         }
 
-        $snippet = $existing ? array_intersect_key($existing['snippet'], array_flip(['name', 'isDraft'])) : [
-            'videoId' => $arguments['video_id'],
-            'language' => $arguments['language'],
-            'name' => $arguments['name'] ?? '',
-            'isDraft' => $arguments['is_draft'] ?? false,
-        ];
-        foreach (['name' => 'name', 'is_draft' => 'isDraft'] as $arg => $field) {
-            if (array_key_exists($arg, $arguments)) {
-                $snippet[$field] = $arguments[$arg];
-            }
-        }
-
-        $body = ['snippet' => $snippet] + (isset($arguments['caption_id']) ? ['id' => $arguments['caption_id']] : []);
+        $body = $this->captionBody($existing, $arguments);
         if ($asset !== null) {
             $this->assertMime($asset, 'text/');
             $result = $this->media->upload(
@@ -465,22 +424,7 @@ final class CreatorService
             return ['deleted' => true];
         }
 
-        $snippet = array_intersect_key($section['snippet'] ?? [], array_flip(['type', 'title', 'position']));
-        foreach (['type', 'title', 'position'] as $field) {
-            if (array_key_exists($field, $arguments)) {
-                $snippet[$field] = $arguments[$field];
-            }
-        }
-
-        $details = $section['contentDetails'] ?? [];
-        foreach (['playlist_ids' => 'playlists', 'channel_ids' => 'channels'] as $arg => $field) {
-            if (isset($arguments[$arg])) {
-                $details[$field] = $arguments[$arg];
-            }
-        }
-
-        $this->validateSection($snippet, $details, $connection['channel_id']);
-        $body = ['snippet' => $snippet, 'contentDetails' => $details] + (isset($arguments['section_id']) ? ['id' => $arguments['section_id']] : []);
+        $body = $this->sectionBody($section, $arguments, $connection['channel_id']);
         $result = $step(
             'section-change',
             fn() => $this->api->call(
@@ -530,5 +474,97 @@ final class CreatorService
         if ($invalidSection) {
             throw new ServiceError('INVALID_ARGUMENT', 'Section type, title and playlist/channel references are inconsistent.');
         }
+    }
+
+    /**
+     * @param array{channel_id: string, generation: string} $connection
+     * @param array<string, mixed> $arguments
+     * @param array<string, mixed>|null $asset
+     * @return array<string, mixed>
+     */
+    private function uploadVideo(
+        string $user,
+        array $connection,
+        array $arguments,
+        ?array $asset,
+        callable $step,
+    ): array {
+        $this->assertMime($asset, 'video/');
+        $current = $this->api->call($user, 'channels.list', ['part' => 'id', 'mine' => 'true']);
+        if (
+            count($current['items'] ?? []) !== 1
+            || ($current['items'][0]['id'] ?? '') !== $connection['channel_id']
+        ) {
+            throw new ServiceError('GOOGLE_ACCOUNT_MISMATCH', 'Google upload identity differs from your confirmed channel.', [], 403);
+        }
+
+        $result = $this->media->upload(
+            $user,
+            'videos.insert',
+            ['part' => 'snippet,status'],
+            [
+                'snippet' => [
+                    'title' => $arguments['title'],
+                    'description' => $arguments['description'] ?? '',
+                    'categoryId' => $arguments['category_id'] ?? '22',
+                    'tags' => $arguments['tags'] ?? [],
+                ],
+                'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private'],
+            ],
+            $asset,
+            $step,
+        );
+        if (!is_string($result['id'] ?? null) || !preg_match('/^[A-Za-z0-9_-]{11}$/D', $result['id'])) {
+            throw new ServiceError('UPSTREAM_UNCERTAIN', 'Upload returned no valid video ID.', [], 502);
+        }
+
+        return ['video_id' => $result['id']];
+    }
+
+    /**
+     * @param array<string, mixed>|null $existing
+     * @param array<string, mixed> $arguments
+     * @return array<string, mixed>
+     */
+    private function captionBody(?array $existing, array $arguments): array
+    {
+        $snippet = $existing ? array_intersect_key($existing['snippet'], array_flip(['name', 'isDraft'])) : [
+            'videoId' => $arguments['video_id'],
+            'language' => $arguments['language'],
+            'name' => $arguments['name'] ?? '',
+            'isDraft' => $arguments['is_draft'] ?? false,
+        ];
+        foreach (['name' => 'name', 'is_draft' => 'isDraft'] as $arg => $field) {
+            if (array_key_exists($arg, $arguments)) {
+                $snippet[$field] = $arguments[$arg];
+            }
+        }
+
+        return ['snippet' => $snippet] + (isset($arguments['caption_id']) ? ['id' => $arguments['caption_id']] : []);
+    }
+
+    /**
+     * @param array<string, mixed>|null $section
+     * @param array<string, mixed> $arguments
+     * @return array<string, mixed>
+     */
+    private function sectionBody(?array $section, array $arguments, string $channel): array
+    {
+        $snippet = array_intersect_key($section['snippet'] ?? [], array_flip(['type', 'title', 'position']));
+        foreach (['type', 'title', 'position'] as $field) {
+            if (array_key_exists($field, $arguments)) {
+                $snippet[$field] = $arguments[$field];
+            }
+        }
+
+        $details = $section['contentDetails'] ?? [];
+        foreach (['playlist_ids' => 'playlists', 'channel_ids' => 'channels'] as $arg => $field) {
+            if (isset($arguments[$arg])) {
+                $details[$field] = $arguments[$arg];
+            }
+        }
+
+        $this->validateSection($snippet, $details, $channel);
+        return ['snippet' => $snippet, 'contentDetails' => $details] + (isset($arguments['section_id']) ? ['id' => $arguments['section_id']] : []);
     }
 }

@@ -84,23 +84,7 @@ final class Workflows
         $plan = $step('plan', fn() => $this->plan($user, $connection['channel_id'], $tool, $arguments));
         $target = $arguments['playlist_id'] ?? null;
         if ($tool === 'copy_playlist') {
-            $created = $step(
-                'create',
-                fn() => $this->api->call(
-                    $user,
-                    'playlists.insert',
-                    ['part' => 'snippet,status'],
-                    [
-                        'snippet' => ['title' => $arguments['title']],
-                        'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private'],
-                    ],
-                    operation: $operation,
-                ),
-            );
-            $target = $created['id'] ?? null;
-            if (!is_string($target) || $target === '') {
-                throw new ServiceError('UPSTREAM_UNCERTAIN', 'Creation returned no playlist ID. Reconcile before retrying.', [], 502);
-            }
+            $target = $this->createCopyTarget($user, $arguments, $step, $operation);
         }
 
         $this->verifyPlan($user, $connection['channel_id'], $tool, $plan, $done, $target);
@@ -306,28 +290,9 @@ final class Workflows
                 $entries = array_map(fn($id) => $byId[$id], $arguments['playlist_item_ids']);
             }
 
-            foreach ($entries as $entry) {
-                $video = $entry['video_id'];
-                if (!is_string($video) || !preg_match('/^[A-Za-z0-9_-]{11}$/D', $video)) {
-                    if ($tool === 'transfer_tracks') {
-                        throw new ServiceError('INVALID_VIDEO', 'Cannot transfer an occurrence without a valid video ID.');
-                    }
-
-                    $skipped++;
-                    continue;
-                }
-                if (
-                    $tool !== 'transfer_tracks'
-                    && ($arguments['duplicate_policy'] ?? 'skip') === 'skip'
-                    && isset($seen[$video])
-                ) {
-                    $skipped++;
-                    continue;
-                }
-
-                $seen[$video] = true;
-                $actions[] = ['type' => 'add', 'video_id' => $video];
-            }
+            [$sourceActions, $sourceSkipped, $seen] = $this->sourceAdditions($entries, $tool, $arguments, $seen);
+            array_push($actions, ...$sourceActions);
+            $skipped += $sourceSkipped;
             if ($tool === 'transfer_tracks' && ($arguments['move'] ?? false)) {
                 foreach ($entries as $entry) {
                     $actions[] = ['type' => 'remove', 'playlist_id' => $source, 'id' => $entry['id']];
@@ -475,19 +440,7 @@ final class Workflows
     private function read(string $user, string $tool, array $arguments): array
     {
         if ($tool === 'compare_playlists') {
-            $deadline = microtime(true) + 45;
-            $left = $this->scanner->entries($user, $arguments['playlist_id'], $deadline);
-            $right = $this->scanner->entries($user, $arguments['other_playlist_id'], $deadline);
-            $leftCounts = array_count_values(array_filter(array_column($left, 'video_id'), 'is_string'));
-            $rightCounts = array_count_values(array_filter(array_column($right, 'video_id'), 'is_string'));
-
-            return [
-                'only_in_left' => array_keys(array_diff_key($leftCounts, $rightCounts)),
-                'only_in_right' => array_keys(array_diff_key($rightCounts, $leftCounts)),
-                'left_occurrence_counts' => $leftCounts,
-                'right_occurrence_counts' => $rightCounts,
-                'complete' => true,
-            ];
+            return $this->comparePlaylists($user, $arguments);
         }
 
         $response = $this->api->call(
@@ -514,28 +467,7 @@ final class Workflows
             'complete' => !isset($response['nextPageToken']),
         ];
         if ($tool === 'audit_playlist') {
-            $ids = array_values(array_unique(array_filter(array_column($entries, 'video_id'), 'is_string')));
-            $videos = $ids ? $this->api->call($user, 'videos.list', ['part' => 'snippet,status,contentDetails', 'id' => implode(',', $ids)]) : ['items' => []];
-            $byId = array_column($videos['items'] ?? [], null, 'id');
-            foreach ($entries as &$entry) {
-                $video = $byId[$entry['video_id']] ?? null;
-                $entry['returned'] = $video !== null;
-                $entry['privacy'] = $video['status']['privacyStatus'] ?? null;
-                $restrictions = $video['contentDetails']['regionRestriction'] ?? [];
-                $entry['region_restrictions'] = $restrictions;
-                if (isset($arguments['region'])) {
-                    $entry['region_restricted'] = $video === null ? null : (
-                        in_array($arguments['region'], $restrictions['blocked'] ?? [], true)
-                        || (isset($restrictions['allowed']) && !in_array($arguments['region'], $restrictions['allowed'], true))
-                    );
-                }
-            }
-            unset($entry);
-
-            return $result + [
-                'entries' => $entries,
-                'note' => 'Omitted metadata does not distinguish deletion from lack of access. No entries were removed.',
-            ];
+            return $result + $this->auditEntries($user, $entries, $arguments);
         }
 
         $format = $arguments['format'] ?? 'json';
@@ -579,5 +511,119 @@ final class Workflows
         fclose($stream);
 
         return $csv;
+    }
+
+    /**
+     * @param array<string, mixed> $arguments
+     */
+    private function createCopyTarget(string $user, array $arguments, callable $step, string $operation): string
+    {
+        $created = $step(
+            'create',
+            fn() => $this->api->call(
+                $user,
+                'playlists.insert',
+                ['part' => 'snippet,status'],
+                [
+                    'snippet' => ['title' => $arguments['title']],
+                    'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private'],
+                ],
+                operation: $operation,
+            ),
+        );
+        $target = $created['id'] ?? null;
+        if (!is_string($target) || $target === '') {
+            throw new ServiceError('UPSTREAM_UNCERTAIN', 'Creation returned no playlist ID. Reconcile before retrying.', [], 502);
+        }
+
+        return $target;
+    }
+
+    /**
+     * @param array<string, mixed> $arguments
+     * @return array<string, mixed>
+     */
+    private function comparePlaylists(string $user, array $arguments): array
+    {
+        $deadline = microtime(true) + 45;
+        $left = $this->scanner->entries($user, $arguments['playlist_id'], $deadline);
+        $right = $this->scanner->entries($user, $arguments['other_playlist_id'], $deadline);
+        $leftCounts = array_count_values(array_filter(array_column($left, 'video_id'), 'is_string'));
+        $rightCounts = array_count_values(array_filter(array_column($right, 'video_id'), 'is_string'));
+
+        return [
+            'only_in_left' => array_keys(array_diff_key($leftCounts, $rightCounts)),
+            'only_in_right' => array_keys(array_diff_key($rightCounts, $leftCounts)),
+            'left_occurrence_counts' => $leftCounts,
+            'right_occurrence_counts' => $rightCounts,
+            'complete' => true,
+        ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $entries
+     * @param array<string, mixed> $arguments
+     * @return array<string, mixed>
+     */
+    private function auditEntries(string $user, array $entries, array $arguments): array
+    {
+        $ids = array_values(array_unique(array_filter(array_column($entries, 'video_id'), 'is_string')));
+        $videos = $ids ? $this->api->call($user, 'videos.list', ['part' => 'snippet,status,contentDetails', 'id' => implode(',', $ids)]) : ['items' => []];
+        $byId = array_column($videos['items'] ?? [], null, 'id');
+        foreach ($entries as &$entry) {
+            $video = $byId[$entry['video_id']] ?? null;
+            $entry['returned'] = $video !== null;
+            $entry['privacy'] = $video['status']['privacyStatus'] ?? null;
+            $restrictions = $video['contentDetails']['regionRestriction'] ?? [];
+            $entry['region_restrictions'] = $restrictions;
+            if (isset($arguments['region'])) {
+                $entry['region_restricted'] = $video === null ? null : (
+                    in_array($arguments['region'], $restrictions['blocked'] ?? [], true)
+                    || (isset($restrictions['allowed']) && !in_array($arguments['region'], $restrictions['allowed'], true))
+                );
+            }
+        }
+        unset($entry);
+
+        return [
+            'entries' => $entries,
+            'note' => 'Omitted metadata does not distinguish deletion from lack of access. No entries were removed.',
+        ];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $entries
+     * @param array<string, mixed> $arguments
+     * @param array<string, bool> $seen
+     * @return array{list<WorkflowAction>, int, array<string, bool>}
+     */
+    private function sourceAdditions(array $entries, string $tool, array $arguments, array $seen): array
+    {
+        $actions = [];
+        $skipped = 0;
+        foreach ($entries as $entry) {
+            $video = $entry['video_id'];
+            if (!is_string($video) || !preg_match('/^[A-Za-z0-9_-]{11}$/D', $video)) {
+                if ($tool === 'transfer_tracks') {
+                    throw new ServiceError('INVALID_VIDEO', 'Cannot transfer an occurrence without a valid video ID.');
+                }
+
+                $skipped++;
+                continue;
+            }
+            if (
+                $tool !== 'transfer_tracks'
+                && ($arguments['duplicate_policy'] ?? 'skip') === 'skip'
+                && isset($seen[$video])
+            ) {
+                $skipped++;
+                continue;
+            }
+
+            $seen[$video] = true;
+            $actions[] = ['type' => 'add', 'video_id' => $video];
+        }
+
+        return [$actions, $skipped, $seen];
     }
 }

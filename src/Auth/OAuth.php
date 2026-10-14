@@ -73,24 +73,7 @@ final class OAuth
      */
     public function register(array $data, bool $public = false): array
     {
-        $redirects = $data['redirect_uris'] ?? [];
-        if (!is_array($redirects) || !$redirects || count($redirects) > 5) {
-            throw new ServiceError('invalid_client_metadata', 'Supply permitted redirect_uris.');
-        }
-
-        foreach ($redirects as $uri) {
-            if (!is_string($uri) || !in_array($uri, $this->config->list('OAUTH_REDIRECT_URIS'), true)) {
-                error_log(
-                    json_encode(
-                        [
-                            'event' => 'oauth_registration_callback_rejected',
-                            'redirect_uri' => is_string($uri) ? substr($uri, 0, 2048) : null,
-                        ],
-                    ),
-                );
-                throw new ServiceError('invalid_redirect_uri', 'Callback URL is not in the operator allowlist.');
-            }
-        }
+        $redirects = $this->registrationRedirects($data);
 
         $method = $data['token_endpoint_auth_method'] ?? 'none';
         if (!in_array($method, ['none', 'client_secret_post', 'client_secret_basic'], true)) {
@@ -106,48 +89,7 @@ final class OAuth
         sort($redirects);
 
         return $this->db->transaction(
-            function () use ($data, $public, $method, $redirects) {
-                if ($method === 'none') {
-                    $existing = $this->db->one(
-                        'SELECT id,name FROM oauth_clients WHERE confidential=0 AND redirect_uris=? ORDER BY id LIMIT 1',
-                        [json_encode($redirects)],
-                    );
-                    if ($existing) {
-                        return [
-                            'client_id' => $existing['id'],
-                            'client_name' => $existing['name'],
-                            'redirect_uris' => $redirects,
-                            'token_endpoint_auth_method' => 'none',
-                            'grant_types' => ['authorization_code', 'refresh_token'],
-                            'response_types' => ['code'],
-                        ];
-                    }
-                }
-
-                $id = bin2hex(random_bytes(24));
-                $secret = $method === 'none' ? null : bin2hex(random_bytes(32));
-                $name = $public ? 'ChatGPT' : mb_substr((string) ($data['client_name'] ?? 'ChatGPT'), 0, 100);
-                $this->db->execute(
-                    'INSERT INTO oauth_clients VALUES (?,?,?,?,?)',
-                    [
-                        $id,
-                        $name,
-                        json_encode($redirects),
-                        $secret ? password_hash($secret, PASSWORD_DEFAULT) : null,
-                        (int) ($secret !== null),
-                    ],
-                );
-
-                return [
-                    'client_id' => $id,
-                    'client_name' => $name,
-                    'redirect_uris' => $redirects,
-                    'token_endpoint_auth_method' => $method,
-                    'grant_types' => ['authorization_code', 'refresh_token'],
-                    'response_types' => ['code'],
-                    'client_id_issued_at' => time(),
-                ] + ($secret ? ['client_secret' => $secret, 'client_secret_expires_at' => 0] : []);
-            },
+            fn() => $this->registerClient($data, $public, $method, $redirects),
         );
     }
 
@@ -265,5 +207,82 @@ final class OAuth
                 401,
             );
         }
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<array-key, string>
+     */
+    private function registrationRedirects(array $data): array
+    {
+        $redirects = $data['redirect_uris'] ?? [];
+        if (!is_array($redirects) || !$redirects || count($redirects) > 5) {
+            throw new ServiceError('invalid_client_metadata', 'Supply permitted redirect_uris.');
+        }
+
+        foreach ($redirects as $uri) {
+            if (!is_string($uri) || !in_array($uri, $this->config->list('OAUTH_REDIRECT_URIS'), true)) {
+                error_log(
+                    json_encode(
+                        [
+                            'event' => 'oauth_registration_callback_rejected',
+                            'redirect_uri' => is_string($uri) ? substr($uri, 0, 2048) : null,
+                        ],
+                    ),
+                );
+                throw new ServiceError('invalid_redirect_uri', 'Callback URL is not in the operator allowlist.');
+            }
+        }
+
+        return $redirects;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @param list<string> $redirects
+     * @return array<string, mixed>
+     */
+    private function registerClient(array $data, bool $public, string $method, array $redirects): array
+    {
+        if ($method === 'none') {
+            $existing = $this->db->one(
+                'SELECT id,name FROM oauth_clients WHERE confidential=0 AND redirect_uris=? ORDER BY id LIMIT 1',
+                [json_encode($redirects)],
+            );
+            if ($existing) {
+                return [
+                    'client_id' => $existing['id'],
+                    'client_name' => $existing['name'],
+                    'redirect_uris' => $redirects,
+                    'token_endpoint_auth_method' => 'none',
+                    'grant_types' => ['authorization_code', 'refresh_token'],
+                    'response_types' => ['code'],
+                ];
+            }
+        }
+
+        $id = bin2hex(random_bytes(24));
+        $secret = $method === 'none' ? null : bin2hex(random_bytes(32));
+        $name = $public ? 'ChatGPT' : mb_substr((string) ($data['client_name'] ?? 'ChatGPT'), 0, 100);
+        $this->db->execute(
+            'INSERT INTO oauth_clients VALUES (?,?,?,?,?)',
+            [
+                $id,
+                $name,
+                json_encode($redirects),
+                $secret ? password_hash($secret, PASSWORD_DEFAULT) : null,
+                (int) ($secret !== null),
+            ],
+        );
+
+        return [
+            'client_id' => $id,
+            'client_name' => $name,
+            'redirect_uris' => $redirects,
+            'token_endpoint_auth_method' => $method,
+            'grant_types' => ['authorization_code', 'refresh_token'],
+            'response_types' => ['code'],
+            'client_id_issued_at' => time(),
+        ] + ($secret ? ['client_secret' => $secret, 'client_secret_expires_at' => 0] : []);
     }
 }

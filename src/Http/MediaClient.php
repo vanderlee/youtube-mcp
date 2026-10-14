@@ -24,34 +24,7 @@ class MediaClient
         $responseHeaders = [];
         $file = null;
         $curl = curl_init($url);
-        curl_setopt_array(
-            $curl,
-            [
-                CURLOPT_CUSTOMREQUEST => $method,
-                CURLOPT_HTTPHEADER => $headers,
-                CURLOPT_CONNECTTIMEOUT => 5,
-                CURLOPT_TIMEOUT => 20,
-                CURLOPT_FOLLOWLOCATION => false,
-                CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
-                CURLOPT_WRITEFUNCTION => static function ($handle, string $chunk) use (&$raw): int {
-                    if (strlen($raw) + strlen($chunk) > 1_048_576) {
-                        return 0;
-                    }
-
-                    $raw .= $chunk;
-
-                    return strlen($chunk);
-                },
-                CURLOPT_HEADERFUNCTION => static function ($handle, string $line) use (&$responseHeaders): int {
-                    $parts = explode(':', $line, 2);
-                    if (count($parts) === 2 && strtolower($parts[0]) === 'location') {
-                        $responseHeaders['location'] = trim($parts[1]);
-                    }
-
-                    return strlen($line);
-                },
-            ],
-        );
+        $this->configureTransfer($curl, $method, $headers, $raw, $responseHeaders);
 
         try {
             if ($path !== null) {
@@ -83,5 +56,46 @@ class MediaClient
             }
             unset($curl);
         }
+    }
+
+    /**
+     * @param list<string> $headers
+     * @param array<string, string> $responseHeaders
+     */
+    private function configureTransfer(
+        \CurlHandle $curl,
+        string $method,
+        array $headers,
+        string &$raw,
+        array &$responseHeaders,
+    ): void {
+        curl_setopt_array(
+            $curl,
+            [
+                CURLOPT_CUSTOMREQUEST => $method,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_TIMEOUT => 20,
+                CURLOPT_FOLLOWLOCATION => false,
+                CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+                CURLOPT_WRITEFUNCTION => static function ($handle, string $chunk) use (&$raw): int {
+                    if (strlen($raw) + strlen($chunk) > 1_048_576) {
+                        return 0;
+                    }
+
+                    $raw .= $chunk;
+
+                    return strlen($chunk);
+                },
+                CURLOPT_HEADERFUNCTION => static function ($handle, string $line) use (&$responseHeaders): int {
+                    $parts = explode(':', $line, 2);
+                    if (count($parts) === 2 && strtolower($parts[0]) === 'location') {
+                        $responseHeaders['location'] = trim($parts[1]);
+                    }
+
+                    return strlen($line);
+                },
+            ],
+        );
     }
 }

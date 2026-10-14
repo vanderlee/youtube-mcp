@@ -91,20 +91,7 @@ final class Service
     {
         $page = ['maxResults' => $arguments['page_size'] ?? 25] + (isset($arguments['page_token']) ? ['pageToken' => $arguments['page_token']] : []);
         if ($tool === 'get_video_details') {
-            $response = $this->api->read(
-                $user,
-                'videos.list',
-                [
-                    'part' => 'snippet,contentDetails,statistics,status',
-                    'id' => implode(',', $arguments['video_ids']),
-                ],
-            );
-
-            return [
-                'items' => $response['items'] ?? [],
-                'not_returned_video_ids' => array_values(array_diff($arguments['video_ids'], array_column($response['items'] ?? [], 'id'))),
-                'availability_note' => 'Omitted videos may be private, deleted or inaccessible; metadata alone does not prove playback availability.',
-            ];
+            return $this->videoDetails($user, $arguments);
         }
         if ($tool === 'get_channel') {
             if (isset($arguments['channel_id']) && isset($arguments['handle'])) {
@@ -116,21 +103,7 @@ final class Service
             return $this->api->read($user, 'channels.list', ['part' => 'snippet,statistics,contentDetails'] + $filter);
         }
         if ($tool === 'list_channel_uploads') {
-            $channel = $this->api->read(
-                $user,
-                'channels.list',
-                ['part' => 'contentDetails', 'id' => $arguments['channel_id'] ?? $connection['channel_id']],
-            );
-            $uploads = $channel['items'][0]['contentDetails']['relatedPlaylists']['uploads'] ?? null;
-            if (!is_string($uploads) || $uploads === '') {
-                throw new ServiceError('CHANNEL_NOT_FOUND', 'No accessible uploads playlist was returned.', [], 404);
-            }
-
-            return $this->api->read(
-                $user,
-                'playlistItems.list',
-                ['part' => 'snippet,contentDetails', 'playlistId' => $uploads] + $page,
-            );
+            return $this->channelUploads($user, $connection, $arguments, $page);
         }
         if ($tool === 'search_channels' || $tool === 'search_playlists') {
             return $this->api->read(
@@ -278,5 +251,56 @@ final class Service
                 );
             }
         }
+    }
+
+    /**
+     * @param array<string, mixed> $arguments
+     * @return array<string, mixed>
+     */
+    private function videoDetails(string $user, array $arguments): array
+    {
+        $response = $this->api->read(
+            $user,
+            'videos.list',
+            [
+                'part' => 'snippet,contentDetails,statistics,status',
+                'id' => implode(',', $arguments['video_ids']),
+            ],
+        );
+
+        return [
+            'items' => $response['items'] ?? [],
+            'not_returned_video_ids' => array_values(array_diff($arguments['video_ids'], array_column($response['items'] ?? [], 'id'))),
+            'availability_note' => 'Omitted videos may be private, deleted or inaccessible; metadata alone does not prove playback availability.',
+        ];
+    }
+
+    /**
+     * @param array{channel_id: string, generation: string} $connection
+     * @param array<string, mixed> $arguments
+     * @param array<string, mixed> $page
+     * @return array<string, mixed>
+     */
+    private function channelUploads(
+        string $user,
+        array $connection,
+        array $arguments,
+        array $page,
+    ): array {
+        $channel = $this->api->read(
+            $user,
+            'channels.list',
+            ['part' => 'contentDetails', 'id' => $arguments['channel_id'] ?? $connection['channel_id']],
+        );
+        $uploads = $channel['items'][0]['contentDetails']['relatedPlaylists']['uploads'] ?? null;
+        if (!is_string($uploads) || $uploads === '') {
+            throw new ServiceError('CHANNEL_NOT_FOUND', 'No accessible uploads playlist was returned.', [], 404);
+        }
+
+        return $this->api->read(
+            $user,
+            'playlistItems.list',
+            ['part' => 'snippet,contentDetails', 'playlistId' => $uploads] + $page,
+        );
     }
 }

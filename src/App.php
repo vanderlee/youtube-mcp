@@ -130,33 +130,7 @@ final class App
 
     private function prepareRequest(ServerRequestInterface $request, string $requestId): ServerRequestInterface
     {
-        if (
-            strtolower($request->getUri()->getHost()) !== strtolower(
-                (string) parse_url($this->config->url(), PHP_URL_HOST),
-            )
-        ) {
-            throw new ServiceError('INVALID_HOST', 'Unexpected host.', [], 400);
-        }
-        if (
-            $request->getHeaderLine('Origin') !== ''
-            && !in_array(
-                $request->getHeaderLine('Origin'),
-                [$this->config->url(), 'https://chatgpt.com'],
-                true,
-            )
-        ) {
-            error_log(
-                json_encode(
-                    [
-                        'event' => 'request_origin_rejected',
-                        'request_id' => $requestId,
-                        'path' => $request->getUri()->getPath(),
-                        'origin' => substr($request->getHeaderLine('Origin'), 0, 512),
-                    ],
-                ),
-            );
-            throw new ServiceError('INVALID_ORIGIN', 'Unexpected origin.', [], 403);
-        }
+        $this->assertTrustedOrigin($request, $requestId);
 
         $mediaUpload = $request->getUri()->getPath() === '/media' && $request->getMethod() === 'POST';
         $maxBytes = $mediaUpload ? MediaStore::MAX_BYTES + 65536 : 65536;
@@ -200,55 +174,12 @@ final class App
 
     private function route(ServerRequestInterface $request): ResponseInterface
     {
+        $response = $this->protocolRoute($request);
+        if ($response !== null) {
+            return $response;
+        }
+
         $path = $request->getUri()->getPath();
-        $method = $request->getMethod();
-        if ($path === '/health/live') {
-            return $this->json(['status' => 'ok']);
-        }
-        if ($path === '/health/ready') {
-            $this->db->one('SELECT name FROM migrations LIMIT 1');
-
-            return $this->json(['status' => 'ready']);
-        }
-        if ($path === '/.well-known/oauth-authorization-server') {
-            return $this->json($this->oauth->metadata());
-        }
-        if (
-            in_array(
-                $path,
-                ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp'],
-                true,
-            )
-        ) {
-            return $this->json(
-                [
-                    'resource' => $this->config->url() . '/mcp',
-                    'authorization_servers' => [$this->config->url()],
-                    'scopes_supported' => Scope::SUPPORTED,
-                    'bearer_methods_supported' => ['header'],
-                ],
-            );
-        }
-        if ($path === '/oauth/register') {
-            $this->post($request);
-
-            return $this->json($this->oauth->register($this->body($request), public: true), 201);
-        }
-        if ($path === '/oauth/token') {
-            $this->post($request);
-            $body = $this->body($request);
-            if (isset($body['resource']) && $body['resource'] !== $this->config->url() . '/mcp') {
-                throw new ServiceError('invalid_target', 'Wrong resource.');
-            }
-            return $this->oauth->exchange($request->withParsedBody($body));
-        }
-        if ($path === '/mcp') {
-            return $this->mcp($request);
-        }
-        if (str_starts_with($path, '/music/')) {
-            throw new ServiceError('NOT_FOUND', 'Page not found.', [], 404);
-        }
-
         $this->session();
         if ($path === '/login') {
             return $this->startGoogle(false);
@@ -297,20 +228,7 @@ final class App
             return $this->startGoogle(true);
         }
         if ($path === '/google/confirm') {
-            $this->csrf($request);
-            $pending = $_SESSION['pending_connection'] ?? null;
-            if (!$pending || $pending['at'] < time() - 600 || $pending['user'] !== $user) {
-                throw new ServiceError('CONNECTION_EXPIRED', 'Reconnect your Google account.');
-            }
-
-            $this->google->connect(
-                $user,
-                (new Vault($this->config->get('APP_KEY')))->decrypt($pending['tokens']),
-                $pending['channel'],
-            );
-            unset($_SESSION['pending_connection']);
-
-            return $this->redirect('/');
+            return $this->confirmGoogleConnection($request, $user);
         }
         if ($path === '/google/disconnect') {
             $this->csrf($request);
@@ -328,21 +246,7 @@ final class App
             return $this->redirect('/');
         }
         if ($path === '/account/delete') {
-            $this->csrf($request);
-            $this->google->disconnect($user);
-            $this->locks->run(
-                'account:' . $user,
-                function () use ($user) {
-                    $this->mediaAssets->purge($user);
-                    $this->db->execute('DELETE FROM audit_events WHERE user_id=?', [$user]);
-                    $this->db->execute('DELETE FROM api_cache_versions WHERE user_id=?', [$user]);
-                    $this->db->execute('DELETE FROM users WHERE id=?', [$user]);
-                },
-            );
-            $_SESSION = [];
-            session_regenerate_id(true);
-
-            return $this->redirect('/');
+            return $this->deleteAccount($request, $user);
         }
         if ($path !== '/') {
             throw new ServiceError('NOT_FOUND', 'Page not found.', [], 404);
@@ -392,21 +296,7 @@ final class App
             ),
         );
         if ($response->getStatusCode() === 403) {
-            $message = (string) $response->getBody();
-            error_log(
-                json_encode(
-                    [
-                        'event' => 'mcp_transport_forbidden',
-                        'host' => substr($request->getHeaderLine('Host'), 0, 512),
-                        'origin' => substr($request->getHeaderLine('Origin'), 0, 512),
-                        'reason' => in_array(
-                            $message,
-                            ['Forbidden: Invalid Host header.', 'Forbidden: Invalid Origin header.'],
-                            true,
-                        ) ? $message : 'Other transport rejection',
-                    ],
-                ),
-            );
+            $this->logForbiddenTransport($request, $response);
         }
 
         return $response;
@@ -667,45 +557,7 @@ final class App
             );
         }
 
-        $owner = $this->db->one('SELECT subject FROM users WHERE id=?', [$flow['user']]);
-        if (
-            !$owner
-            || $owner['subject'] !== $identity['subject']
-            || ($_SESSION['user'] ?? null) !== $flow['user']
-        ) {
-            throw new ServiceError('GOOGLE_ACCOUNT_MISMATCH', 'Connect the same Google identity used to sign in.');
-        }
-
-        $channels = $this->api->call(
-            $flow['user'],
-            'channels.list',
-            ['part' => 'snippet', 'mine' => 'true'],
-            token: $tokens['access_token'],
-        );
-        if (count($channels['items'] ?? []) !== 1) {
-            throw new ServiceError(
-                'CHANNEL_SELECTION_REQUIRED',
-                'Google must authorize exactly one YouTube channel. Reconnect using the intended channel.',
-            );
-        }
-
-        $channel = $channels['items'][0];
-        $_SESSION['pending_connection'] = [
-            'user' => $flow['user'],
-            'tokens' => (new Vault($this->config->get('APP_KEY')))->encrypt($tokens),
-            'channel' => $channel,
-            'at' => time(),
-        ];
-
-        return $this->html(
-            'Confirm YouTube channel',
-            '<p>Use <strong>' . htmlspecialchars($channel['snippet']['title']) . '</strong> (' . htmlspecialchars(
-                $channel['id'],
-            ) . ')? Confirm this is the YouTube channel you want to manage.</p>' . $this->form(
-                '/google/confirm',
-                'Connect this channel',
-            ),
-        );
+        return $this->confirmGoogleChannel($flow['user'], $identity, $tokens);
     }
 
     private function html(string $title, string $body): ResponseInterface
@@ -742,5 +594,192 @@ final class App
         if (!hash_equals($_SESSION['csrf'], (string) ($request->getParsedBody()['csrf'] ?? ''))) {
             throw new ServiceError('CSRF_FAILED', 'Reload the page and retry.', [], 403);
         }
+    }
+
+    private function assertTrustedOrigin(ServerRequestInterface $request, string $requestId): void
+    {
+        if (
+            strtolower($request->getUri()->getHost()) !== strtolower(
+                (string) parse_url($this->config->url(), PHP_URL_HOST),
+            )
+        ) {
+            throw new ServiceError('INVALID_HOST', 'Unexpected host.', [], 400);
+        }
+        if (
+            $request->getHeaderLine('Origin') !== ''
+            && !in_array(
+                $request->getHeaderLine('Origin'),
+                [$this->config->url(), 'https://chatgpt.com'],
+                true,
+            )
+        ) {
+            error_log(
+                json_encode(
+                    [
+                        'event' => 'request_origin_rejected',
+                        'request_id' => $requestId,
+                        'path' => $request->getUri()->getPath(),
+                        'origin' => substr($request->getHeaderLine('Origin'), 0, 512),
+                    ],
+                ),
+            );
+            throw new ServiceError('INVALID_ORIGIN', 'Unexpected origin.', [], 403);
+        }
+    }
+
+    private function protocolRoute(ServerRequestInterface $request): ?ResponseInterface
+    {
+        $path = $request->getUri()->getPath();
+        if ($path === '/health/live') {
+            return $this->json(['status' => 'ok']);
+        }
+        if ($path === '/health/ready') {
+            $this->db->one('SELECT name FROM migrations LIMIT 1');
+
+            return $this->json(['status' => 'ready']);
+        }
+        if ($path === '/.well-known/oauth-authorization-server') {
+            return $this->json($this->oauth->metadata());
+        }
+        if (
+            in_array(
+                $path,
+                ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp'],
+                true,
+            )
+        ) {
+            return $this->json(
+                [
+                    'resource' => $this->config->url() . '/mcp',
+                    'authorization_servers' => [$this->config->url()],
+                    'scopes_supported' => Scope::SUPPORTED,
+                    'bearer_methods_supported' => ['header'],
+                ],
+            );
+        }
+        if ($path === '/oauth/register') {
+            $this->post($request);
+
+            return $this->json($this->oauth->register($this->body($request), public: true), 201);
+        }
+        if ($path === '/oauth/token') {
+            $this->post($request);
+            $body = $this->body($request);
+            if (isset($body['resource']) && $body['resource'] !== $this->config->url() . '/mcp') {
+                throw new ServiceError('invalid_target', 'Wrong resource.');
+            }
+            return $this->oauth->exchange($request->withParsedBody($body));
+        }
+        if ($path === '/mcp') {
+            return $this->mcp($request);
+        }
+        if (str_starts_with($path, '/music/')) {
+            throw new ServiceError('NOT_FOUND', 'Page not found.', [], 404);
+        }
+
+        return null;
+    }
+
+    private function confirmGoogleConnection(ServerRequestInterface $request, string $user): ResponseInterface
+    {
+        $this->csrf($request);
+        $pending = $_SESSION['pending_connection'] ?? null;
+        if (!$pending || $pending['at'] < time() - 600 || $pending['user'] !== $user) {
+            throw new ServiceError('CONNECTION_EXPIRED', 'Reconnect your Google account.');
+        }
+
+        $this->google->connect(
+            $user,
+            (new Vault($this->config->get('APP_KEY')))->decrypt($pending['tokens']),
+            $pending['channel'],
+        );
+        unset($_SESSION['pending_connection']);
+
+        return $this->redirect('/');
+    }
+
+    private function deleteAccount(ServerRequestInterface $request, string $user): ResponseInterface
+    {
+        $this->csrf($request);
+        $this->google->disconnect($user);
+        $this->locks->run(
+            'account:' . $user,
+            function () use ($user) {
+                $this->mediaAssets->purge($user);
+                $this->db->execute('DELETE FROM audit_events WHERE user_id=?', [$user]);
+                $this->db->execute('DELETE FROM api_cache_versions WHERE user_id=?', [$user]);
+                $this->db->execute('DELETE FROM users WHERE id=?', [$user]);
+            },
+        );
+        $_SESSION = [];
+        session_regenerate_id(true);
+
+        return $this->redirect('/');
+    }
+
+    private function logForbiddenTransport(ServerRequestInterface $request, ResponseInterface $response): void
+    {
+        $message = (string) $response->getBody();
+        error_log(
+            json_encode(
+                [
+                    'event' => 'mcp_transport_forbidden',
+                    'host' => substr($request->getHeaderLine('Host'), 0, 512),
+                    'origin' => substr($request->getHeaderLine('Origin'), 0, 512),
+                    'reason' => in_array(
+                        $message,
+                        ['Forbidden: Invalid Host header.', 'Forbidden: Invalid Origin header.'],
+                        true,
+                    ) ? $message : 'Other transport rejection',
+                ],
+            ),
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $identity
+     * @param array<string, mixed> $tokens
+     */
+    private function confirmGoogleChannel(string $user, array $identity, array $tokens): ResponseInterface
+    {
+        $owner = $this->db->one('SELECT subject FROM users WHERE id=?', [$user]);
+        if (
+            !$owner
+            || $owner['subject'] !== $identity['subject']
+            || ($_SESSION['user'] ?? null) !== $user
+        ) {
+            throw new ServiceError('GOOGLE_ACCOUNT_MISMATCH', 'Connect the same Google identity used to sign in.');
+        }
+
+        $channels = $this->api->call(
+            $user,
+            'channels.list',
+            ['part' => 'snippet', 'mine' => 'true'],
+            token: $tokens['access_token'],
+        );
+        if (count($channels['items'] ?? []) !== 1) {
+            throw new ServiceError(
+                'CHANNEL_SELECTION_REQUIRED',
+                'Google must authorize exactly one YouTube channel. Reconnect using the intended channel.',
+            );
+        }
+
+        $channel = $channels['items'][0];
+        $_SESSION['pending_connection'] = [
+            'user' => $user,
+            'tokens' => (new Vault($this->config->get('APP_KEY')))->encrypt($tokens),
+            'channel' => $channel,
+            'at' => time(),
+        ];
+
+        return $this->html(
+            'Confirm YouTube channel',
+            '<p>Use <strong>' . htmlspecialchars($channel['snippet']['title']) . '</strong> (' . htmlspecialchars(
+                $channel['id'],
+            ) . ')? Confirm this is the YouTube channel you want to manage.</p>' . $this->form(
+                '/google/confirm',
+                'Connect this channel',
+            ),
+        );
     }
 }
