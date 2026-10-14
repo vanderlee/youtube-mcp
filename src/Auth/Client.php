@@ -11,11 +11,14 @@ final class Client implements ClientEntityInterface
 {
     use EntityTrait;
 
+    /**
+     * @param list<string> $redirects
+     */
     public function __construct(
         string $id,
         private string $name,
         private array $redirects,
-        private bool $confidential = false
+        private bool $confidential = false,
     ) {
         $this->setIdentifier($id);
     }

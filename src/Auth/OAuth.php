@@ -33,7 +33,7 @@ final class OAuth
             $this->repository,
             $this->repository,
             'file://' . $config->storage() . '/oauth-private.pem',
-            base64_decode($config->get('APP_KEY'), true)
+            base64_decode($config->get('APP_KEY'), true),
         );
 
         $grant = new AuthCodeGrant($this->repository, $this->repository, new DateInterval('PT5M'));
@@ -47,6 +47,9 @@ final class OAuth
         $this->server->setDefaultScope('playlists.read');
     }
 
+    /**
+     * @return array<string, string|list<string>>
+     */
     public function metadata(): array
     {
         $issuer = $this->config->url();
@@ -60,10 +63,14 @@ final class OAuth
             'response_types_supported' => ['code'],
             'grant_types_supported' => ['authorization_code', 'refresh_token'],
             'code_challenge_methods_supported' => ['S256'],
-            'token_endpoint_auth_methods_supported' => ['none', 'client_secret_post', 'client_secret_basic']
+            'token_endpoint_auth_methods_supported' => ['none', 'client_secret_post', 'client_secret_basic'],
         ];
     }
 
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
     public function register(array $data, bool $public = false): array
     {
         $redirects = $data['redirect_uris'] ?? [];
@@ -78,8 +85,8 @@ final class OAuth
                         [
                             'event' => 'oauth_registration_callback_rejected',
                             'redirect_uri' => is_string($uri) ? substr($uri, 0, 2048) : null,
-                        ]
-                    )
+                        ],
+                    ),
                 );
                 throw new ServiceError('invalid_redirect_uri', 'Callback URL is not in the operator allowlist.');
             }
@@ -92,7 +99,7 @@ final class OAuth
         if ($public && ($method !== 'none' || count($redirects) !== 1)) {
             throw new ServiceError(
                 'invalid_client_metadata',
-                'Public registration requires one callback and token_endpoint_auth_method none. Create confidential clients through the operator CLI.'
+                'Public registration requires one callback and token_endpoint_auth_method none. Create confidential clients through the operator CLI.',
             );
         }
         $redirects = array_values(array_unique($redirects));
@@ -103,7 +110,7 @@ final class OAuth
                 if ($method === 'none') {
                     $existing = $this->db->one(
                         'SELECT id,name FROM oauth_clients WHERE confidential=0 AND redirect_uris=? ORDER BY id LIMIT 1',
-                        [json_encode($redirects)]
+                        [json_encode($redirects)],
                     );
                     if ($existing) {
                         return [
@@ -127,8 +134,8 @@ final class OAuth
                         $name,
                         json_encode($redirects),
                         $secret ? password_hash($secret, PASSWORD_DEFAULT) : null,
-                        (int) ($secret !== null)
-                    ]
+                        (int) ($secret !== null),
+                    ],
                 );
 
                 return [
@@ -138,9 +145,9 @@ final class OAuth
                     'token_endpoint_auth_method' => $method,
                     'grant_types' => ['authorization_code', 'refresh_token'],
                     'response_types' => ['code'],
-                    'client_id_issued_at' => time()
+                    'client_id_issued_at' => time(),
                 ] + ($secret ? ['client_secret' => $secret, 'client_secret_expires_at' => 0] : []);
-            }
+            },
         );
     }
 
@@ -149,12 +156,22 @@ final class OAuth
         // SQLite's write transaction serializes validation/issuance against every revocation writer.
         return $this->locks->run(
             'oauth-token',
-            fn () => $this->db->transaction(
-                fn () => $this->server->respondToAccessTokenRequest($request, new Response())
-            )
+            fn() => $this->db->transaction(
+                fn() => $this->server->respondToAccessTokenRequest($request, new Response()),
+            ),
         );
     }
 
+    /**
+     * @param array{
+     *     id: string,
+     *     scopes: list<string>,
+     *     token_id: string,
+     *     expires_at: int,
+     *     client_id: string,
+     *     generation: string|null
+     * } $identity
+     */
     public function runAuthenticated(array $identity, callable $work): mixed
     {
         return $this->locks->run(
@@ -171,12 +188,12 @@ final class OAuth
                 }
 
                 return $work();
-            }
+            },
         );
     }
 
     public function validateAuthorization(
-        ServerRequestInterface $request
+        ServerRequestInterface $request,
     ): AuthorizationRequestInterface {
         $query = $request->getQueryParams();
         if (($query['resource'] ?? null) !== $this->config->url() . '/mcp') {
@@ -186,7 +203,7 @@ final class OAuth
             ($query['code_challenge_method'] ?? null) !== 'S256'
             || !preg_match(
                 '/^[A-Za-z0-9_-]{43}$/',
-                (string) ($query['code_challenge'] ?? '')
+                (string) ($query['code_challenge'] ?? ''),
             )
         ) {
             throw new ServiceError('invalid_request', 'PKCE S256 is required.');
@@ -195,6 +212,16 @@ final class OAuth
         return $this->server->validateAuthorizationRequest($request);
     }
 
+    /**
+     * @return array{
+     *     id: string,
+     *     scopes: list<string>,
+     *     token_id: string,
+     *     expires_at: int,
+     *     client_id: string,
+     *     generation: string|null
+     * }
+     */
     public function authenticate(ServerRequestInterface $request): array
     {
         $header = $request->getHeaderLine('Authorization');
@@ -204,13 +231,13 @@ final class OAuth
         try {
             $claims = (array) JWT::decode(
                 $match[1],
-                new Key(file_get_contents($this->config->storage() . '/oauth-public.pem'), 'RS256')
+                new Key(file_get_contents($this->config->storage() . '/oauth-public.pem'), 'RS256'),
             );
             if (
                 ($claims['iss'] ?? null) !== $this->config->url()
                 || ($claims['aud'] ?? null) !== $this->config->url() . '/mcp'
                 || !is_string(
-                    $claims['sub'] ?? null
+                    $claims['sub'] ?? null,
                 )
                 || $this->repository->isAccessTokenRevoked((string) ($claims['jti'] ?? ''))
             ) {
@@ -228,14 +255,14 @@ final class OAuth
                 'token_id' => $claims['jti'],
                 'expires_at' => $claims['exp'],
                 'client_id' => $claims['client_id'],
-                'generation' => $connection['generation'] ?? null
+                'generation' => $connection['generation'] ?? null,
             ];
         } catch (Throwable) {
             throw new ServiceError(
                 'AUTHENTICATION_REQUIRED',
                 'Session expired or revoked. Reconnect using OAuth.',
                 [],
-                401
+                401,
             );
         }
     }

@@ -7,7 +7,7 @@ COMPOSER ?= composer
 help:
 	@echo "install   Install locked development dependencies"
 	@echo "test      Run the Pest test suite"
-	@echo "phpstan   Run PHPStan at level 1"
+	@echo "phpstan   Run PHPStan at level 6"
 	@echo "cs        Check coding standards with PHP_CodeSniffer"
 	@echo "cs-check  Preview PHP-CS-Fixer changes without writing files"
 	@echo "cs-fix    Apply PHP-CS-Fixer changes (review the diff)"

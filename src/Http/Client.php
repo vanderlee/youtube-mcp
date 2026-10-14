@@ -8,9 +8,17 @@ use YouTubeMcp\ServiceError;
 
 class Client
 {
-    /** Handles live only as long as this request-scoped client; never shared between users. */
+    /**
+     * Handles live only as long as this request-scoped client; never shared between users.
+     *
+     * @var array<string, \CurlHandle>
+     */
     private array $handles = [];
 
+    /**
+     * @param list<string> $headers
+     * @return array{status: int, data: array<array-key, mixed>}
+     */
     public function request(string $method, string $url, array $headers = [], ?string $body = null): array
     {
         $curl = $this->connection($url, $headers);
@@ -27,8 +35,8 @@ class Client
                 CURLOPT_CONNECTTIMEOUT => 5,
                 CURLOPT_TIMEOUT => 20,
                 CURLOPT_FOLLOWLOCATION => false,
-                CURLOPT_PROTOCOLS => CURLPROTO_HTTPS
-            ]
+                CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+            ],
         );
         if ($body !== null) {
             curl_setopt($curl, CURLOPT_POSTFIELDS, $body);
@@ -42,7 +50,7 @@ class Client
                 'UPSTREAM_UNCERTAIN',
                 'Upstream request did not complete. A dispatched change may have succeeded; inspect the operation before retrying.',
                 [],
-                502
+                502,
             );
         }
 
@@ -54,6 +62,9 @@ class Client
         return ['status' => $status, 'data' => $data];
     }
 
+    /**
+     * @param list<string> $headers
+     */
     private function connection(string $url, array $headers): \CurlHandle
     {
         $origin = parse_url($url, PHP_URL_SCHEME) . '://' . parse_url($url, PHP_URL_HOST) . ':' . (parse_url($url, PHP_URL_PORT) ?? 443);

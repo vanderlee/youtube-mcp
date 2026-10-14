@@ -17,9 +17,8 @@ final class Google
         private Database $db,
         private Vault $vault,
         private Client $http,
-        private Lock $lock
-    ) {
-    }
+        private Lock $lock,
+    ) {}
 
     public function authorize(string $state, string $challenge, bool $youtube): string
     {
@@ -34,7 +33,7 @@ final class Google
             'scope' => 'openid email profile' . ($youtube ? ' ' . self::YOUTUBE_SCOPE : ''),
             'state' => $state,
             'code_challenge' => $challenge,
-            'code_challenge_method' => 'S256'
+            'code_challenge_method' => 'S256',
         ];
         if ($youtube) {
             $args += ['access_type' => 'offline', 'prompt' => 'consent'];
@@ -43,6 +42,9 @@ final class Google
         return 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query($args);
     }
 
+    /**
+     * @return array<array-key, mixed>
+     */
     public function exchange(string $code, string $verifier): array
     {
         return $this->token(
@@ -50,17 +52,20 @@ final class Google
                 'code' => $code,
                 'code_verifier' => $verifier,
                 'redirect_uri' => $this->config->url() . '/google/callback',
-                'grant_type' => 'authorization_code'
-            ]
+                'grant_type' => 'authorization_code',
+            ],
         );
     }
 
+    /**
+     * @return array{subject: string, email: string}
+     */
     public function identity(string $accessToken): array
     {
         $response = $this->http->request(
             'GET',
             'https://openidconnect.googleapis.com/v1/userinfo',
-            ['Authorization: Bearer ' . $accessToken]
+            ['Authorization: Bearer ' . $accessToken],
         );
 
         $profile = $response['data'];
@@ -75,10 +80,13 @@ final class Google
 
         return [
             'subject' => 'https://accounts.google.com|' . $profile['sub'],
-            'email' => strtolower($profile['email'])
+            'email' => strtolower($profile['email']),
         ];
     }
 
+    /**
+     * @param array{subject: string, email: string} $identity
+     */
     public function signIn(array $identity): string
     {
         $existing = $this->db->one('SELECT id FROM users WHERE subject=?', [$identity['subject']]);
@@ -91,14 +99,14 @@ final class Google
             && !in_array(
                 $identity['email'],
                 array_map('strtolower', $this->config->list('ALLOWED_EMAILS')),
-                true
+                true,
             )
         ) {
             throw new ServiceError(
                 'REGISTRATION_DISABLED',
                 'Your account is not invited to this installation.',
                 [],
-                403
+                403,
             );
         }
 
@@ -106,17 +114,21 @@ final class Google
         $id = substr(
             hash_hmac('sha256', $identity['subject'], base64_decode($this->config->get('APP_KEY'), true)),
             0,
-            32
+            32,
         );
 
         $this->db->execute(
             'INSERT INTO users VALUES (?,?,?,?) ON CONFLICT(subject) DO NOTHING',
-            [$id, $identity['subject'], $identity['email'], time()]
+            [$id, $identity['subject'], $identity['email'], time()],
         );
 
         return $this->db->one('SELECT id FROM users WHERE subject=?', [$identity['subject']])['id'];
     }
 
+    /**
+     * @param array<string, mixed> $channel
+     * @param array<array-key, mixed> $tokens
+     */
     public function connect(string $user, array $tokens, array $channel): void
     {
         $scopes = preg_split('/\s+/', (string) ($tokens['scope'] ?? ''));
@@ -129,13 +141,13 @@ final class Google
         ) {
             throw new ServiceError(
                 'GOOGLE_RECONNECT_REQUIRED',
-                'Offline YouTube permission is required. Reconnect and grant access.'
+                'Offline YouTube permission is required. Reconnect and grant access.',
             );
         }
 
         $this->lock->run(
             'account:' . $user,
-            fn () => $this->db->transaction(
+            fn() => $this->db->transaction(
                 function () use ($user, $tokens, $channel, $scopes) {
                     $this->db->execute('UPDATE oauth_tokens SET revoked=1 WHERE user_id=?', [$user]);
                     $this->db->execute(
@@ -146,12 +158,12 @@ final class Google
                             $channel['snippet']['title'],
                             $this->vault->encrypt($tokens),
                             implode(' ', $scopes),
-                            bin2hex(random_bytes(16))
-                        ]
+                            bin2hex(random_bytes(16)),
+                        ],
                     );
                     $this->db->execute('DELETE FROM api_cache WHERE user_id=?', [$user]);
-                }
-            )
+                },
+            ),
         );
     }
 
@@ -165,7 +177,7 @@ final class Google
                 if (($tokens['expires_at'] ?? 0) <= time() + 60) {
                     try {
                         $refreshedTokens = $this->token(
-                            ['grant_type' => 'refresh_token', 'refresh_token' => $tokens['refresh_token']]
+                            ['grant_type' => 'refresh_token', 'refresh_token' => $tokens['refresh_token']],
                         );
                     } catch (ServiceError $e) {
                         if ($e->reason === 'GOOGLE_RECONNECT_REQUIRED') {
@@ -177,30 +189,43 @@ final class Google
                     $tokens = array_replace($tokens, $refreshedTokens);
                     $this->db->execute(
                         'UPDATE google_connections SET tokens=? WHERE user_id=?',
-                        [$this->vault->encrypt($tokens), $user]
+                        [$this->vault->encrypt($tokens), $user],
                     );
                 }
 
                 return $tokens['access_token'];
-            }
+            },
         );
     }
 
+    /**
+     * @return array{
+     *     user_id: string,
+     *     channel_id: string,
+     *     channel_name: string,
+     *     tokens: string,
+     *     scopes: string,
+     *     generation: string
+     * }
+     */
     public function connection(string $user): array
     {
         return $this->db->one('SELECT * FROM google_connections WHERE user_id=?', [$user]) ?? throw new ServiceError(
             'GOOGLE_RECONNECT_REQUIRED',
             'Connect your Google account in the service dashboard.',
             [],
-            401
+            401,
         );
     }
 
+    /**
+     * @return array{local_disconnected: bool, google_revoked: bool}
+     */
     public function disconnect(string $user): array
     {
         return $this->lock->run(
             'account:' . $user,
-            fn () => $this->lock->run(
+            fn() => $this->lock->run(
                 'google:' . $user,
                 function () use ($user) {
                     $connection = $this->db->one('SELECT tokens FROM google_connections WHERE user_id=?', [$user]);
@@ -212,7 +237,7 @@ final class Google
                                 'POST',
                                 'https://oauth2.googleapis.com/revoke',
                                 ['Content-Type: application/x-www-form-urlencoded'],
-                                http_build_query(['token' => $tokens['refresh_token']])
+                                http_build_query(['token' => $tokens['refresh_token']]),
                             );
                             $revoked = $response['status'] === 200;
                         } catch (ServiceError) {
@@ -225,15 +250,19 @@ final class Google
                             $this->db->execute('DELETE FROM google_connections WHERE user_id=?', [$user]);
                             $this->db->execute('UPDATE oauth_tokens SET revoked=1 WHERE user_id=?', [$user]);
                             $this->db->execute('DELETE FROM api_cache WHERE user_id=?', [$user]);
-                        }
+                        },
                     );
 
                     return ['local_disconnected' => true, 'google_revoked' => $revoked];
-                }
-            )
+                },
+            ),
         );
     }
 
+    /**
+     * @param array<string, string> $args
+     * @return array<array-key, mixed>
+     */
     private function token(array $args): array
     {
         $response = $this->http->request(
@@ -243,9 +272,9 @@ final class Google
             http_build_query(
                 $args + [
                     'client_id' => $this->config->get('GOOGLE_CLIENT_ID'),
-                    'client_secret' => $this->config->get('GOOGLE_CLIENT_SECRET')
-                ]
-            )
+                    'client_secret' => $this->config->get('GOOGLE_CLIENT_SECRET'),
+                ],
+            ),
         );
         if (
             $response['status'] >= 500
@@ -255,7 +284,7 @@ final class Google
                 'GOOGLE_UNAVAILABLE',
                 'Google authorization is temporarily unavailable. Retry later.',
                 [],
-                503
+                503,
             );
         }
         if ($response['status'] !== 200) {
@@ -263,7 +292,7 @@ final class Google
                 'GOOGLE_RECONNECT_REQUIRED',
                 'Google authorization failed. Reconnect your account.',
                 [],
-                401
+                401,
             );
         }
 

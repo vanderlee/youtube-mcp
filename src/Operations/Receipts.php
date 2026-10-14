@@ -10,15 +10,17 @@ use YouTubeMcp\Storage\{Database, Lock};
 
 final class Receipts
 {
-    public function __construct(private Database $db, private Lock $locks)
-    {
-    }
+    public function __construct(private Database $db, private Lock $locks) {}
 
+    /**
+     * @param list<string> $scopes
+     * @return array<string, mixed>
+     */
     public function get(string $user, string $id, string $generation, array $scopes): array
     {
         $row = $this->db->one(
             'SELECT receipt,tool FROM operations WHERE id=? AND user_id=? AND generation=?',
-            [$id, $user, $generation]
+            [$id, $user, $generation],
         );
         if (!$row) {
             throw new ServiceError('OPERATION_NOT_FOUND', 'Operation was not found for this account connection.', [], 404);
@@ -30,13 +32,17 @@ final class Receipts
                 'INSUFFICIENT_SERVICE_SCOPE',
                 'Authorize ' . $readScope . ' or ' . $scope . ' to read this receipt.',
                 [],
-                403
+                403,
             );
         }
 
         return json_decode($row['receipt'], true);
     }
 
+    /**
+     * @param array<string, mixed> $args
+     * @return array<string, mixed>
+     */
     public function run(string $user, string $generation, string $tool, array $args, callable $work): array
     {
         $key = $args['operation_key'] ?? '';
@@ -44,7 +50,7 @@ final class Receipts
         if (!is_string($key) || !preg_match('/^[A-Za-z0-9._-]{8,128}$/', $key)) {
             throw new ServiceError(
                 'INVALID_ARGUMENT',
-                'operation_key must contain 8-128 letters, digits, dots, underscores or hyphens.'
+                'operation_key must contain 8-128 letters, digits, dots, underscores or hyphens.',
             );
         }
         unset($args['resume']);
@@ -55,7 +61,7 @@ final class Receipts
             function () use ($user, $generation, $tool, $key, $hash, $resume, $work) {
                 $row = $this->db->one(
                     'SELECT * FROM operations WHERE user_id=? AND generation=? AND operation_key=?',
-                    [$user, $generation, $key]
+                    [$user, $generation, $key],
                 );
                 if ($row) {
                     if ($row['request_hash'] !== $hash || $row['tool'] !== $tool) {
@@ -63,7 +69,7 @@ final class Receipts
                             'OPERATION_KEY_CONFLICT',
                             'This operation key was used with different arguments.',
                             [],
-                            409
+                            409,
                         );
                     }
 
@@ -76,7 +82,7 @@ final class Receipts
                             'RECONCILIATION_REQUIRED',
                             'A previous request may have changed YouTube. Inspect the playlist and receipt; automatic replay is disabled.',
                             ['operation_id' => $row['id']],
-                            409
+                            409,
                         );
                     }
                 } else {
@@ -84,7 +90,7 @@ final class Receipts
                         'operation_id' => bin2hex(random_bytes(16)),
                         'tool' => $tool,
                         'status' => 'running',
-                        'completed' => []
+                        'completed' => [],
                     ];
                     $this->db->execute(
                         'INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)',
@@ -98,8 +104,8 @@ final class Receipts
                             'running',
                             json_encode($receipt),
                             time(),
-                            time()
-                        ]
+                            time(),
+                        ],
                     );
                 }
 
@@ -136,7 +142,7 @@ final class Receipts
                     $receipt['status'] = 'uncertain';
                     $receipt['error'] = [
                         'code' => 'INTERNAL_ERROR',
-                        'message' => 'Operation interrupted. Inspect the receipt and playlist before retrying.'
+                        'message' => 'Operation interrupted. Inspect the receipt and playlist before retrying.',
                     ];
                     $save();
                     throw $e;
@@ -145,14 +151,17 @@ final class Receipts
                 $save();
                 $this->db->execute(
                     'INSERT INTO audit_events(user_id,action,target,outcome,created_at) VALUES (?,?,?,?,?)',
-                    [$user, $tool, $receipt['operation_id'], $receipt['status'], time()]
+                    [$user, $tool, $receipt['operation_id'], $receipt['status'], time()],
                 );
 
                 return $receipt;
-            }
+            },
         );
     }
 
+    /**
+     * @param array<string, mixed> $receipt
+     */
     private function saveReceipt(array $receipt): void
     {
         $this->db->execute(
@@ -161,8 +170,8 @@ final class Receipts
                 $receipt['status'],
                 json_encode($receipt, JSON_THROW_ON_ERROR),
                 time(),
-                $receipt['operation_id']
-            ]
+                $receipt['operation_id'],
+            ],
         );
     }
 
@@ -175,6 +184,6 @@ final class Receipts
             ksort($value);
         }
 
-        return array_map(fn ($item) => $this->normalized($item), $value);
+        return array_map(fn($item) => $this->normalized($item), $value);
     }
 }

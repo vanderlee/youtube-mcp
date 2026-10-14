@@ -39,10 +39,14 @@ final class Service
         private Budget $budget,
         private Receipts $receipts,
         private Lock $locks,
-        private ?CreatorService $creator = null
-    ) {
-    }
+        private ?CreatorService $creator = null,
+    ) {}
 
+    /**
+     * @param array<string, mixed> $a
+     * @param array<array-key, string> $scopes
+     * @return array<string, mixed>
+     */
     public function execute(string $user, array $scopes, string $tool, array $a): array
     {
         if ($tool === 'get_operation') {
@@ -52,7 +56,7 @@ final class Service
                     $connection = $this->google->connection($user);
 
                     return $this->receipts->get($user, $a['operation_id'], $connection['generation'], $scopes);
-                }
+                },
             );
         }
         if (isset(CreatorTools::specs()[$tool])) {
@@ -75,7 +79,7 @@ final class Service
                 'INSUFFICIENT_SERVICE_SCOPE',
                 'Authorize the required permission: ' . self::scope($tool),
                 [],
-                403
+                403,
             );
         }
         if ($tool === 'get_usage_status') {
@@ -90,7 +94,7 @@ final class Service
                 'channel_id' => $connection['channel_id'],
                 'channel_name' => $connection['channel_name'],
                 'service_scopes' => array_values($scopes),
-                'google_scopes' => $googleScopes
+                'google_scopes' => $googleScopes,
             ];
         }
         if ($write) {
@@ -101,15 +105,15 @@ final class Service
 
                     return $this->locks->run(
                         'playlist:' . $user . ':' . ($a['playlist_id'] ?? 'create'),
-                        fn () => $this->receipts->run(
+                        fn() => $this->receipts->run(
                             $user,
                             $connection['generation'],
                             $tool,
                             $a,
-                            fn ($step, $id, $done) => $this->mutate($user, $connection, $tool, $a, $step, $id, $done)
-                        )
+                            fn($step, $id, $done) => $this->mutate($user, $connection, $tool, $a, $step, $id, $done),
+                        ),
                     );
-                }
+                },
             );
         }
 
@@ -128,12 +132,16 @@ final class Service
         $group = match ($tool) {
             'list_liked_tracks', 'get_track_ratings', 'rate_track' => 'likes',
             'list_subscriptions', 'subscribe_artist', 'unsubscribe_artist' => 'subscriptions',
-            default => 'playlists'
+            default => 'playlists',
         };
 
         return $group . (in_array($tool, self::WRITES, true) ? '.write' : '.read');
     }
 
+    /**
+     * @param array<string, mixed> $a
+     * @return array<string, mixed>
+     */
     private function read(string $user, string $tool, array $a): array
     {
         $page = ['maxResults' => $a['page_size'] ?? 25];
@@ -145,7 +153,7 @@ final class Service
                 $user,
                 'playlists.list',
                 ['part' => 'snippet,status,contentDetails', 'mine' => 'true'] + $page,
-                ttl: 30
+                ttl: 30,
             );
         }
         if ($tool === 'list_liked_tracks') {
@@ -153,13 +161,13 @@ final class Service
                 $user,
                 'videos.list',
                 ['part' => 'snippet,contentDetails', 'myRating' => 'like'] + $page,
-                ttl: 30
+                ttl: 30,
             );
 
             return $response + ['music_availability' => 'YouTube liked videos; may include non-music content. Music playback is not guaranteed.'];
         }
         if ($tool === 'get_track_ratings') {
-            $ids = array_map(fn ($v) => $this->video($v), $a['video_ids']);
+            $ids = array_map(fn($v) => $this->video($v), $a['video_ids']);
 
             return $this->api->call($user, 'videos.getRating', ['id' => implode(',', array_unique($ids))], ttl: 15);
         }
@@ -168,7 +176,7 @@ final class Service
                 $user,
                 'subscriptions.list',
                 ['part' => 'snippet', 'mine' => 'true'] + $page,
-                ttl: 30
+                ttl: 30,
             );
         }
         if ($tool === 'get_playlist') {
@@ -177,14 +185,14 @@ final class Service
                 $user,
                 'playlistItems.list',
                 ['part' => 'snippet,contentDetails', 'playlistId' => $a['playlist_id']] + $page,
-                ttl: 15
+                ttl: 15,
             );
 
             return [
                 'playlist' => $metadata,
                 'entries' => $contents['items'] ?? [],
                 'next_page_token' => $contents['nextPageToken'] ?? null,
-                'links' => $this->links($a['playlist_id'])
+                'links' => $this->links($a['playlist_id']),
             ];
         }
         if ($tool === 'search_tracks') {
@@ -202,15 +210,15 @@ final class Service
             if (!($a['include_details'] ?? false)) {
                 return [
                     'candidates' => array_map(
-                        fn ($v) => [
+                        fn($v) => [
                             'video_id' => $v['id']['videoId'],
                             'title' => $v['snippet']['title'],
-                            'channel' => $v['snippet']['channelTitle']
+                            'channel' => $v['snippet']['channelTitle'],
                         ],
-                        $results['items'] ?? []
+                        $results['items'] ?? [],
                     ),
                     'next_page_token' => $results['nextPageToken'] ?? null,
-                    'music_availability' => 'YouTube candidates; Music playback is not guaranteed.'
+                    'music_availability' => 'YouTube candidates; Music playback is not guaranteed.',
                 ];
             }
 
@@ -219,27 +227,33 @@ final class Service
                 $user,
                 'videos.list',
                 ['part' => 'snippet,contentDetails,status', 'id' => implode(',', $ids)],
-                ttl: 300
+                ttl: 300,
             ) : ['items' => []];
 
             return [
                 'candidates' => array_map(
-                    fn ($v) => [
+                    fn($v) => [
                         'video_id' => $v['id'],
                         'title' => $v['snippet']['title'],
                         'channel' => $v['snippet']['channelTitle'],
                         'duration' => $v['contentDetails']['duration'] ?? null,
-                        'url' => 'https://www.youtube.com/watch?v=' . $v['id']
+                        'url' => 'https://www.youtube.com/watch?v=' . $v['id'],
                     ],
-                    $videos['items'] ?? []
+                    $videos['items'] ?? [],
                 ),
                 'next_page_token' => $results['nextPageToken'] ?? null,
-                'music_availability' => 'These are YouTube video candidates; YouTube Music playback is not guaranteed.'
+                'music_availability' => 'These are YouTube video candidates; YouTube Music playback is not guaranteed.',
             ];
         }
         throw new ServiceError('UNKNOWN_TOOL', 'Unknown tool.');
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array{channel_id: string, generation: string} $connection
+     * @param array<string, mixed> $done
+     * @return array<string, mixed>
+     */
     private function mutate(
         string $user,
         array $connection,
@@ -247,7 +261,7 @@ final class Service
         array $arguments,
         callable $step,
         string $operation,
-        array $done
+        array $done,
     ): array {
         if (in_array($tool, ['rate_track', 'subscribe_artist', 'unsubscribe_artist'], true)) {
             return $this->mutatePreference($user, $tool, $arguments, $step, $operation, $done);
@@ -261,7 +275,7 @@ final class Service
             return ['playlist_id' => $id, 'changed' => 0, 'links' => $id ? $this->links($id) : []];
         }
 
-        $cost = array_sum(array_map(fn ($p) => $this->budget->method($p[1])[1], $planned));
+        $cost = array_sum(array_map(fn($p) => $this->budget->method($p[1])[1], $planned));
         $reservation = $this->budget->reserve($user, $cost);
         $deadline = microtime(true) + 45;
         try {
@@ -271,11 +285,11 @@ final class Service
                         'OPERATION_TIME_LIMIT',
                         'Batch time limit reached. Inspect this receipt and explicitly resume pending work.',
                         [],
-                        409
+                        409,
                     );
                 }
 
-                $step($label, fn () => $this->api->call($user, $method, $params, $body, $reservation, $operation));
+                $step($label, fn() => $this->api->call($user, $method, $params, $body, $reservation, $operation));
             }
         } finally {
             $this->budget->release($reservation);
@@ -284,12 +298,18 @@ final class Service
         return ['playlist_id' => $id, 'changed' => count($planned), 'links' => $id ? $this->links($id) : []];
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array{channel_id: string, generation: string} $connection
+     * @param array<string, mixed> $done
+     * @return array{string|null, list<array{string, string, array<string, mixed>, array<string, mixed>|null}>}
+     */
     private function planChanges(
         string $user,
         array $connection,
         string $tool,
         array $arguments,
-        array $done
+        array $done,
     ): array {
         $id = $arguments['playlist_id'] ?? null;
         $metadata = null;
@@ -301,7 +321,7 @@ final class Service
                     'NOT_PLAYLIST_OWNER',
                     'Only playlists owned by your connected channel may be changed.',
                     [],
-                    403
+                    403,
                 );
             }
         }
@@ -318,17 +338,17 @@ final class Service
             $body = [
                 'id' => $id,
                 'snippet' => $snippet,
-                'status' => ['privacyStatus' => $arguments['privacy'] ?? $metadata['status']['privacyStatus']]
+                'status' => ['privacyStatus' => $arguments['privacy'] ?? $metadata['status']['privacyStatus']],
             ];
             $planned[] = ['update', 'playlists.update', ['part' => 'snippet,status'], $body];
         } elseif ($tool === 'delete_playlist') {
             $planned[] = ['delete', 'playlists.delete', ['id' => $id], null];
         } elseif ($tool === 'add_tracks') {
-            $videos = array_map(fn ($v) => $this->video($v), $arguments['video_ids']);
+            $videos = array_map(fn($v) => $this->video($v), $arguments['video_ids']);
             $policy = $arguments['duplicate_policy'] ?? 'skip';
             $present = $policy === 'skip' ? array_column(
                 array_column($this->entries($user, $id), 'snippet'),
-                'resourceId'
+                'resourceId',
             ) : [];
             $seen = array_fill_keys(array_column($present, 'videoId'), true);
             foreach ($videos as $n => $video) {
@@ -347,15 +367,15 @@ final class Service
                     [
                         'snippet' => [
                             'playlistId' => $id,
-                            'resourceId' => ['kind' => 'youtube#video', 'videoId' => $video]
-                        ]
-                    ]
+                            'resourceId' => ['kind' => 'youtube#video', 'videoId' => $video],
+                        ],
+                    ],
                 ];
             }
         } elseif ($tool === 'remove_tracks' || $tool === 'move_track') {
             $targets = $tool === 'remove_tracks' ? $arguments['playlist_item_ids'] : [$arguments['playlist_item_id']];
             $pending = array_values(
-                array_filter($targets, fn ($t) => !isset($done[($tool === 'remove_tracks' ? 'remove:' : 'move:') . $t]))
+                array_filter($targets, fn($t) => !isset($done[($tool === 'remove_tracks' ? 'remove:' : 'move:') . $t])),
             );
             $entries = $pending ? $this->api->call(
                 $user,
@@ -364,8 +384,8 @@ final class Service
                     'part' => 'snippet',
                     'id' => implode(',', $pending),
                     'maxResults' => 50,
-                    'fields' => 'items(id,snippet(playlistId,position,resourceId))'
-                ]
+                    'fields' => 'items(id,snippet(playlistId,position,resourceId))',
+                ],
             )['items'] ?? [] : [];
             $byId = array_column($entries, null, 'id');
             foreach ($targets as $target) {
@@ -378,7 +398,7 @@ final class Service
                         'ITEM_NOT_IN_PLAYLIST',
                         'An entry is missing from this playlist. Refresh before retrying.',
                         [],
-                        409
+                        409,
                     );
                 }
                 if ($tool === 'remove_tracks') {
@@ -390,7 +410,7 @@ final class Service
                             'YOUTUBE_RESPONSE_INVALID',
                             'YouTube did not return the playlist length; no move was dispatched.',
                             [],
-                            502
+                            502,
                         );
                     }
                     if ($arguments['position'] >= $length) {
@@ -409,25 +429,30 @@ final class Service
                             'snippet' => [
                                 'playlistId' => $id,
                                 'position' => $arguments['position'],
-                                'resourceId' => $byId[$target]['snippet']['resourceId']
-                            ]
-                        ]
+                                'resourceId' => $byId[$target]['snippet']['resourceId'],
+                            ],
+                        ],
                     ];
                 }
             }
         }
 
-        $planned = array_values(array_filter($planned, fn ($p) => !array_key_exists($p[0], $done)));
+        $planned = array_values(array_filter($planned, fn($p) => !array_key_exists($p[0], $done)));
         return [$id, $planned];
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array<string, mixed> $done
+     * @return array<string, mixed>
+     */
     private function mutatePreference(
         string $user,
         string $tool,
         array $arguments,
         callable $step,
         string $operation,
-        array $done
+        array $done,
     ): array {
         if (array_key_exists('change', $done)) {
             return ['changed' => 0];
@@ -455,8 +480,8 @@ final class Service
                     'part' => 'snippet',
                     'mine' => 'true',
                     'forChannelId' => $target,
-                    'maxResults' => 50
-                ]
+                    'maxResults' => 50,
+                ],
             );
             $subscription = $response['items'][0]['id'] ?? null;
             if (
@@ -475,7 +500,7 @@ final class Service
             }
         }
 
-        $step('change', fn () => $this->api->call($user, $method, $params, $body, operation: $operation));
+        $step('change', fn() => $this->api->call($user, $method, $params, $body, operation: $operation));
 
         return ['target_id' => $target, 'changed' => 1];
     }
@@ -498,7 +523,7 @@ final class Service
             in_array(
                 $host,
                 ['youtube.com', 'www.youtube.com', 'music.youtube.com'],
-                true
+                true,
             )
             && ($p['path'] ?? '') === '/watch'
         ) {
@@ -514,20 +539,26 @@ final class Service
         return $id;
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array{channel_id: string, generation: string} $connection
+     * @param array<string, mixed> $done
+     * @return array<string, mixed>
+     */
     private function create(
         string $user,
         array $connection,
         array $arguments,
         callable $step,
         string $operation,
-        array $done
+        array $done,
     ): array {
         $inputs = $arguments['video_ids'] ?? [];
         if (!is_array($inputs) || count($inputs) > 20) {
             throw new ServiceError('INVALID_ARGUMENT', 'Create accepts at most 20 initial tracks.');
         }
         // Validate every ID before creating anything. Preserve occurrence indexes for receipt replay.
-        $videos = array_map(fn ($v) => $this->video($v), $inputs);
+        $videos = array_map(fn($v) => $this->video($v), $inputs);
         $policy = $arguments['duplicate_policy'] ?? 'skip';
         if (!in_array($policy, ['skip', 'allow'], true)) {
             throw new ServiceError('INVALID_ARGUMENT', 'Unsupported duplicate policy.');
@@ -536,16 +567,16 @@ final class Service
         $deadline = microtime(true) + 45;
         $created = $step(
             'create',
-            fn () => $this->api->call(
+            fn() => $this->api->call(
                 $user,
                 'playlists.insert',
                 ['part' => 'snippet,status'],
                 [
                     'snippet' => ['title' => $arguments['title'], 'description' => $arguments['description'] ?? ''],
-                    'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private']
+                    'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private'],
                 ],
-                operation: $operation
-            )
+                operation: $operation,
+            ),
         );
         $id = $created['id'] ?? null;
         if (!is_string($id) || $id === '') {
@@ -553,7 +584,7 @@ final class Service
                 'UPSTREAM_UNCERTAIN',
                 'Playlist creation did not return an ID. Inspect YouTube before retrying.',
                 [],
-                502
+                502,
             );
         }
         if (isset($done['create']) && count($done) < count($videos) + 1 && $videos) {
@@ -563,7 +594,7 @@ final class Service
                     'NOT_PLAYLIST_OWNER',
                     'Created playlist is no longer owned by this channel.',
                     [],
-                    403
+                    403,
                 );
             }
         }
@@ -581,21 +612,21 @@ final class Service
                     'OPERATION_TIME_LIMIT',
                     'Inspect the receipt and explicitly resume pending tracks.',
                     [],
-                    409
+                    409,
                 );
             }
 
             $step(
                 'add:' . $n,
-                fn () => $this->api->call(
+                fn() => $this->api->call(
                     $user,
                     'playlistItems.insert',
                     ['part' => 'snippet'],
                     [
-                        'snippet' => ['playlistId' => $id, 'resourceId' => ['kind' => 'youtube#video', 'videoId' => $video]]
+                        'snippet' => ['playlistId' => $id, 'resourceId' => ['kind' => 'youtube#video', 'videoId' => $video]],
                     ],
-                    operation: $operation
-                )
+                    operation: $operation,
+                ),
             );
             $added++;
         }
@@ -604,10 +635,13 @@ final class Service
             'playlist_id' => $id,
             'added' => $added,
             'skipped' => count($videos) - $added,
-            'links' => $this->links($id)
+            'links' => $this->links($id),
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function metadata(string $user, string $id, bool $fresh = true): array
     {
         $params = ['part' => 'snippet,status,contentDetails', 'id' => $id];
@@ -619,18 +653,24 @@ final class Service
             'PLAYLIST_NOT_FOUND',
             'Playlist not found or not accessible.',
             [],
-            404
+            404,
         );
     }
 
+    /**
+     * @return array{youtube: string, youtube_music: string}
+     */
     private function links(string $id): array
     {
         return [
             'youtube' => 'https://www.youtube.com/playlist?list=' . $id,
-            'youtube_music' => 'https://music.youtube.com/playlist?list=' . $id
+            'youtube_music' => 'https://music.youtube.com/playlist?list=' . $id,
         ];
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
     private function entries(string $user, string $id): array
     {
         $items = [];
@@ -642,7 +682,7 @@ final class Service
                     'PLAYLIST_SCAN_LIMIT',
                     'Preflight reached its time limit. No new writes were dispatched.',
                     [],
-                    409
+                    409,
                 );
             }
 
@@ -660,7 +700,7 @@ final class Service
         }
         throw new ServiceError(
             'PLAYLIST_SCAN_LIMIT',
-            'Playlist is too large for a bounded preflight scan. No new changes have been dispatched.'
+            'Playlist is too large for a bounded preflight scan. No new changes have been dispatched.',
         );
     }
 }

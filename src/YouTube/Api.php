@@ -14,6 +14,9 @@ use YouTubeMcp\Storage\Database;
 class Api
 {
     private int $readCacheTtl = 30;
+    /**
+     * @var array<string, string>
+     */
     private array $playlistItems = [];
 
     public function __construct(
@@ -21,7 +24,7 @@ class Api
         private Budget $budget,
         private Database $db,
         private ?Google $google = null,
-        int $readCacheTtl = 30
+        int $readCacheTtl = 30,
     ) {
         if (
             $readCacheTtl < 0
@@ -33,7 +36,12 @@ class Api
         $this->readCacheTtl = $readCacheTtl;
     }
 
-    /** Opt-in for user-facing reads only; mutation checks keep call()'s zero-TTL default. */
+    /**
+     * Opt-in for user-facing reads only; mutation checks keep call()'s zero-TTL default.
+     *
+     * @param array<string, mixed> $params
+     * @return array<array-key, mixed>
+     */
     public function read(string $user, string $method, array $params): array
     {
         if (
@@ -46,6 +54,11 @@ class Api
         return $this->call($user, $method, $params, ttl: $this->readCacheTtl);
     }
 
+    /**
+     * @param array<string, mixed>|null $body
+     * @param array<string, mixed> $params
+     * @return array<array-key, mixed>
+     */
     public function call(
         string $user,
         string $method,
@@ -54,7 +67,7 @@ class Api
         ?string $reservation = null,
         ?string $operation = null,
         ?string $token = null,
-        int $ttl = 0
+        int $ttl = 0,
     ): array {
         [$resource, $action] = explode('.', $method);
         [$bucket] = $this->budget->method($method);
@@ -65,7 +78,7 @@ class Api
             'setModerationStatus' => 'POST',
             'insert' => 'POST',
             'update' => 'PUT',
-            'delete' => 'DELETE'
+            'delete' => 'DELETE',
         ][$action];
         $path = in_array($action, ['rate', 'getRating', 'setModerationStatus'], true) ? $resource . '/' . $action : $resource;
         $connection = $token === null ? $this->google?->connection($user) : null;
@@ -100,7 +113,7 @@ class Api
                     $verb,
                     'https://www.googleapis.com/youtube/v3/' . $path . '?' . http_build_query($params),
                     ['Authorization: Bearer ' . $access, 'Content-Type: application/json'],
-                    $body === null ? null : json_encode($body, JSON_THROW_ON_ERROR)
+                    $body === null ? null : json_encode($body, JSON_THROW_ON_ERROR),
                 );
             } catch (ServiceError $e) {
                 $this->budget->outcome($request, 'uncertain');
@@ -138,7 +151,7 @@ class Api
                     'YOUTUBE_QUOTA_EXHAUSTED',
                     'YouTube daily quota is exhausted.',
                     ['bucket' => $bucket, 'upstream_reason' => $reason],
-                    429
+                    429,
                 );
             }
             if ($status === 429 || in_array($reason, ['rateLimitExceeded', 'userRateLimitExceeded'], true)) {
@@ -146,7 +159,7 @@ class Api
                     'YOUTUBE_RATE_LIMITED',
                     'YouTube is throttling requests. Retry later.',
                     ['upstream_reason' => $reason],
-                    429
+                    429,
                 );
             }
             if ($verb === 'GET' && $status >= 500 && $attempt < 2) {
@@ -159,7 +172,7 @@ class Api
                     'UPSTREAM_UNCERTAIN',
                     'YouTube failed while processing a change. Check the playlist before resuming.',
                     [],
-                    502
+                    502,
                 );
             }
 
@@ -172,22 +185,25 @@ class Api
                         'playlistOperationUnsupported',
                         'playlistContainsMaximumNumberOfVideos',
                         'playlistLimitExceeded',
-                        'tooManyPlaylists'
+                        'tooManyPlaylists',
                     ],
-                    true
+                    true,
                 ) => 'YOUTUBE_CHANNEL_LIMIT_REACHED',
                 $status === 404 => 'YOUTUBE_NOT_FOUND',
-                default => 'YOUTUBE_REQUEST_REJECTED'
+                default => 'YOUTUBE_REQUEST_REJECTED',
             };
             throw new ServiceError(
                 $code,
                 'YouTube rejected this request.',
                 ['upstream_reason' => $reason],
-                $status === 401 ? 401 : 400
+                $status === 401 ? 401 : 400,
             );
         } while (true);
     }
 
+    /**
+     * @param array{channel_id: string, generation: string} $connection
+     */
     private function requireCurrentConnection(string $user, array $connection, string $verb): void
     {
         $current = $this->db->one('SELECT channel_id,generation FROM google_connections WHERE user_id=?', [$user]);
@@ -201,14 +217,14 @@ class Api
                     'UPSTREAM_UNCERTAIN',
                     'The connection changed after a dispatched mutation. Inspect the account and receipt before retrying.',
                     [],
-                    502
+                    502,
                 );
             }
             throw new ServiceError(
                 'GOOGLE_CONNECTION_CHANGED',
                 'The account connection changed during this request. Start a new request.',
                 [],
-                409
+                409,
             );
         }
     }

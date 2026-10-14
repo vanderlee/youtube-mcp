@@ -9,10 +9,11 @@ use YouTubeMcp\ServiceError;
 
 final class Scanner
 {
-    public function __construct(private Api $api)
-    {
-    }
+    public function __construct(private Api $api) {}
 
+    /**
+     * @return array<string, mixed>
+     */
     public function metadata(string $user, string $playlist): array
     {
         $response = $this->api->call($user, 'playlists.list', ['part' => 'snippet,status,contentDetails', 'id' => $playlist]);
@@ -24,6 +25,9 @@ final class Scanner
         return $metadata;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function owned(string $user, string $playlist, string $channel): array
     {
         $metadata = $this->metadata($user, $playlist);
@@ -34,7 +38,11 @@ final class Scanner
         return $metadata;
     }
 
-    /** Complete snapshot or error: never plan mutations from a truncated scan. */
+    /**
+     * Complete snapshot or error: never plan mutations from a truncated scan.
+     *
+     * @return list<array<string, mixed>>
+     */
     public function entries(string $user, string $playlist, float $deadline): array
     {
         $entries = [];
@@ -49,7 +57,7 @@ final class Scanner
                 $user,
                 'playlistItems.list',
                 ['part' => 'snippet,contentDetails,status', 'playlistId' => $playlist, 'maxResults' => 50]
-                    + ($page === null ? [] : ['pageToken' => $page])
+                    + ($page === null ? [] : ['pageToken' => $page]),
             );
             foreach ($response['items'] ?? [] as $entry) {
                 if (!is_string($entry['id'] ?? null) || isset($seen[$entry['id']])) {
@@ -63,7 +71,7 @@ final class Scanner
                     'title' => $entry['snippet']['title'] ?? '',
                     'added_at' => $entry['snippet']['publishedAt'] ?? null,
                     'position' => $entry['snippet']['position'] ?? count($entries),
-                    'privacy' => $entry['status']['privacyStatus'] ?? null
+                    'privacy' => $entry['status']['privacyStatus'] ?? null,
                 ];
             }
             if (count($entries) > 1000) {
@@ -79,7 +87,7 @@ final class Scanner
             'PLAYLIST_SCAN_LIMIT',
             'A complete scan is limited to 1000 entries per playlist; no new write was dispatched.',
             [],
-            409
+            409,
         );
     }
 }

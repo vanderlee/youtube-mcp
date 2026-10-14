@@ -16,6 +16,9 @@ use YouTubeMcp\ServiceError;
 
 final class Tools
 {
+    /**
+     * @return list<Tool>
+     */
     public static function definitions(): array
     {
         $string = ['type' => 'string', 'minLength' => 1, 'maxLength' => 256];
@@ -26,67 +29,67 @@ final class Tools
             'operation_key' => ['type' => 'string', 'pattern' => '^[A-Za-z0-9._-]{8,128}$'],
             'resume' => [
                 'type' => 'boolean',
-                'description' => 'Explicitly resume only pending steps of a prior partial receipt; never resumes uncertain changes.'
-            ]
+                'description' => 'Explicitly resume only pending steps of a prior partial receipt; never resumes uncertain changes.',
+            ],
         ];
         $privacy = ['type' => 'string', 'enum' => ['private', 'unlisted', 'public']];
         $title = ['type' => 'string', 'minLength' => 1, 'maxLength' => 150];
         $description = ['type' => 'string', 'maxLength' => 5000];
-        $array = fn ($schema) => ['type' => 'array', 'minItems' => 1, 'maxItems' => 20, 'items' => $schema];
+        $array = fn($schema) => ['type' => 'array', 'minItems' => 1, 'maxItems' => 20, 'items' => $schema];
         $specs = [
             'list_liked_tracks' => [
                 'List your liked YouTube videos, including non-music content, one page at a time.',
                 $page,
-                []
+                [],
             ],
             'get_track_ratings' => [
                 'Read your ratings for up to 20 video IDs or HTTPS YouTube URLs.',
                 ['video_ids' => $array(['type' => 'string', 'minLength' => 11, 'maxLength' => 500])],
-                ['video_ids']
+                ['video_ids'],
             ],
             'rate_track' => [
                 'Like or dislike a video, or remove your rating with none. This changes your YouTube rating.',
                 [
                     'video_id' => ['type' => 'string', 'minLength' => 11, 'maxLength' => 500],
-                    'rating' => ['type' => 'string', 'enum' => ['like', 'dislike', 'none']]
+                    'rating' => ['type' => 'string', 'enum' => ['like', 'dislike', 'none']],
                 ] + $operationProperties,
-                ['video_id', 'rating', 'operation_key']
+                ['video_id', 'rating', 'operation_key'],
             ],
             'list_subscriptions' => [
                 'List your YouTube channel subscriptions, including non-artists, one page at a time.',
                 $page,
-                []
+                [],
             ],
             'subscribe_artist' => [
                 'Subscribe to an artist YouTube channel using its UC channel ID; also supports other channels.',
                 ['channel_id' => ['type' => 'string', 'pattern' => '^UC[A-Za-z0-9_-]{22}$']] + $operationProperties,
-                ['channel_id', 'operation_key']
+                ['channel_id', 'operation_key'],
             ],
             'unsubscribe_artist' => [
                 'Unsubscribe from a YouTube channel using its UC channel ID.',
                 ['channel_id' => ['type' => 'string', 'pattern' => '^UC[A-Za-z0-9_-]{22}$']] + $operationProperties,
-                ['channel_id', 'operation_key']
+                ['channel_id', 'operation_key'],
             ],
             'get_connection_status' => ['Show the connected YouTube channel.', [], []],
             'get_usage_status' => [
                 'Show locally observed daily usage estimates. YouTube enforces quotas; remaining quota is not known to this service.',
                 [],
-                []
+                [],
             ],
             'get_operation' => [
                 'Read a receipt from your current connection without YouTube requests. Requires the originating tool permission or its corresponding read permission.',
                 ['operation_id' => $string],
-                ['operation_id']
+                ['operation_id'],
             ],
             'list_playlists' => [
                 'List your playlists one page at a time. Fetch further pages only when needed.',
                 $page,
-                []
+                [],
             ],
             'get_playlist' => [
                 'Read playlist metadata and one page of entries, with occurrence IDs.',
                 ['playlist_id' => $playlist] + $page,
-                ['playlist_id']
+                ['playlist_id'],
             ],
             'search_tracks' => [
                 'Search video candidates; Music availability is uncertain. Prefer supplied IDs. One API call by default; include_details adds durations with another call.',
@@ -94,13 +97,13 @@ final class Tools
                     'query' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 200],
                     'include_details' => [
                         'type' => 'boolean',
-                        'description' => 'Fetch durations with one additional API call. Default false.'
+                        'description' => 'Fetch durations with one additional API call. Default false.',
                     ],
                     'region' => ['type' => 'string', 'pattern' => '^[A-Z]{2}$'],
                     'page_token' => $string,
-                    'limit' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 50]
+                    'limit' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 50],
                 ],
-                ['query']
+                ['query'],
             ],
             'create_playlist' => [
                 'Create and optionally populate a playlist in one call; private by default. No search or read-back is needed for supplied video IDs.',
@@ -111,11 +114,11 @@ final class Tools
                     'video_ids' => [
                         'type' => 'array',
                         'maxItems' => 20,
-                        'items' => ['type' => 'string', 'minLength' => 11, 'maxLength' => 500]
+                        'items' => ['type' => 'string', 'minLength' => 11, 'maxLength' => 500],
                     ],
-                    'duplicate_policy' => ['type' => 'string', 'enum' => ['skip', 'allow']]
+                    'duplicate_policy' => ['type' => 'string', 'enum' => ['skip', 'allow']],
                 ] + $operationProperties,
-                ['title', 'operation_key']
+                ['title', 'operation_key'],
             ],
             'update_playlist' => [
                 'Change only supplied metadata fields of an owned playlist.',
@@ -123,37 +126,37 @@ final class Tools
                     'playlist_id' => $playlist,
                     'title' => $title,
                     'description' => $description,
-                    'privacy' => $privacy
+                    'privacy' => $privacy,
                 ] + $operationProperties,
-                ['playlist_id', 'operation_key']
+                ['playlist_id', 'operation_key'],
             ],
             'add_tracks' => [
                 'Add up to 20 video IDs or HTTPS video URLs to an owned playlist. Writes cost 50 units each; batching is not a discount.',
                 [
                     'playlist_id' => $playlist,
                     'video_ids' => $array(['type' => 'string', 'minLength' => 11, 'maxLength' => 500]),
-                    'duplicate_policy' => ['type' => 'string', 'enum' => ['skip', 'allow']]
+                    'duplicate_policy' => ['type' => 'string', 'enum' => ['skip', 'allow']],
                 ] + $operationProperties,
-                ['playlist_id', 'video_ids', 'operation_key']
+                ['playlist_id', 'video_ids', 'operation_key'],
             ],
             'remove_tracks' => [
                 'Remove specific occurrences by playlist-item ID, not video ID.',
                 ['playlist_id' => $playlist, 'playlist_item_ids' => $array($item) + ['uniqueItems' => true]] + $operationProperties,
-                ['playlist_id', 'playlist_item_ids', 'operation_key']
+                ['playlist_id', 'playlist_item_ids', 'operation_key'],
             ],
             'move_track' => [
                 'Move one playlist entry to a zero-based position.',
                 [
                     'playlist_id' => $playlist,
                     'playlist_item_id' => $item,
-                    'position' => ['type' => 'integer', 'minimum' => 0, 'maximum' => 999]
+                    'position' => ['type' => 'integer', 'minimum' => 0, 'maximum' => 999],
                 ] + $operationProperties,
-                ['playlist_id', 'playlist_item_id', 'position', 'operation_key']
+                ['playlist_id', 'playlist_item_id', 'position', 'operation_key'],
             ],
             'delete_playlist' => [
                 'Permanently delete an owned playlist when requested.',
                 ['playlist_id' => $playlist] + $operationProperties,
-                ['playlist_id', 'operation_key']
+                ['playlist_id', 'operation_key'],
             ],
         ];
         $specs['search_tracks'][1] += \YouTubeMcp\YouTube\Tools::searchFilters();
@@ -165,7 +168,7 @@ final class Tools
                 $properties['response_detail'] = [
                     'type' => 'string',
                     'enum' => ['compact', 'full'],
-                    'description' => 'Compact by default; full includes available upstream details or the complete local receipt.'
+                    'description' => 'Compact by default; full includes available upstream details or the complete local receipt.',
                 ];
             }
 
@@ -176,7 +179,7 @@ final class Tools
                     'type' => 'object',
                     'properties' => $properties ?: new stdClass(),
                     'required' => $required,
-                    'additionalProperties' => false
+                    'additionalProperties' => false,
                 ],
                 $toolDescription,
                 ToolAnnotations::fromArray(
@@ -209,36 +212,55 @@ final class Tools
                                 'delete_channel_section',
                                 'delete_media_asset',
                             ],
-                            true
+                            true,
                         ),
                         'idempotentHint' => !$write,
-                        'openWorldHint' => !in_array($name, ['get_usage_status', 'get_operation', 'list_media_assets', 'delete_media_asset'], true)
-                    ]
+                        'openWorldHint' => !in_array($name, ['get_usage_status', 'get_operation', 'list_media_assets', 'delete_media_asset'], true),
+                    ],
                 ),
                 meta: [
                     'securitySchemes' => [
                         [
                             'type' => 'oauth2',
-                            'scopes' => $name === 'get_operation' ? [] : [Service::scope($name)]
-                        ]
-                    ]
-                ]
+                            'scopes' => $name === 'get_operation' ? [] : [Service::scope($name)],
+                        ],
+                    ],
+                ],
             );
         }
 
         return $result;
     }
 
+    /**
+     * @param array{
+     *     id: string,
+     *     scopes: list<string>,
+     *     token_id: string,
+     *     expires_at: int,
+     *     client_id: string,
+     *     generation: string|null
+     * } $identity
+     */
     public static function handler(Service $service, array $identity, string $name, OAuth $oauth): ToolHandlerInterface
     {
-        return new class($service, $identity, $name, $oauth) implements ToolHandlerInterface {
+        return new class ($service, $identity, $name, $oauth) implements ToolHandlerInterface {
+            /**
+             * @param array{
+             *     id: string,
+             *     scopes: list<string>,
+             *     token_id: string,
+             *     expires_at: int,
+             *     client_id: string,
+             *     generation: string|null
+             * } $identity
+             */
             public function __construct(
                 private Service $service,
                 private array $identity,
                 private string $name,
-                private OAuth $oauth
-            ) {
-            }
+                private OAuth $oauth,
+            ) {}
 
             public function execute(array $arguments, ClientGateway $gateway): mixed
             {
@@ -247,29 +269,29 @@ final class Tools
                     unset($arguments['response_detail']);
                     $result = $this->oauth->runAuthenticated(
                         $this->identity,
-                        fn () => $this->service->execute(
+                        fn() => $this->service->execute(
                             $this->identity['id'],
                             $this->identity['scopes'],
                             $this->name,
-                            $arguments
-                        )
+                            $arguments,
+                        ),
                     );
                     $result = $detail === 'full' ? $result : Presentation::compact($this->name, $result);
 
                     return new CallToolResult(
                         [
                             new TextContent(
-                                'Result in structuredContent' . (isset($result['status']) ? ': ' . $result['status'] : '.')
-                            )
+                                'Result in structuredContent' . (isset($result['status']) ? ': ' . $result['status'] : '.'),
+                            ),
                         ],
                         isset($result['status']) && $result['status'] !== 'completed',
-                        $result
+                        $result,
                     );
                 } catch (ServiceError $e) {
                     return new CallToolResult(
                         [new TextContent($e->reason . ': ' . $e->getMessage())],
                         true,
-                        $e->payload()
+                        $e->payload(),
                     );
                 }
             }

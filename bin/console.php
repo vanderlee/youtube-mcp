@@ -16,7 +16,8 @@ try {
             }
             echo 'Autoload OK: ' . $class . PHP_EOL;
         }
-        if (!method_exists(\YouTubeMcp\Config::class, 'load')) {
+        // Inspect the deployed class to detect files from different releases at runtime.
+        if (!(new ReflectionClass(Config::class))->hasMethod('load')) {
             throw new RuntimeException('Config::load is missing. Application files are from different releases.');
         }
         echo "Application class checks passed; configuration, storage and PHP-FPM are not verified.\n";
@@ -30,12 +31,14 @@ try {
         $names = [];
         $validator = new \Opis\JsonSchema\Validator();
         foreach ($tools as $tool) {
-            if (isset($names[$tool->name])) { throw new RuntimeException('Duplicate tool name: ' . $tool->name); }
+            if (isset($names[$tool->name])) {
+                throw new RuntimeException('Duplicate tool name: ' . $tool->name);
+            }
             $names[$tool->name] = true;
             $schema = json_decode(json_encode($tool->inputSchema, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
             // Compiles each schema. Missing required arguments in this dummy value are expected.
             $validator->validate(new stdClass(), $schema);
-            if (array_diff($tool->inputSchema['required'] ?? [], array_keys((array)$tool->inputSchema['properties']))) {
+            if (array_diff($tool->inputSchema['required'] ?? [], array_keys((array) $tool->inputSchema['properties']))) {
                 throw new RuntimeException('Tool has required arguments absent from its properties: ' . $tool->name);
             }
         }
@@ -92,9 +95,9 @@ try {
             'DELETE FROM quota_windows WHERE window<? AND reserved=0',
             [
                 (new DateTimeImmutable('now', new DateTimeZone('America/Los_Angeles')))->modify('-30 days')->format(
-                    'Y-m-d'
-                )
-            ]
+                    'Y-m-d',
+                ),
+            ],
         );
         echo "Cleanup complete; interrupted/uncertain operations retained.\n";
         exit(0);
@@ -108,15 +111,15 @@ try {
         $db = new Database($config->storage() . '/service.sqlite');
         $oauth = new \YouTubeMcp\Auth\OAuth($db, $config);
         echo json_encode(
-                $oauth->register(
-                    [
-                        'redirect_uris' => [$uri],
-                        'client_name' => $argv[3] ?? 'ChatGPT',
-                        'token_endpoint_auth_method' => 'client_secret_post'
-                    ]
-                ),
-                JSON_PRETTY_PRINT
-            ) . PHP_EOL;
+            $oauth->register(
+                [
+                    'redirect_uris' => [$uri],
+                    'client_name' => $argv[3] ?? 'ChatGPT',
+                    'token_endpoint_auth_method' => 'client_secret_post',
+                ],
+            ),
+            JSON_PRETTY_PRINT,
+        ) . PHP_EOL;
         exit(0);
     }
     echo "Commands: key:generate, init, migrate, cleanup, bootstrap:check, mcp:check, client:create CALLBACK_URI [NAME]\n";

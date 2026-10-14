@@ -9,9 +9,10 @@ use RuntimeException;
 
 final class Config
 {
-    public function __construct(private array $values = [], public readonly string $root = __DIR__ . '/..')
-    {
-    }
+    /**
+     * @param array<string, mixed> $values
+     */
+    public function __construct(private array $values = [], public readonly string $root = __DIR__ . '/..') {}
 
     public static function load(string $root): self
     {
@@ -38,10 +39,13 @@ final class Config
 
         return str_starts_with($path, '/') || preg_match(
             '/^[A-Za-z]:[\\\\\/]/',
-            $path
+            $path,
         ) ? $path : $this->root . '/' . $path;
     }
 
+    /**
+     * @return list<string>
+     */
     public function list(string $name): array
     {
         return array_values(array_filter(array_map('trim', explode(',', $this->get($name)))));

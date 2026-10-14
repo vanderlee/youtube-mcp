@@ -11,7 +11,16 @@ use Throwable;
 
 final class Database
 {
-    /** Never include raw driver messages: they can contain paths or stored values. */
+    /**
+     * Never include raw driver messages: they can contain paths or stored values.
+     *
+     * @return array{
+     *     database_reason: string,
+     *     database_sqlstate: string,
+     *     database_driver_code?: int,
+     *     database_table?: string
+     * }
+     */
     public static function errorDetails(PDOException $error): array
     {
         $message = strtolower($error->getMessage());
@@ -27,7 +36,7 @@ final class Database
         };
         $details = [
             'database_reason' => $reason,
-            'database_sqlstate' => (string) ($error->errorInfo[0] ?? $error->getCode())
+            'database_sqlstate' => (string) ($error->errorInfo[0] ?? $error->getCode()),
         ];
         if (isset($error->errorInfo[1]) && is_numeric($error->errorInfo[1])) {
             $details['database_driver_code'] = (int) $error->errorInfo[1];
@@ -55,16 +64,23 @@ final class Database
             'sqlite:' . $path,
             null,
             null,
-            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC],
         );
         $this->pdo->exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL');
     }
 
+    /**
+     * @param array<array-key, mixed> $params
+     * @return list<array<string, mixed>>
+     */
     public function all(string $sql, array $params = []): array
     {
         return $this->execute($sql, $params)->fetchAll();
     }
 
+    /**
+     * @param array<array-key, mixed> $params
+     */
     public function execute(string $sql, array $params = []): PDOStatement
     {
         $stmt = $this->pdo->prepare($sql);
@@ -86,12 +102,16 @@ final class Database
                     function () use ($sql, $name) {
                         $this->pdo->exec($sql);
                         $this->execute('INSERT INTO migrations VALUES (?)', [$name]);
-                    }
+                    },
                 );
             }
         }
     }
 
+    /**
+     * @param array<array-key, mixed> $params
+     * @return array<string, mixed>|null
+     */
     public function one(string $sql, array $params = []): ?array
     {
         return $this->execute($sql, $params)->fetch() ?: null;

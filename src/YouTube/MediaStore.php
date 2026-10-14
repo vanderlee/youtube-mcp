@@ -12,10 +12,12 @@ final class MediaStore
 {
     public const MAX_BYTES = 67_108_864;
 
-    public function __construct(private Database $db, private Config $config)
-    {
-    }
+    public function __construct(private Database $db, private Config $config) {}
 
+    /**
+     * @param array{channel_id: string, generation: string} $connection
+     * @return array{asset_id: string, mime: string, bytes: int}
+     */
     public function save(string $user, array $connection, UploadedFileInterface $upload): array
     {
         $size = $upload->getSize();
@@ -53,8 +55,8 @@ final class MediaStore
                     $mime,
                     $size,
                     hash_file('sha256', $path),
-                    time()
-                ]
+                    time(),
+                ],
             );
 
             return ['asset_id' => $id, 'mime' => $mime, 'bytes' => $size];
@@ -81,7 +83,7 @@ final class MediaStore
             'image/jpeg',
             'image/png',
             'text/plain',
-            'text/vtt'
+            'text/vtt',
         ];
         if (!in_array($mime, $allowed, true)) {
             throw new ServiceError('INVALID_MEDIA', 'Use MP4, WebM, MOV, AVI, PNG, JPEG, SRT or VTT media.');
@@ -106,6 +108,10 @@ final class MediaStore
         return $mime;
     }
 
+    /**
+     * @param array{channel_id: string, generation: string} $connection
+     * @return array<string, mixed>
+     */
     public function get(string $user, array $connection, string $id): array
     {
         if (!preg_match('/^[a-f0-9]{48}$/D', $id)) {
@@ -114,7 +120,7 @@ final class MediaStore
 
         $row = $this->db->one(
             'SELECT * FROM media_assets WHERE id=? AND user_id=? AND channel_id=? AND generation=? AND created_at>?',
-            [$id, $user, $connection['channel_id'], $connection['generation'], time() - 86400]
+            [$id, $user, $connection['channel_id'], $connection['generation'], time() - 86400],
         );
         $path = $this->config->storage() . '/media/' . $id;
         if (
@@ -128,21 +134,28 @@ final class MediaStore
                 'MEDIA_NOT_FOUND',
                 'Asset is missing, expired, changed or belongs to a different account connection.',
                 [],
-                404
+                404,
             );
         }
 
         return $row + ['path' => $path];
     }
 
+    /**
+     * @param array{channel_id: string, generation: string} $connection
+     * @return list<array<string, mixed>>
+     */
     public function listing(string $user, array $connection): array
     {
         return $this->db->all(
             'SELECT id AS asset_id,mime,bytes,created_at FROM media_assets WHERE user_id=? AND channel_id=? AND generation=? AND created_at>? ORDER BY created_at DESC LIMIT 51',
-            [$user, $connection['channel_id'], $connection['generation'], time() - 86400]
+            [$user, $connection['channel_id'], $connection['generation'], time() - 86400],
         );
     }
 
+    /**
+     * @param array{channel_id: string, generation: string} $connection
+     */
     public function delete(string $user, array $connection, string $id): void
     {
         $asset = $this->get($user, $connection, $id);
@@ -186,7 +199,7 @@ final class MediaStore
                     }
 
                     $this->db->execute('DELETE FROM media_assets WHERE id=? AND created_at<=?', [$row['id'], time() - 86400]);
-                }
+                },
             );
         }
 

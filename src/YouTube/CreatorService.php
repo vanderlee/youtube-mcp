@@ -18,10 +18,14 @@ final class CreatorService
         private Receipts $receipts,
         private Lock $locks,
         private MediaStore $assets,
-        private MediaApi $media
-    ) {
-    }
+        private MediaApi $media,
+    ) {}
 
+    /**
+     * @param array<string, mixed> $a
+     * @param list<string> $scopes
+     * @return array<string, mixed>
+     */
     public function execute(string $user, array $scopes, string $tool, array $a): array
     {
         $scope = CreatorTools::scope($tool);
@@ -44,12 +48,16 @@ final class CreatorService
                     $connection['generation'],
                     $tool,
                     $a,
-                    fn ($step, $operation, $done) => $this->write($user, $connection, $tool, $a, $step, $operation, $done)
+                    fn($step, $operation, $done) => $this->write($user, $connection, $tool, $a, $step, $operation, $done),
                 );
-            }
+            },
         );
     }
 
+    /**
+     * @param array{channel_id: string, generation: string} $connection
+     * @return array<string, mixed>
+     */
     private function ownedVideo(string $user, array $connection, string $video): array
     {
         $response = $this->api->call($user, 'videos.list', ['part' => 'snippet,status', 'id' => $video]);
@@ -65,13 +73,18 @@ final class CreatorService
         return $metadata;
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array{channel_id: string, generation: string} $connection
+     * @return array<string, mixed>
+     */
     private function caption(string $user, array $connection, array $arguments): array
     {
         $this->ownedVideo($user, $connection, $arguments['video_id']);
         $response = $this->api->call(
             $user,
             'captions.list',
-            ['part' => 'snippet', 'videoId' => $arguments['video_id'], 'id' => $arguments['caption_id']]
+            ['part' => 'snippet', 'videoId' => $arguments['video_id'], 'id' => $arguments['caption_id']],
         );
         foreach ($response['items'] ?? [] as $caption) {
             if (
@@ -84,6 +97,11 @@ final class CreatorService
         throw new ServiceError('CAPTION_NOT_FOUND', 'Caption does not belong to this owned video.', [], 404);
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array{channel_id: string, generation: string} $connection
+     * @return array<string, mixed>
+     */
     private function read(string $user, array $connection, string $tool, array $arguments): array
     {
         if ($tool === 'list_media_assets') {
@@ -98,7 +116,7 @@ final class CreatorService
             return $this->api->call(
                 $user,
                 'channelSections.list',
-                ['part' => 'snippet,contentDetails', 'channelId' => $connection['channel_id']]
+                ['part' => 'snippet,contentDetails', 'channelId' => $connection['channel_id']],
             );
         }
         if ($tool === 'download_caption') {
@@ -112,6 +130,12 @@ final class CreatorService
         return $this->api->call($user, 'captions.list', ['part' => 'snippet', 'videoId' => $arguments['video_id']]);
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array{channel_id: string, generation: string} $connection
+     * @param array<string, mixed> $done
+     * @return array<string, mixed>
+     */
     private function write(
         string $user,
         array $connection,
@@ -119,7 +143,7 @@ final class CreatorService
         array $arguments,
         callable $step,
         string $operation,
-        array $done
+        array $done,
     ): array {
         if ($tool === 'delete_media_asset') {
             $step(
@@ -128,7 +152,7 @@ final class CreatorService
                     $this->assets->delete($user, $connection, $arguments['asset_id']);
 
                     return ['deleted' => true];
-                }
+                },
             );
 
             return ['asset_id' => $arguments['asset_id'], 'deleted' => true];
@@ -159,12 +183,12 @@ final class CreatorService
                         'title' => $arguments['title'],
                         'description' => $arguments['description'] ?? '',
                         'categoryId' => $arguments['category_id'] ?? '22',
-                        'tags' => $arguments['tags'] ?? []
+                        'tags' => $arguments['tags'] ?? [],
                     ],
-                    'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private']
+                    'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private'],
                 ],
                 $asset,
-                $step
+                $step,
             );
             if (!is_string($result['id'] ?? null) || !preg_match('/^[A-Za-z0-9_-]{11}$/D', $result['id'])) {
                 throw new ServiceError('UPSTREAM_UNCERTAIN', 'Upload returned no valid video ID.', [], 502);
@@ -191,51 +215,61 @@ final class CreatorService
         return $this->sectionChange($user, $connection, $tool, $arguments, $step, $operation);
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array<string, mixed> $video
+     * @return array<string, mixed>
+     */
     private function videoChange(
         string $user,
         string $tool,
         array $arguments,
         array $video,
         callable $step,
-        string $operation
+        string $operation,
     ): array {
         if ($tool === 'delete_video') {
             $step(
                 'video-change',
-                fn () => $this->api->call($user, 'videos.delete', ['id' => $arguments['video_id']], operation: $operation)
+                fn() => $this->api->call($user, 'videos.delete', ['id' => $arguments['video_id']], operation: $operation),
             );
         } else {
             $body = $this->videoUpdateBody($arguments, $video);
 
             $step(
                 'video-change',
-                fn () => $this->api->call(
+                fn() => $this->api->call(
                     $user,
                     'videos.update',
                     ['part' => implode(',', array_diff(array_keys($body), ['id']))],
                     $body,
-                    operation: $operation
-                )
+                    operation: $operation,
+                ),
             );
         }
 
         return ['video_id' => $arguments['video_id'], 'changed' => true];
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array<string, mixed> $video
+     * @return array<string, mixed>
+     */
     private function videoUpdateBody(array $arguments, array $video): array
     {
         $body = ['id' => $arguments['video_id']];
         $snippet = array_intersect_key(
             $video['snippet'],
-            array_flip(['title', 'description', 'categoryId', 'tags', 'defaultLanguage', 'defaultAudioLanguage'])
+            array_flip(['title', 'description', 'categoryId', 'tags', 'defaultLanguage', 'defaultAudioLanguage']),
         );
         $supplied = false;
         foreach ([
-                'title' => 'title',
-                'description' => 'description',
-                'category_id' => 'categoryId',
-                'tags' => 'tags'
-            ] as $arg => $field) {
+            'title' => 'title',
+            'description' => 'description',
+            'category_id' => 'categoryId',
+            'tags' => 'tags',
+        ] as $arg => $field) {
             if (array_key_exists($arg, $arguments)) {
                 $snippet[$field] = $arguments[$arg];
                 $supplied = true;
@@ -254,9 +288,9 @@ final class CreatorService
                         'license',
                         'publicStatsViewable',
                         'selfDeclaredMadeForKids',
-                        'publishAt'
-                    ]
-                )
+                        'publishAt',
+                    ],
+                ),
             );
             $body['status']['privacyStatus'] = $arguments['privacy'];
             if ($arguments['privacy'] !== 'private') {
@@ -270,6 +304,12 @@ final class CreatorService
         return $body;
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array<string, mixed>|null $asset
+     * @param array{channel_id: string, generation: string} $connection
+     * @return array<string, mixed>
+     */
     private function captionChange(
         string $user,
         array $connection,
@@ -277,13 +317,13 @@ final class CreatorService
         array $arguments,
         ?array $asset,
         callable $step,
-        string $operation
+        string $operation,
     ): array {
         $existing = isset($arguments['caption_id']) ? $this->caption($user, $connection, $arguments) : null;
         if ($tool === 'delete_caption') {
             $step(
                 'caption-change',
-                fn () => $this->api->call($user, 'captions.delete', ['id' => $arguments['caption_id']], operation: $operation)
+                fn() => $this->api->call($user, 'captions.delete', ['id' => $arguments['caption_id']], operation: $operation),
             );
 
             return ['deleted' => true];
@@ -293,7 +333,7 @@ final class CreatorService
             'videoId' => $arguments['video_id'],
             'language' => $arguments['language'],
             'name' => $arguments['name'] ?? '',
-            'isDraft' => $arguments['is_draft'] ?? false
+            'isDraft' => $arguments['is_draft'] ?? false,
         ];
         foreach (['name' => 'name', 'is_draft' => 'isDraft'] as $arg => $field) {
             if (array_key_exists($arg, $arguments)) {
@@ -310,7 +350,7 @@ final class CreatorService
                 ['part' => 'snippet'],
                 $body,
                 $asset,
-                $step
+                $step,
             );
         } else {
             if (!isset($arguments['name']) && !array_key_exists('is_draft', $arguments)) {
@@ -319,7 +359,7 @@ final class CreatorService
 
             $result = $step(
                 'caption-change',
-                fn () => $this->api->call($user, 'captions.update', ['part' => 'snippet'], $body, operation: $operation)
+                fn() => $this->api->call($user, 'captions.update', ['part' => 'snippet'], $body, operation: $operation),
             );
         }
 
@@ -331,6 +371,12 @@ final class CreatorService
         return ['caption_id' => $id];
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array<string, mixed>|null $asset
+     * @param array{channel_id: string, generation: string} $connection
+     * @return array<string, mixed>
+     */
     private function brandingChange(
         string $user,
         array $connection,
@@ -338,7 +384,7 @@ final class CreatorService
         array $arguments,
         ?array $asset,
         callable $step,
-        string $operation
+        string $operation,
     ): array {
         $channel = $this->api->call($user, 'channels.list', ['part' => 'brandingSettings', 'id' => $connection['channel_id']])['items'][0] ?? null;
         if (!$channel || ($channel['id'] ?? '') !== $connection['channel_id']) {
@@ -371,32 +417,37 @@ final class CreatorService
 
         $step(
             'branding-change',
-            fn () => $this->api->call(
+            fn() => $this->api->call(
                 $user,
                 'channels.update',
                 ['part' => 'brandingSettings'],
                 ['id' => $connection['channel_id'], 'brandingSettings' => $branding],
-                operation: $operation
-            )
+                operation: $operation,
+            ),
         );
 
         return ['channel_id' => $connection['channel_id'], 'changed' => true];
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array{channel_id: string, generation: string} $connection
+     * @return array<string, mixed>
+     */
     private function sectionChange(
         string $user,
         array $connection,
         string $tool,
         array $arguments,
         callable $step,
-        string $operation
+        string $operation,
     ): array {
         $section = null;
         if (isset($arguments['section_id'])) {
             $section = $this->api->call(
                 $user,
                 'channelSections.list',
-                ['part' => 'snippet,contentDetails', 'id' => $arguments['section_id']]
+                ['part' => 'snippet,contentDetails', 'id' => $arguments['section_id']],
             )['items'][0] ?? null;
             if (
                 ($section['id'] ?? '') !== $arguments['section_id']
@@ -408,7 +459,7 @@ final class CreatorService
         if ($tool === 'delete_channel_section') {
             $step(
                 'section-change',
-                fn () => $this->api->call($user, 'channelSections.delete', ['id' => $arguments['section_id']], operation: $operation)
+                fn() => $this->api->call($user, 'channelSections.delete', ['id' => $arguments['section_id']], operation: $operation),
             );
 
             return ['deleted' => true];
@@ -432,13 +483,13 @@ final class CreatorService
         $body = ['snippet' => $snippet, 'contentDetails' => $details] + (isset($arguments['section_id']) ? ['id' => $arguments['section_id']] : []);
         $result = $step(
             'section-change',
-            fn () => $this->api->call(
+            fn() => $this->api->call(
                 $user,
                 $section ? 'channelSections.update' : 'channelSections.insert',
                 ['part' => 'snippet,contentDetails'],
                 $body,
-                operation: $operation
-            )
+                operation: $operation,
+            ),
         );
         $id = $result['id'] ?? $arguments['section_id'] ?? null;
         if (!is_string($id) || $id === '') {
@@ -448,6 +499,9 @@ final class CreatorService
         return ['section_id' => $id];
     }
 
+    /**
+     * @param array<string, mixed>|null $asset
+     */
     private function assertMime(?array $asset, string $prefix): void
     {
         if (!$asset || !str_starts_with($asset['mime'], $prefix)) {
@@ -455,6 +509,10 @@ final class CreatorService
         }
     }
 
+    /**
+     * @param array<string, mixed> $details
+     * @param array<string, mixed> $snippet
+     */
     private function validateSection(array $snippet, array $details, string $channel): void
     {
         $type = $snippet['type'] ?? '';

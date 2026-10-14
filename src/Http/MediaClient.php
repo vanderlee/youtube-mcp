@@ -9,12 +9,16 @@ use YouTubeMcp\ServiceError;
 /** Streaming official uploads and bounded caption downloads; never follows redirects. */
 class MediaClient
 {
+    /**
+     * @param list<string> $headers
+     * @return array{status: int, headers: array<string, string>, raw: string}
+     */
     public function exchange(
         string $method,
         string $url,
         array $headers,
         ?string $body = null,
-        ?string $path = null
+        ?string $path = null,
     ): array {
         $raw = '';
         $responseHeaders = [];
@@ -45,8 +49,8 @@ class MediaClient
                     }
 
                     return strlen($line);
-                }
-            ]
+                },
+            ],
         );
 
         try {
@@ -68,7 +72,7 @@ class MediaClient
                     'UPSTREAM_UNCERTAIN',
                     'Media request did not complete; inspect the operation before retrying.',
                     [],
-                    502
+                    502,
                 );
             }
 

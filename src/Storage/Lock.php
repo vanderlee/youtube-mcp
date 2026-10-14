@@ -8,7 +8,11 @@ use YouTubeMcp\ServiceError;
 
 final class Lock
 {
-    /** Reentrant only for the same logical name within this request's lock owner. */
+    /**
+     * Reentrant only for the same logical name within this request's lock owner.
+     *
+     * @var array<string, true>
+     */
     private array $held = [];
 
     public function __construct(private string $directory)
@@ -36,7 +40,7 @@ final class Lock
                 'OPERATION_BUSY',
                 'This account or playlist is being updated. Retry shortly.',
                 [],
-                409
+                409,
             );
         }
         $this->held[$name] = true;

@@ -11,6 +11,13 @@ use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Lock;
 use YouTubeMcp\YouTube\Api;
 
+/**
+ * @phpstan-type WorkflowAction array{type: 'add', video_id: string}
+ *     |array{type: 'remove', id: string, playlist_id?: string}
+ *     |array{type: 'move', id: string, video_id: string, position: int}
+ * @phpstan-type Snapshot array<string, list<array<string, mixed>>>
+ * @phpstan-type WorkflowPlan array{before: Snapshot, actions: list<WorkflowAction>, skipped: int}
+ */
 final class Workflows
 {
     private Scanner $scanner;
@@ -19,11 +26,16 @@ final class Workflows
         private Google $google,
         private Api $api,
         private Receipts $receipts,
-        private Lock $locks
+        private Lock $locks,
     ) {
         $this->scanner = new Scanner($api);
     }
 
+    /**
+     * @param array<string, mixed> $a
+     * @param list<string> $scopes
+     * @return array<string, mixed>
+     */
     public function execute(string $user, array $scopes, string $tool, array $a): array
     {
         $write = in_array($tool, WorkflowTools::WRITES, true);
@@ -47,12 +59,18 @@ final class Workflows
                     $connection['generation'],
                     $tool,
                     $a,
-                    fn ($step, $operation, $done) => $this->mutate($user, $connection, $tool, $a, $step, $operation, $done)
+                    fn($step, $operation, $done) => $this->mutate($user, $connection, $tool, $a, $step, $operation, $done),
                 );
-            }
+            },
         );
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array{channel_id: string, generation: string} $connection
+     * @param array<string, mixed> $done
+     * @return array<string, mixed>
+     */
     private function mutate(
         string $user,
         array $connection,
@@ -60,24 +78,24 @@ final class Workflows
         array $arguments,
         callable $step,
         string $operation,
-        array $done
+        array $done,
     ): array {
         // Persist a frozen plan before dispatching any write; resume never replans from changed inputs.
-        $plan = $step('plan', fn () => $this->plan($user, $connection['channel_id'], $tool, $arguments));
+        $plan = $step('plan', fn() => $this->plan($user, $connection['channel_id'], $tool, $arguments));
         $target = $arguments['playlist_id'] ?? null;
         if ($tool === 'copy_playlist') {
             $created = $step(
                 'create',
-                fn () => $this->api->call(
+                fn() => $this->api->call(
                     $user,
                     'playlists.insert',
                     ['part' => 'snippet,status'],
                     [
                         'snippet' => ['title' => $arguments['title']],
-                        'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private']
+                        'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private'],
                     ],
-                    operation: $operation
-                )
+                    operation: $operation,
+                ),
             );
             $target = $created['id'] ?? null;
             if (!is_string($target) || $target === '') {
@@ -99,12 +117,12 @@ final class Workflows
                     'OPERATION_TIME_LIMIT',
                     'At most 20 writes and 45 seconds per call. Inspect the receipt and explicitly resume remaining steps.',
                     [],
-                    409
+                    409,
                 );
             }
 
             $playlist = $action['playlist_id'] ?? $target;
-            $step($label, fn () => $this->dispatchAction($user, $playlist, $action, $operation));
+            $step($label, fn() => $this->dispatchAction($user, $playlist, $action, $operation));
             $writes++;
         }
 
@@ -112,17 +130,21 @@ final class Workflows
             'playlist_id' => $target,
             'planned_changes' => count($plan['actions']),
             'skipped_entries' => $plan['skipped'],
-            'complete' => true
+            'complete' => true,
         ];
     }
 
+    /**
+     * @param array<string, mixed> $done
+     * @param WorkflowPlan $plan
+     */
     private function verifyPlan(
         string $user,
         string $channel,
         string $tool,
         array $plan,
         array $done,
-        ?string $target
+        ?string $target,
     ): void {
         $expected = $plan['before'];
         if ($tool === 'copy_playlist') {
@@ -139,18 +161,22 @@ final class Workflows
         foreach ($expected as $playlist => $entries) {
             $this->scanner->owned($user, $playlist, $channel);
             $current = $this->scanner->entries($user, $playlist, $verificationDeadline);
-            $identity = static fn (array $entry): array => [$entry['id'], $entry['video_id'] ?? null];
+            $identity = static fn(array $entry): array => [$entry['id'], $entry['video_id'] ?? null];
             if (array_map($identity, $current) !== array_map($identity, $entries)) {
                 throw new ServiceError(
                     'PLAYLIST_CHANGED',
                     'Playlist order or membership differs from the saved plan. Reconcile this operation before starting a new one.',
                     [],
-                    409
+                    409,
                 );
             }
         }
     }
 
+    /**
+     * @param WorkflowAction $action
+     * @return array<string, mixed>
+     */
     private function dispatchAction(string $user, string $playlist, array $action, string $operation): array
     {
         if ($action['type'] === 'remove') {
@@ -159,7 +185,7 @@ final class Workflows
 
         $snippet = [
             'playlistId' => $playlist,
-            'resourceId' => ['kind' => 'youtube#video', 'videoId' => $action['video_id']]
+            'resourceId' => ['kind' => 'youtube#video', 'videoId' => $action['video_id']],
         ];
         if ($action['type'] === 'move') {
             $snippet['position'] = $action['position'];
@@ -171,20 +197,24 @@ final class Workflows
             $action['type'] === 'move' ? 'playlistItems.update' : 'playlistItems.insert',
             ['part' => 'snippet'],
             $body,
-            operation: $operation
+            operation: $operation,
         );
         if (!is_string($result['id'] ?? null) || $result['id'] === '') {
             throw new ServiceError(
                 'UPSTREAM_UNCERTAIN',
                 'Playlist change returned no occurrence ID. Reconcile before retrying.',
                 [],
-                502
+                502,
             );
         }
 
         return ['id' => $result['id']];
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @return WorkflowPlan
+     */
     private function plan(string $user, string $channel, string $tool, array $arguments): array
     {
         $deadline = microtime(true) + 45;
@@ -219,20 +249,25 @@ final class Workflows
                 'PLAYLIST_SCAN_LIMIT',
                 'The target would exceed the 1000-entry workflow limit. No new write was dispatched.',
                 [],
-                409
+                409,
             );
         }
 
         return ['before' => $before, 'actions' => $actions, 'skipped' => $skipped];
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param Snapshot $before
+     * @return array{Snapshot, list<WorkflowAction>, int}
+     */
     private function sourceActions(
         string $user,
         string $channel,
         string $tool,
         array $arguments,
         array $before,
-        float $deadline
+        float $deadline,
     ): array {
         $target = $arguments['playlist_id'] ?? null;
         $actions = [];
@@ -268,7 +303,7 @@ final class Workflows
                     $before[$source] = $entries;
                 }
 
-                $entries = array_map(fn ($id) => $byId[$id], $arguments['playlist_item_ids']);
+                $entries = array_map(fn($id) => $byId[$id], $arguments['playlist_item_ids']);
             }
 
             foreach ($entries as $entry) {
@@ -303,6 +338,10 @@ final class Workflows
         return [$before, $actions, $skipped];
     }
 
+    /**
+     * @param list<array<string, mixed>> $entries
+     * @return list<WorkflowAction>
+     */
     private function duplicateActions(array $entries, string $keep): array
     {
         $entries = $keep === 'last' ? array_reverse($entries) : $entries;
@@ -323,6 +362,11 @@ final class Workflows
         return $actions;
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param list<array<string, mixed>> $entries
+     * @return list<WorkflowAction>
+     */
     private function reorderActions(array $entries, string $tool, array $arguments): array
     {
         $actions = [];
@@ -345,6 +389,11 @@ final class Workflows
         return $actions;
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param list<array<string, mixed>> $entries
+     * @return list<array<string, mixed>>
+     */
     private function orderedEntries(array $entries, string $tool, array $arguments): array
     {
         if ($tool === 'reorder_playlist') {
@@ -357,13 +406,13 @@ final class Workflows
             }
 
             $byId = array_column($entries, null, 'id');
-            $desired = array_map(fn ($id) => $byId[$id], $arguments['playlist_item_ids']);
+            $desired = array_map(fn($id) => $byId[$id], $arguments['playlist_item_ids']);
         } else {
             $desired = $entries;
             $order = $arguments['order'];
             if (
                 str_starts_with($order, 'added_')
-                && array_filter($entries, fn ($entry) => $entry['added_at'] === null)
+                && array_filter($entries, fn($entry) => $entry['added_at'] === null)
             ) {
                 throw new ServiceError('YOUTUBE_RESPONSE_INVALID', 'Playlist-added timestamps were not returned.', [], 502);
             }
@@ -386,13 +435,18 @@ final class Workflows
                     }
 
                     return $comparison ?: $left['position'] <=> $right['position'];
-                }
+                },
             );
         }
 
         return $desired;
     }
 
+    /**
+     * @param WorkflowAction $action
+     * @param Snapshot $expected
+     * @param array<string, mixed> $result
+     */
     private function apply(array &$expected, array $action, array $result, string $target): void
     {
         $playlist = $action['playlist_id'] ?? $target;
@@ -414,6 +468,10 @@ final class Workflows
         }
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @return array<string, mixed>
+     */
     private function read(string $user, string $tool, array $arguments): array
     {
         if ($tool === 'compare_playlists') {
@@ -428,7 +486,7 @@ final class Workflows
                 'only_in_right' => array_keys(array_diff_key($rightCounts, $leftCounts)),
                 'left_occurrence_counts' => $leftCounts,
                 'right_occurrence_counts' => $rightCounts,
-                'complete' => true
+                'complete' => true,
             ];
         }
 
@@ -438,22 +496,22 @@ final class Workflows
             [
                 'part' => 'snippet,contentDetails',
                 'playlistId' => $arguments['playlist_id'],
-                'maxResults' => $arguments['page_size'] ?? 50
+                'maxResults' => $arguments['page_size'] ?? 50,
             ]
-                + (isset($arguments['page_token']) ? ['pageToken' => $arguments['page_token']] : [])
+                + (isset($arguments['page_token']) ? ['pageToken' => $arguments['page_token']] : []),
         );
         $entries = array_map(
-            fn ($entry) => [
+            fn($entry) => [
                 'playlist_item_id' => $entry['id'],
                 'video_id' => $entry['contentDetails']['videoId'] ?? $entry['snippet']['resourceId']['videoId'] ?? null,
                 'title' => $entry['snippet']['title'] ?? '',
-                'position' => $entry['snippet']['position'] ?? null
+                'position' => $entry['snippet']['position'] ?? null,
             ],
-            $response['items'] ?? []
+            $response['items'] ?? [],
         );
         $result = [
             'next_page_token' => $response['nextPageToken'] ?? null,
-            'complete' => !isset($response['nextPageToken'])
+            'complete' => !isset($response['nextPageToken']),
         ];
         if ($tool === 'audit_playlist') {
             $ids = array_values(array_unique(array_filter(array_column($entries, 'video_id'), 'is_string')));
@@ -476,7 +534,7 @@ final class Workflows
 
             return $result + [
                 'entries' => $entries,
-                'note' => 'Omitted metadata does not distinguish deletion from lack of access. No entries were removed.'
+                'note' => 'Omitted metadata does not distinguish deletion from lack of access. No entries were removed.',
             ];
         }
 
@@ -488,9 +546,9 @@ final class Workflows
             return $result + [
                 'format' => $format,
                 'urls' => array_map(
-                    fn ($entry) => $entry['video_id'] ? 'https://www.youtube.com/watch?v=' . $entry['video_id'] : null,
-                    $entries
-                )
+                    fn($entry) => $entry['video_id'] ? 'https://www.youtube.com/watch?v=' . $entry['video_id'] : null,
+                    $entries,
+                ),
             ];
         }
 
@@ -499,6 +557,9 @@ final class Workflows
         return $result + ['format' => 'csv', 'csv' => $csv];
     }
 
+    /**
+     * @param list<array<string, mixed>> $entries
+     */
     private function exportCsv(array $entries): string
     {
         $stream = fopen('php://temp', 'w+');

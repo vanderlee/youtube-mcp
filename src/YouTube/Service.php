@@ -16,10 +16,14 @@ final class Service
         private Google $google,
         private Api $api,
         private Receipts $receipts,
-        private Lock $locks
-    ) {
-    }
+        private Lock $locks,
+    ) {}
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param list<string> $scopes
+     * @return array<string, mixed>
+     */
     public function execute(string $user, array $scopes, string $tool, array $arguments): array
     {
         if (!in_array(Tools::scope($tool), $scopes, true)) {
@@ -41,12 +45,16 @@ final class Service
                     $connection['generation'],
                     $tool,
                     $arguments,
-                    fn ($step, $operation, $done) => $this->write($user, $connection, $tool, $arguments, $step, $operation)
+                    fn($step, $operation, $done) => $this->write($user, $connection, $tool, $arguments, $step, $operation),
                 );
-            }
+            },
         );
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @return array<string, mixed>
+     */
     public static function searchParameters(array $arguments): array
     {
         $map = [
@@ -55,7 +63,7 @@ final class Service
             'published_before' => 'publishedBefore',
             'order' => 'order',
             'duration' => 'videoDuration',
-            'category_id' => 'videoCategoryId'
+            'category_id' => 'videoCategoryId',
         ];
         if (
             isset($arguments['published_after'], $arguments['published_before'])
@@ -74,6 +82,11 @@ final class Service
         return $result;
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array{channel_id: string, generation: string} $connection
+     * @return array<string, mixed>
+     */
     private function read(string $user, array $connection, string $tool, array $arguments): array
     {
         $page = ['maxResults' => $arguments['page_size'] ?? 25] + (isset($arguments['page_token']) ? ['pageToken' => $arguments['page_token']] : []);
@@ -83,14 +96,14 @@ final class Service
                 'videos.list',
                 [
                     'part' => 'snippet,contentDetails,statistics,status',
-                    'id' => implode(',', $arguments['video_ids'])
-                ]
+                    'id' => implode(',', $arguments['video_ids']),
+                ],
             );
 
             return [
                 'items' => $response['items'] ?? [],
                 'not_returned_video_ids' => array_values(array_diff($arguments['video_ids'], array_column($response['items'] ?? [], 'id'))),
-                'availability_note' => 'Omitted videos may be private, deleted or inaccessible; metadata alone does not prove playback availability.'
+                'availability_note' => 'Omitted videos may be private, deleted or inaccessible; metadata alone does not prove playback availability.',
             ];
         }
         if ($tool === 'get_channel') {
@@ -106,7 +119,7 @@ final class Service
             $channel = $this->api->read(
                 $user,
                 'channels.list',
-                ['part' => 'contentDetails', 'id' => $arguments['channel_id'] ?? $connection['channel_id']]
+                ['part' => 'contentDetails', 'id' => $arguments['channel_id'] ?? $connection['channel_id']],
             );
             $uploads = $channel['items'][0]['contentDetails']['relatedPlaylists']['uploads'] ?? null;
             if (!is_string($uploads) || $uploads === '') {
@@ -116,7 +129,7 @@ final class Service
             return $this->api->read(
                 $user,
                 'playlistItems.list',
-                ['part' => 'snippet,contentDetails', 'playlistId' => $uploads] + $page
+                ['part' => 'snippet,contentDetails', 'playlistId' => $uploads] + $page,
             );
         }
         if ($tool === 'search_channels' || $tool === 'search_playlists') {
@@ -126,9 +139,9 @@ final class Service
                 [
                     'part' => 'snippet',
                     'type' => $tool === 'search_channels' ? 'channel' : 'playlist',
-                    'q' => $arguments['query']
+                    'q' => $arguments['query'],
                 ]
-                    + $page + self::searchParameters($arguments)
+                    + $page + self::searchParameters($arguments),
             );
         }
         if ($tool === 'list_comments') {
@@ -139,8 +152,8 @@ final class Service
                     'part' => 'snippet,replies',
                     'videoId' => $arguments['video_id'],
                     'textFormat' => 'plainText',
-                    'order' => $arguments['order'] ?? 'time'
-                ] + $page
+                    'order' => $arguments['order'] ?? 'time',
+                ] + $page,
             )
                 + ['embedded_replies_may_be_incomplete' => true];
         }
@@ -148,21 +161,26 @@ final class Service
         return $this->api->read(
             $user,
             'comments.list',
-            ['part' => 'snippet', 'parentId' => $arguments['comment_id'], 'textFormat' => 'plainText'] + $page
+            ['part' => 'snippet', 'parentId' => $arguments['comment_id'], 'textFormat' => 'plainText'] + $page,
         );
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array{channel_id: string, generation: string} $connection
+     * @return array<string, mixed>
+     */
     private function write(
         string $user,
         array $connection,
         string $tool,
         array $arguments,
         callable $step,
-        string $operation
+        string $operation,
     ): array {
         [$method, $params, $body] = $this->commentRequest($user, $connection, $tool, $arguments);
 
-        $result = $step('comment-change', fn () => $this->api->call($user, $method, $params, $body, operation: $operation));
+        $result = $step('comment-change', fn() => $this->api->call($user, $method, $params, $body, operation: $operation));
         if (
             in_array($tool, ['post_comment', 'reply_to_comment'], true)
             && (!is_string($result['id'] ?? null)
@@ -172,13 +190,18 @@ final class Service
                 'UPSTREAM_UNCERTAIN',
                 'Google did not return the created comment ID. Reconcile before retrying.',
                 [],
-                502
+                502,
             );
         }
 
         return ['changed' => true, 'comment_id' => $result['id'] ?? $arguments['comment_id'] ?? null];
     }
 
+    /**
+     * @param array<string, mixed> $arguments
+     * @param array{channel_id: string, generation: string} $connection
+     * @return array{string, array<string, mixed>, array<string, mixed>|null}
+     */
     private function commentRequest(string $user, array $connection, string $tool, array $arguments): array
     {
         $method = '';
@@ -189,8 +212,8 @@ final class Service
             $body = [
                 'snippet' => [
                     'videoId' => $arguments['video_id'],
-                    'topLevelComment' => ['snippet' => ['textOriginal' => $arguments['text']]]
-                ]
+                    'topLevelComment' => ['snippet' => ['textOriginal' => $arguments['text']]],
+                ],
             ];
         } elseif ($tool === 'reply_to_comment') {
             $method = 'comments.insert';
@@ -225,12 +248,17 @@ final class Service
         return [$method, $params, $body];
     }
 
+    /**
+     * @param array<string, array<string, mixed>> $byId
+     * @param array<string, mixed> $comments
+     * @param list<string> $ids
+     */
     private function requireOwnedCommentVideos(
         string $user,
         string $channel,
         array $comments,
         array $byId,
-        array $ids
+        array $ids,
     ): void {
         $videos = array_unique(array_column(array_column($comments['items'], 'snippet'), 'videoId'));
         if (count($videos) === 0) {
@@ -246,7 +274,7 @@ final class Service
                     'NOT_VIDEO_OWNER',
                     'Only comments on videos owned by your confirmed channel may be moderated.',
                     [],
-                    403
+                    403,
                 );
             }
         }

@@ -20,15 +20,21 @@ final class Vault
         $this->key = $key;
     }
 
+    /**
+     * @param array<array-key, mixed> $value
+     */
     public function encrypt(array $value): string
     {
         $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
 
         return base64_encode(
-            $nonce . sodium_crypto_secretbox(json_encode($value, JSON_THROW_ON_ERROR), $nonce, $this->key)
+            $nonce . sodium_crypto_secretbox(json_encode($value, JSON_THROW_ON_ERROR), $nonce, $this->key),
         );
     }
 
+    /**
+     * @return array<array-key, mixed>
+     */
     public function decrypt(string $value): array
     {
         $raw = base64_decode($value, true);
@@ -42,7 +48,7 @@ final class Vault
         $plain = sodium_crypto_secretbox_open(
             substr($raw, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES),
             substr($raw, 0, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES),
-            $this->key
+            $this->key,
         );
         if ($plain === false) {
             throw new RuntimeException('Cannot decrypt credentials.');

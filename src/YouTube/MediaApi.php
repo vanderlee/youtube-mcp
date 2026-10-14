@@ -16,24 +16,29 @@ final class MediaApi
         private Budget $budget,
         private Vault $vault,
         private MediaClient $http,
-        private ?ResponseCache $cache = null
-    ) {
-    }
+        private ?ResponseCache $cache = null,
+    ) {}
 
+    /**
+     * @param array<string, mixed> $asset
+     * @param array<string, mixed> $metadata
+     * @param array<string, mixed> $params
+     * @return array<string, mixed>
+     */
     public function upload(
         string $user,
         string $method,
         array $params,
         array $metadata,
         array $asset,
-        callable $step
+        callable $step,
     ): array {
         $resource = explode('.', $method)[0];
         if (
             !in_array(
                 $method,
                 ['videos.insert', 'captions.insert', 'captions.update', 'thumbnails.set', 'channelBanners.insert'],
-                true
+                true,
             )
         ) {
             throw new ServiceError('INVALID_ARGUMENT', 'Unsupported upload method.');
@@ -54,9 +59,9 @@ final class MediaApi
                             'Authorization: Bearer ' . $this->google->accessToken($user),
                             'Content-Type: application/json',
                             'X-Upload-Content-Type: ' . $asset['mime'],
-                            'X-Upload-Content-Length: ' . $asset['bytes']
+                            'X-Upload-Content-Length: ' . $asset['bytes'],
                         ],
-                        json_encode((object) $metadata, JSON_THROW_ON_ERROR)
+                        json_encode((object) $metadata, JSON_THROW_ON_ERROR),
                     );
                 } catch (ServiceError $error) {
                     $this->budget->outcome($id, 'uncertain');
@@ -69,7 +74,7 @@ final class MediaApi
                 self::validateLocation($location);
 
                 return ['session' => $this->vault->encrypt(['location' => $location])];
-            }
+            },
         );
         $location = $this->vault->decrypt($session['session'])['location'];
         self::validateLocation($location);
@@ -86,9 +91,9 @@ final class MediaApi
                         [
                             'Authorization: Bearer ' . $access,
                             'Content-Type: ' . $asset['mime'],
-                            'Content-Length: ' . $asset['bytes']
+                            'Content-Length: ' . $asset['bytes'],
                         ],
-                        path: $asset['path']
+                        path: $asset['path'],
                     );
                 } finally {
                     $this->cache?->invalidate($user, $method, $params, $metadata, null);
@@ -98,7 +103,7 @@ final class MediaApi
                         'UPSTREAM_UNCERTAIN',
                         'Upload is incomplete. Reconcile its saved receipt; automatic retransmission is disabled.',
                         [],
-                        502
+                        502,
                     );
                 }
 
@@ -109,10 +114,13 @@ final class MediaApi
                 }
                 // Only identifiers and the banner image URL are required by subsequent steps.
                 return array_intersect_key($data, array_flip(['id', 'url']));
-            }
+            },
         );
     }
 
+    /**
+     * @return array{caption_id: string, format: string, content: string}
+     */
     public function caption(string $user, string $id, string $format): array
     {
         $request = $this->budget->dispatch($user, 'captions.download');
@@ -120,7 +128,7 @@ final class MediaApi
             $response = $this->http->exchange(
                 'GET',
                 'https://www.googleapis.com/youtube/v3/captions/' . rawurlencode($id) . '?tfmt=' . rawurlencode($format),
-                ['Authorization: Bearer ' . $this->google->accessToken($user)]
+                ['Authorization: Bearer ' . $this->google->accessToken($user)],
             );
         } catch (ServiceError $error) {
             $this->budget->outcome($request, 'uncertain');
@@ -151,7 +159,7 @@ final class MediaApi
                 'UPSTREAM_UNCERTAIN',
                 'Google returned an unsupported upload session URL; no file was transmitted.',
                 [],
-                502
+                502,
             );
         }
     }
@@ -166,7 +174,7 @@ final class MediaApi
                 'YOUTUBE_MEDIA_REJECTED',
                 'Google rejected the media request.',
                 ['upstream_http_status' => $status],
-                400
+                400,
             );
         }
     }

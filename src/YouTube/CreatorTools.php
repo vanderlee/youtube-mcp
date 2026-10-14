@@ -19,9 +19,12 @@ final class CreatorTools
         'create_channel_section',
         'update_channel_section',
         'delete_channel_section',
-        'delete_media_asset'
+        'delete_media_asset',
     ];
 
+    /**
+     * @return array<string, array{string, array<string, array<string, mixed>>, list<string>}>
+     */
     public static function specs(): array
     {
         $video = ['type' => 'string', 'pattern' => '^[A-Za-z0-9_-]{11}$'];
@@ -29,7 +32,7 @@ final class CreatorTools
         $asset = ['type' => 'string', 'pattern' => '^[a-f0-9]{48}$'];
         $operationProperties = [
             'operation_key' => ['type' => 'string', 'pattern' => '^[A-Za-z0-9._-]{8,128}$'],
-            'resume' => ['type' => 'boolean']
+            'resume' => ['type' => 'boolean'],
         ];
         $title = ['type' => 'string', 'minLength' => 1, 'maxLength' => 100];
         $description = ['type' => 'string', 'maxLength' => 5000];
@@ -41,9 +44,9 @@ final class CreatorTools
             'tags' => [
                 'type' => 'array',
                 'maxItems' => 30,
-                'items' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 100]
+                'items' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 100],
             ],
-            'privacy' => $privacy
+            'privacy' => $privacy,
         ];
         $caption = ['video_id' => $video, 'caption_id' => $id];
         $section = [
@@ -56,55 +59,55 @@ final class CreatorTools
                 'minItems' => 1,
                 'maxItems' => 10,
                 'uniqueItems' => true,
-                'items' => ['type' => 'string', 'pattern' => '^UC[A-Za-z0-9_-]{22}$']
-            ]
+                'items' => ['type' => 'string', 'pattern' => '^UC[A-Za-z0-9_-]{22}$'],
+            ],
         ];
 
         return [
             'list_video_categories' => [
                 'Read assignable YouTube video categories for a region.',
                 ['region' => ['type' => 'string', 'pattern' => '^[A-Z]{2}$']],
-                []
+                [],
             ],
             'list_media_assets' => [
                 'List up to 50 active, user-owned staged media asset IDs. Files are staged through the private dashboard and expire after 24 hours.',
                 [],
-                []
+                [],
             ],
             'delete_media_asset' => [
                 'Delete a staged media asset owned by your current connection; does not delete any YouTube video.',
                 ['asset_id' => $asset] + $operationProperties,
-                ['asset_id', 'operation_key']
+                ['asset_id', 'operation_key'],
             ],
             'upload_video' => [
                 'Upload a staged video (max 64 MiB), private by default. No automatic retransmission after interruption. Google may enforce private-only uploads for unverified API projects.',
                 ['asset_id' => $asset] + $metadata + $operationProperties,
-                ['asset_id', 'title', 'operation_key']
+                ['asset_id', 'title', 'operation_key'],
             ],
             'update_video' => [
                 'Update only supplied metadata/privacy of a video owned by your confirmed channel.',
                 ['video_id' => $video] + $metadata + $operationProperties,
-                ['video_id', 'operation_key']
+                ['video_id', 'operation_key'],
             ],
             'delete_video' => [
                 'Permanently delete a video owned by your confirmed channel when explicitly requested.',
                 ['video_id' => $video] + $operationProperties,
-                ['video_id', 'operation_key']
+                ['video_id', 'operation_key'],
             ],
             'set_video_thumbnail' => [
                 'Set an owned video thumbnail from a staged PNG/JPEG asset (max 2 MiB).',
                 ['video_id' => $video, 'asset_id' => $asset] + $operationProperties,
-                ['video_id', 'asset_id', 'operation_key']
+                ['video_id', 'asset_id', 'operation_key'],
             ],
             'list_captions' => [
                 'List caption tracks for a video owned by your confirmed channel; this is not a public transcript service.',
                 ['video_id' => $video],
-                ['video_id']
+                ['video_id'],
             ],
             'download_caption' => [
                 'Download an owned video caption as SRT or VTT, bounded to 1 MiB.',
                 $caption + ['format' => ['type' => 'string', 'enum' => ['srt', 'vtt']]],
-                ['video_id', 'caption_id']
+                ['video_id', 'caption_id'],
             ],
             'upload_caption' => [
                 'Upload a staged timed SRT/VTT caption for an owned video. Automatic caption synchronization is not used.',
@@ -113,23 +116,23 @@ final class CreatorTools
                     'asset_id' => $asset,
                     'language' => ['type' => 'string', 'pattern' => '^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$'],
                     'name' => ['type' => 'string', 'maxLength' => 150],
-                    'is_draft' => ['type' => 'boolean']
+                    'is_draft' => ['type' => 'boolean'],
                 ] + $operationProperties,
-                ['video_id', 'asset_id', 'language', 'operation_key']
+                ['video_id', 'asset_id', 'language', 'operation_key'],
             ],
             'update_caption' => [
                 'Change an owned caption track name/draft state, optionally replacing its timed contents using an asset.',
                 $caption + [
                     'asset_id' => $asset,
                     'name' => ['type' => 'string', 'maxLength' => 150],
-                    'is_draft' => ['type' => 'boolean']
+                    'is_draft' => ['type' => 'boolean'],
                 ] + $operationProperties,
-                ['video_id', 'caption_id', 'operation_key']
+                ['video_id', 'caption_id', 'operation_key'],
             ],
             'delete_caption' => [
                 'Delete a caption track from a video owned by your confirmed channel.',
                 $caption + $operationProperties,
-                ['video_id', 'caption_id', 'operation_key']
+                ['video_id', 'caption_id', 'operation_key'],
             ],
             'update_channel_branding' => [
                 'Change supplied description, keywords, country or unsubscribed trailer of your confirmed channel, preserving other branding fields.',
@@ -137,30 +140,30 @@ final class CreatorTools
                     'description' => ['type' => 'string', 'maxLength' => 1000],
                     'keywords' => ['type' => 'string', 'maxLength' => 500],
                     'country' => ['type' => 'string', 'pattern' => '^[A-Z]{2}$'],
-                    'trailer_video_id' => $video
+                    'trailer_video_id' => $video,
                 ] + $operationProperties,
-                ['operation_key']
+                ['operation_key'],
             ],
             'set_channel_banner' => [
                 'Upload and apply a staged PNG/JPEG banner to your confirmed channel. Google enforces image dimensions.',
                 ['asset_id' => $asset] + $operationProperties,
-                ['asset_id', 'operation_key']
+                ['asset_id', 'operation_key'],
             ],
             'list_channel_sections' => ['Read your confirmed channel presentation sections.', [], []],
             'create_channel_section' => [
                 'Create a playlist/channel presentation section on your confirmed channel.',
                 $section + $operationProperties,
-                ['type', 'operation_key']
+                ['type', 'operation_key'],
             ],
             'update_channel_section' => [
                 'Update only supplied properties of a section owned by your confirmed channel.',
                 ['section_id' => $id] + $section + $operationProperties,
-                ['section_id', 'operation_key']
+                ['section_id', 'operation_key'],
             ],
             'delete_channel_section' => [
                 'Delete a presentation section owned by your confirmed channel.',
                 ['section_id' => $id] + $operationProperties,
-                ['section_id', 'operation_key']
+                ['section_id', 'operation_key'],
             ],
         ];
     }

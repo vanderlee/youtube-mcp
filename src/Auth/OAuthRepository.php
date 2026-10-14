@@ -23,9 +23,7 @@ final class OAuthRepository implements
     RefreshTokenRepositoryInterface,
     ScopeRepositoryInterface
 {
-    public function __construct(private Database $db, private string $issuer)
-    {
-    }
+    public function __construct(private Database $db, private string $issuer) {}
 
     public function getClientEntity(string $clientIdentifier): ?ClientEntityInterface
     {
@@ -35,7 +33,7 @@ final class OAuthRepository implements
             $row['id'],
             $row['name'],
             json_decode($row['redirect_uris'], true),
-            (bool) $row['confidential']
+            (bool) $row['confidential'],
         ) : null;
     }
 
@@ -63,7 +61,7 @@ final class OAuthRepository implements
         string $grantType,
         ClientEntityInterface $clientEntity,
         ?string $userIdentifier = null,
-        ?string $authCodeId = null
+        ?string $authCodeId = null,
     ): array {
         return $scopes;
     }
@@ -71,7 +69,7 @@ final class OAuthRepository implements
     public function getNewToken(
         ClientEntityInterface $clientEntity,
         array $scopes,
-        ?string $userIdentifier = null
+        ?string $userIdentifier = null,
     ): AccessTokenEntityInterface {
         $token = new AccessToken($this->issuer);
         $token->setClient($clientEntity);
@@ -90,7 +88,7 @@ final class OAuthRepository implements
             $accessTokenEntity->getIdentifier(),
             $accessTokenEntity->getUserIdentifier(),
             $accessTokenEntity->getClient()->getIdentifier(),
-            $accessTokenEntity->getExpiryDateTime()->getTimestamp()
+            $accessTokenEntity->getExpiryDateTime()->getTimestamp(),
         );
     }
 
@@ -106,11 +104,11 @@ final class OAuthRepository implements
             $authCodeEntity->getIdentifier(),
             $authCodeEntity->getUserIdentifier(),
             $authCodeEntity->getClient()->getIdentifier(),
-            $authCodeEntity->getExpiryDateTime()->getTimestamp()
+            $authCodeEntity->getExpiryDateTime()->getTimestamp(),
         );
     }
 
-    public function getNewRefreshToken(): ?RefreshTokenEntityInterface
+    public function getNewRefreshToken(): RefreshTokenEntityInterface
     {
         return new RefreshToken();
     }
@@ -123,7 +121,7 @@ final class OAuthRepository implements
             $refreshTokenEntity->getIdentifier(),
             $accessToken->getUserIdentifier(),
             $accessToken->getClient()->getIdentifier(),
-            $refreshTokenEntity->getExpiryDateTime()->getTimestamp()
+            $refreshTokenEntity->getExpiryDateTime()->getTimestamp(),
         );
     }
 
@@ -161,7 +159,7 @@ final class OAuthRepository implements
     {
         $this->db->execute(
             'INSERT INTO oauth_tokens(id,kind,user_id,client_id,expires_at) VALUES (?,?,?,?,?)',
-            [hash('sha256', $id), $kind, $user, $client, $expiry]
+            [hash('sha256', $id), $kind, $user, $client, $expiry],
         );
     }
 
