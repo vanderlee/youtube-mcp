@@ -21,7 +21,7 @@ final class View
             'title' => $title,
             'body' => $body,
             'signedIn' => !empty($_SESSION['user']),
-            'brandName' => $this->config->get('BRAND_NAME', 'toyls'),
+            'brandName' => $this->config->get('BRAND_NAME', 'Toyls'),
             'brandTagline' => $this->config->get('BRAND_TAGLINE', 'tools, toys & toils'),
         ]);
 

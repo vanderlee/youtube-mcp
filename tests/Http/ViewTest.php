@@ -53,7 +53,7 @@ test('template names cannot escape the views directory', function (): void {
 test('browser branding keeps its defaults and escapes configured values everywhere', function (): void {
     $directory = dirname(__DIR__, 2) . '/views';
     $default = (string) (new View($directory, $this->config()))->page('Welcome', 'welcome')->getBody();
-    expect($default)->toContain('<title>Welcome · toyls</title>', '<strong>toyls</strong>', '<small>tools, toys &amp; toils</small>', '<footer>toyls · tools, toys &amp; toils</footer>');
+    expect($default)->toContain('<title>Welcome · Toyls</title>', '<strong>Toyls</strong>', '<small>tools, toys &amp; toils</small>', '<footer>Toyls · tools, toys &amp; toils</footer>');
 
     $config = $this->config([
         'BRAND_NAME' => 'Brand "<&',
@@ -66,5 +66,5 @@ test('browser branding keeps its defaults and escapes configured values everywhe
         'aria-label="Brand &quot;&lt;&amp; YouTube home"',
         '<small>&lt;script&gt;alert(&quot;tagline&quot;)&lt;/script&gt;</small>',
         '<footer>Brand &quot;&lt;&amp; · &lt;script&gt;alert(&quot;tagline&quot;)&lt;/script&gt;</footer>',
-    )->not->toContain('<script>', 'toyls', 'tools, toys');
+    )->not->toContain('<script>', 'Toyls', 'tools, toys');
 });
