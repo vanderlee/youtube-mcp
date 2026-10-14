@@ -2,15 +2,15 @@
 
 ## To do
 
-- Add support for other LLM's besides ChatGTP.
-- Create full suite of unittests.
-- Simply rollout on Plesk (Docker?).
-- Enable easy rollout on other platforms.
-- Use included PHP files as templates for the HTML in APP.php
-
-## Ongoing
-
-- Reduce API calls as much as possible.
-- Reduce Chat token usage as much as possible.
-- Increase performance.
-- Reduce overhead.
+- Add support for other LLM's besides ChatGTP
+- Better tests
+- Enable rollout on other platforms
+- Refactor code
+  - Readability
+  - Formal scanners
+  - App.php; use templates (PHP-as-template?) and decent routing
+  - Simplify unnecessary complexity
+  - Split up large methods into smaller ones
+  - Reduce cognitive load on methods
+- CI Pipeline
+- Detach "Toyls" branding
