@@ -11,7 +11,6 @@ use Mcp\Server\ClientGateway;
 use Mcp\Server\Handler\ToolHandlerInterface;
 use stdClass;
 use YouTubeMcp\Auth\OAuth;
-use YouTubeMcp\Playlist\Service;
 use YouTubeMcp\ServiceError;
 
 final class Tools
@@ -40,7 +39,7 @@ final class Tools
      *     generation: string|null
      * } $identity
      */
-    public static function handler(Service $service, array $identity, string $name, OAuth $oauth): ToolHandlerInterface
+    public static function handler(Dispatcher $service, array $identity, string $name, OAuth $oauth): ToolHandlerInterface
     {
         return new class ($service, $identity, $name, $oauth) implements ToolHandlerInterface {
             /**
@@ -54,7 +53,7 @@ final class Tools
              * } $identity
              */
             public function __construct(
-                private Service $service,
+                private Dispatcher $service,
                 private array $identity,
                 private string $name,
                 private OAuth $oauth,
@@ -251,7 +250,7 @@ final class Tools
      */
     private static function definition(string $name, string $toolDescription, array $properties, array $required): Tool
     {
-        $write = in_array($name, Service::WRITES, true);
+        $write = ToolCatalog::isWrite($name);
         if (!$write) {
             $properties['response_detail'] = [
                 'type' => 'string',
@@ -275,7 +274,7 @@ final class Tools
                 'securitySchemes' => [
                     [
                         'type' => 'oauth2',
-                        'scopes' => $name === 'get_operation' ? [] : [Service::scope($name)],
+                        'scopes' => $name === 'get_operation' ? [] : [ToolCatalog::scope($name)],
                     ],
                 ],
             ],

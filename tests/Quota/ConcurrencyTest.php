@@ -6,7 +6,7 @@ namespace YouTubeMcp\Tests\Quota;
 
 use YouTubeMcp\Storage\Database;
 
-test('separate php workers are not locally quota limited', function (): void {
+test('separate php workers record usage without lost updates or local admission limits', function (): void {
     $dir = $this->tempDir();
     $db = new Database($dir . '/test.sqlite');
     $db->migrate(dirname(__DIR__, 2));
@@ -22,7 +22,7 @@ test('separate php workers are not locally quota limited', function (): void {
             $command = array_merge(
                 [PHP_BINARY],
                 $flags,
-                [dirname(__DIR__) . '/concurrent-reserve.php', $dir . '/test.sqlite', $user],
+                [dirname(__DIR__) . '/concurrent-usage.php', $dir . '/test.sqlite', $user],
             );
             $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
             $this->assertIsResource($process);
@@ -38,7 +38,18 @@ test('separate php workers are not locally quota limited', function (): void {
         }
         $workers = [];
         sort($results);
-        $this->assertSame(['admitted', 'admitted'], $results);
+        $this->assertSame(['recorded', 'recorded'], $results);
+        $db = new Database($dir . '/test.sqlite');
+        $usage = new \YouTubeMcp\Quota\Usage($db);
+        $this->assertSame(1000, $usage->status('a')['buckets']['general']['project_spent']);
+        foreach (['a', 'b'] as $user) {
+            $this->assertSame(500, $usage->status($user)['buckets']['general']['user_spent']);
+            $this->assertSame(10, (int) $db->one(
+                'SELECT COUNT(*) AS n FROM quota_requests WHERE user_id=? AND operation_id=? AND state=?',
+                [$user, 'fixture-' . $user, 'success'],
+            )['n']);
+        }
+        unset($usage, $db);
     } finally {
         foreach ($workers as [$process, $pipes]) {
             foreach ($pipes as $p) {

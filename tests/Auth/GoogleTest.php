@@ -6,7 +6,7 @@ namespace YouTubeMcp\Tests\Auth;
 
 use YouTubeMcp\Auth\{Google, Vault};
 use YouTubeMcp\Http\Client;
-use YouTubeMcp\Quota\Budget;
+use YouTubeMcp\Quota\Usage;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Lock;
 
@@ -57,12 +57,12 @@ test('deleting and recreating user preserves usage history', function (): void {
     $g = new Google($cfg, $db, new Vault($cfg->get('APP_KEY')), new Client(), new Lock($this->dir));
     $identity = ['subject' => 'https://accounts.google.com|example', 'email' => 'person@example.test'];
     $first = $g->signIn($identity);
-    $budget = new Budget($db, $cfg);
-    $budget->dispatch($first, 'videos.list');
+    $usage = new Usage($db);
+    $usage->dispatch($first, 'videos.list');
     $db->execute('DELETE FROM users WHERE id=?', [$first]);
     $second = $g->signIn($identity);
     $this->assertSame($first, $second);
-    $this->assertSame(1, $budget->status($second)['buckets']['general']['user_spent']);
+    $this->assertSame(1, $usage->status($second)['buckets']['general']['user_spent']);
 });
 
 test('refresh updates only the connected users encrypted tokens', function (): void {

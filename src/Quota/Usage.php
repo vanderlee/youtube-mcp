@@ -8,11 +8,10 @@ use Closure;
 use DateTimeImmutable;
 use DateTimeZone;
 use LogicException;
-use YouTubeMcp\Config;
 use YouTubeMcp\Storage\Database;
 
 /** Local usage estimates only. YouTube enforces all quotas and rate limits. */
-final class Budget
+final class Usage
 {
     public const COSTS = [
         'videos.rate' => 50,
@@ -58,18 +57,10 @@ final class Budget
 
     private Closure $clock;
 
-    public function __construct(private Database $db, Config $config, ?callable $clock = null)
+    public function __construct(private Database $db, ?callable $clock = null)
     {
-        $this->clock = $clock ? Closure::fromCallable($clock) : fn() => time();
+        $this->clock = $clock ? Closure::fromCallable($clock) : static fn() => time();
     }
-
-    // Compatibility with existing operation plans; there are no admission or expiry gates.
-    public function reserve(string $user, int $units): string
-    {
-        return bin2hex(random_bytes(16));
-    }
-
-    public function release(string $id): void {}
 
     public function cleanup(): void
     {
@@ -85,7 +76,6 @@ final class Budget
     public function dispatch(
         string $user,
         string $method,
-        ?string $reservation = null,
         ?string $operation = null,
     ): string {
         [$bucket, $cost] = $this->method($method);

@@ -81,8 +81,13 @@ try {
     }
     if ($command === 'cleanup') {
         $db = new Database($config->storage() . '/service.sqlite');
-        (new \YouTubeMcp\Quota\Budget($db, $config))->cleanup();
-        (new \YouTubeMcp\YouTube\MediaStore($db, $config))->cleanup(new \YouTubeMcp\Storage\Lock($config->storage() . '/locks'));
+        (new \YouTubeMcp\Quota\Usage($db))->cleanup();
+        $deferred = (new \YouTubeMcp\YouTube\MediaStore($db, $config))->cleanup(
+            new \YouTubeMcp\Storage\Lock($config->storage() . '/locks'),
+        );
+        if ($deferred > 0) {
+            echo 'Media cleanup deferred ' . $deferred . " expired asset(s) in busy accounts until the next run.\n";
+        }
         $now = time();
         $cutoff = $now - 86400 * $config->int('OPERATION_RETENTION_DAYS', 7);
         $db->execute('DELETE FROM api_cache WHERE expires_at<=?', [$now]);

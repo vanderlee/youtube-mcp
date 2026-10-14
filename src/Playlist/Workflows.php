@@ -6,6 +6,7 @@ namespace YouTubeMcp\Playlist;
 
 use YouTubeMcp\Auth\Google;
 use YouTubeMcp\Mcp\Arguments;
+use YouTubeMcp\Mcp\ToolCatalog;
 use YouTubeMcp\Operations\Receipts;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Lock;
@@ -38,8 +39,8 @@ final class Workflows
      */
     public function execute(string $user, array $scopes, string $tool, array $a): array
     {
-        $write = in_array($tool, WorkflowTools::WRITES, true);
-        $scope = $write ? 'playlists.write' : 'playlists.read';
+        $write = ToolCatalog::isWrite($tool);
+        $scope = ToolCatalog::scope($tool);
         if (!in_array($scope, $scopes, true)) {
             throw new ServiceError('INSUFFICIENT_SERVICE_SCOPE', 'Authorize ' . $scope . '.', [], 403);
         }

@@ -35,3 +35,6 @@ jobs:
       - name: Run PHPStan
         if: matrix.php == '8.2'
         run: make phpstan
+      - name: Check formatting
+        if: matrix.php == '8.2'
+        run: composer cs-check

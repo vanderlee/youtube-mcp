@@ -9,7 +9,7 @@ $server = stream_socket_server(
     $errno,
     $error,
     STREAM_SERVER_BIND | STREAM_SERVER_LISTEN,
-    $context
+    $context,
 );
 if ($server === false) {
     fwrite(STDERR, "Cannot start loopback TLS fixture.\n");
@@ -34,7 +34,7 @@ foreach ([2, 1] as $connection => $count) {
             [$name, $value] = explode(':', $header, 2);
             $headers[strtolower($name)] = trim($value);
         }
-        $remaining = (int)($headers['content-length'] ?? 0);
+        $remaining = (int) ($headers['content-length'] ?? 0);
         $body = '';
         while ($remaining > 0) {
             $chunk = fread($socket, $remaining);
@@ -48,14 +48,14 @@ foreach ([2, 1] as $connection => $count) {
             'connection' => $connection + 1,
             'method' => explode(' ', $line)[0],
             'authorization' => $headers['authorization'] ?? null,
-            'body' => $body
+            'body' => $body,
         ], JSON_THROW_ON_ERROR);
         $keepAlive = $n + 1 < $count ? 'keep-alive' : 'close';
         fwrite(
             $socket,
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " . strlen(
-                $json
-            ) . "\r\nConnection: $keepAlive\r\n\r\n$json"
+                $json,
+            ) . "\r\nConnection: $keepAlive\r\n\r\n$json",
         );
     }
     fclose($socket);

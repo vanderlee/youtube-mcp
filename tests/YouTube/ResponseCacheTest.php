@@ -15,7 +15,7 @@ test('playlist invalidation preserves other playlists searches and other users',
             ['a', 'first', ['playlist-data', 'playlist:P1']],
             ['a', 'second', ['playlist-data', 'playlist:P2']],
             ['a', 'search', ['search:video']],
-            ['b', 'other-user', ['playlist-data', 'playlist:P1']]
+            ['b', 'other-user', ['playlist-data', 'playlist:P1']],
         ] as [$user, $key, $tags]
     ) {
         $cache->put($user, $key, ['items' => [$key]], 30, $cache->versions($user, $tags));
@@ -59,7 +59,7 @@ test('rating changes retain video metadata and search but clear ratings and like
             'metadata' => 'video:v1',
             'search' => 'search:video',
             'rating' => 'rating:v1',
-            'likes' => 'likes'
+            'likes' => 'likes',
         ] as $key => $tag
     ) {
         $cache->put('a', $key, [], 30, $cache->versions('a', [$tag]));

@@ -24,26 +24,23 @@ trait ExtendedYouTubeFixtures
         $cfg = $this->config();
         $db->execute(
             'INSERT INTO google_connections VALUES (?,?,?,?,?,?)',
-            ['u1', 'UC' . str_repeat('a', 22), 'Fixture', 'unused', 'scope', 'generation']
+            ['u1', 'UC' . str_repeat('a', 22), 'Fixture', 'unused', 'scope', 'generation'],
         );
         $lock = new Lock($this->dir);
         $google = new Google($cfg, $db, new Vault($cfg->get('APP_KEY')), new Client(), $lock);
         $api = new class ($responses) extends Api {
             public array $calls = [];
 
-            public function __construct(private array $responses)
-            {
-            }
+            public function __construct(private array $responses) {}
 
             public function call(
                 string $user,
                 string $method,
                 array $params = [],
                 ?array $body = null,
-                ?string $reservation = null,
                 ?string $operation = null,
                 ?string $token = null,
-                int $ttl = 0
+                int $ttl = 0,
             ): array {
                 $this->calls[] = [$user, $method, $params, $body];
                 $response = array_shift($this->responses);
@@ -81,8 +78,8 @@ test('new reads enforce scopes and validate inputs before using the account', fu
                 ['channels.read'],
                 'get_channel',
                 ['handle' => '@fixture', 'channel_id' => 'UC' . str_repeat('a', 22)],
-                'INVALID_ARGUMENT'
-            ]
+                'INVALID_ARGUMENT',
+            ],
         ] as [$scopes, $tool, $args, $code]
     ) {
         try {
@@ -107,14 +104,14 @@ test('video details report omitted ids and channel uploads follow the returned u
         'u1',
         ['videos.read'],
         'get_video_details',
-        ['video_ids' => ['aaaaaaaaaaa', 'bbbbbbbbbbb']]
+        ['video_ids' => ['aaaaaaaaaaa', 'bbbbbbbbbbb']],
     );
     $this->assertSame(['bbbbbbbbbbb'], $details['not_returned_video_ids']);
     $uploads = $service->execute(
         'u1',
         ['channels.read'],
         'list_channel_uploads',
-        ['page_size' => 10, 'page_token' => 'page']
+        ['page_size' => 10, 'page_token' => 'page'],
     );
     $this->assertSame('next', $uploads['nextPageToken']);
     $this->assertSame('UUfixture', $api->calls[2][2]['playlistId']);
@@ -129,7 +126,7 @@ test('search types and date boundaries stay distinct', function (): void {
         'u1',
         ['channels.read'],
         'search_channels',
-        ['query' => 'artist', 'published_after' => '2020-01-01T00:00:00Z']
+        ['query' => 'artist', 'published_after' => '2020-01-01T00:00:00Z'],
     );
     $service->execute('u1', ['videos.read'], 'search_playlists', ['query' => 'music', 'order' => 'date']);
     $this->assertSame('channel', $api->calls[0][2]['type']);
@@ -139,7 +136,7 @@ test('search types and date boundaries stay distinct', function (): void {
             'u1',
             ['videos.read'],
             'search_playlists',
-            ['query' => 'x', 'published_after' => '2022-01-01T00:00:00Z', 'published_before' => '2020-01-01T00:00:00Z']
+            ['query' => 'x', 'published_after' => '2022-01-01T00:00:00Z', 'published_before' => '2020-01-01T00:00:00Z'],
         );
         $this->fail();
     } catch (ServiceError $error) {
@@ -159,14 +156,14 @@ test('comment writes reject another author and moderation rejects foreign video 
         'u1',
         ['comments.write'],
         'delete_comment',
-        ['comment_id' => 'comment', 'operation_key' => 'delete-comment-test']
+        ['comment_id' => 'comment', 'operation_key' => 'delete-comment-test'],
     );
     $this->assertSame('NOT_COMMENT_AUTHOR', $result['error']['code']);
     $result = $service->execute(
         'u1',
         ['comments.moderate'],
         'moderate_comments',
-        ['comment_ids' => ['comment'], 'status' => 'rejected', 'operation_key' => 'moderate-comment-test']
+        ['comment_ids' => ['comment'], 'status' => 'rejected', 'operation_key' => 'moderate-comment-test'],
     );
     $this->assertSame('NOT_VIDEO_OWNER', $result['error']['code']);
     $this->assertSame(['comments.list', 'comments.list', 'videos.list'], array_column($api->calls, 1));
@@ -198,13 +195,13 @@ test('moderation verifies every selected comments video before dispatch', functi
             'items' => [
                 ['id' => 'first', 'snippet' => ['videoId' => 'aaaaaaaaaaa']],
                 ['id' => 'second', 'snippet' => ['videoId' => 'bbbbbbbbbbb']],
-            ]
+            ],
         ],
         [
             'items' => [
                 ['id' => 'aaaaaaaaaaa', 'snippet' => ['channelId' => $channel]],
                 ['id' => 'bbbbbbbbbbb', 'snippet' => ['channelId' => $foreignVideo ? 'foreign' : $channel]],
-            ]
+            ],
         ],
         [],
     ]);

@@ -183,26 +183,42 @@ final class MediaStore
         $this->db->execute('DELETE FROM media_assets WHERE user_id=?', [$user]);
     }
 
-    public function cleanup(\YouTubeMcp\Storage\Lock $locks): void
+    /** Returns the number of expired assets deferred because their account is busy. */
+    public function cleanup(\YouTubeMcp\Storage\Lock $locks): int
     {
+        $deferred = 0;
         foreach ($this->db->all('SELECT id,user_id FROM media_assets WHERE created_at<=?', [time() - 86400]) as $row) {
-            $locks->run(
-                'account:' . $row['user_id'],
-                function () use ($row) {
-                    if (!preg_match('/^[a-f0-9]{48}$/D', $row['id'])) {
-                        return;
-                    }
-
-                    $path = $this->config->storage() . '/media/' . $row['id'];
-                    if (is_file($path) && !is_link($path) && !unlink($path)) {
-                        throw new ServiceError('STORAGE_UNAVAILABLE', 'Expired media could not be removed.', [], 503);
-                    }
-
-                    $this->db->execute('DELETE FROM media_assets WHERE id=? AND created_at<=?', [$row['id'], time() - 86400]);
-                },
-            );
+            try {
+                $locks->run('account:' . $row['user_id'], fn() => $this->removeExpiredAsset($row['id']));
+            } catch (ServiceError $error) {
+                if ($error->reason !== 'OPERATION_BUSY') {
+                    throw $error;
+                }
+                $deferred++;
+            }
         }
 
+        $this->cleanupOrphans();
+
+        return $deferred;
+    }
+
+    private function removeExpiredAsset(string $id): void
+    {
+        if (!preg_match('/^[a-f0-9]{48}$/D', $id)) {
+            return;
+        }
+
+        $path = $this->config->storage() . '/media/' . $id;
+        if (is_file($path) && !is_link($path) && !unlink($path)) {
+            throw new ServiceError('STORAGE_UNAVAILABLE', 'Expired media could not be removed.', [], 503);
+        }
+
+        $this->db->execute('DELETE FROM media_assets WHERE id=? AND created_at<=?', [$id, time() - 86400]);
+    }
+
+    private function cleanupOrphans(): void
+    {
         $directory = $this->config->storage() . '/media';
         if (!is_dir($directory)) {
             return;

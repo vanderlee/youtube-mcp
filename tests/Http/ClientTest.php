@@ -14,12 +14,14 @@ test('https connections are reused without retaining request bodies or other ide
         $config = $directory . '/openssl.cnf';
         file_put_contents(
             $config,
-            "[req]\ndistinguished_name=dn\n[dn]\n[extensions]\nsubjectAltName=IP:127.0.0.1\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,digitalSignature,keyEncipherment,keyCertSign\nextendedKeyUsage=serverAuth\n"
+            "[req]\ndistinguished_name=dn\n[dn]\n[extensions]\nsubjectAltName=IP:127.0.0.1\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,digitalSignature,keyEncipherment,keyCertSign\nextendedKeyUsage=serverAuth\n",
         );
         $key = openssl_pkey_new(['private_key_bits' => 2048, 'config' => $config]);
-        $csr = openssl_csr_new(['commonName' => '127.0.0.1'],
+        $csr = openssl_csr_new(
+            ['commonName' => '127.0.0.1'],
             $key,
-            ['config' => $config, 'req_extensions' => 'extensions']);
+            ['config' => $config, 'req_extensions' => 'extensions'],
+        );
         $certificate = openssl_csr_sign($csr, null, $key, 1, ['config' => $config, 'x509_extensions' => 'extensions']);
         openssl_x509_export($certificate, $public);
         openssl_pkey_export($key, $private, null, ['config' => $config]);
@@ -38,7 +40,7 @@ test('https connections are reused without retaining request bodies or other ide
                 '-d',
                 'curl.cainfo=' . $directory . '/ca.pem',
                 dirname(__DIR__) . '/fixtures/https-client.php',
-                $address
+                $address,
             ],
             [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $clientPipes,
@@ -51,10 +53,10 @@ test('https connections are reused without retaining request bodies or other ide
         $data = json_decode($result, true, 512, JSON_THROW_ON_ERROR);
         expect($data[0]['data']['connection'])->toBe(1);
         expect($data[1]['data'])->toBe(
-            ['connection' => 1, 'method' => 'GET', 'authorization' => 'Bearer dummy-a', 'body' => '']
+            ['connection' => 1, 'method' => 'GET', 'authorization' => 'Bearer dummy-a', 'body' => ''],
         );
         expect($data[2]['data'])->toBe(
-            ['connection' => 2, 'method' => 'GET', 'authorization' => 'Bearer dummy-b', 'body' => '']
+            ['connection' => 2, 'method' => 'GET', 'authorization' => 'Bearer dummy-b', 'body' => ''],
         );
     } finally {
         if (is_resource($server)) {

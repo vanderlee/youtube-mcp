@@ -14,7 +14,7 @@ test('merged migrations preserve every historical upgrade point', function (int 
         '/^-- Migration: ([a-zA-Z0-9_]+\.sql)\h*\r?\n/m',
         file_get_contents($root . '/migrations/001_initial.sql'),
         -1,
-        PREG_SPLIT_DELIM_CAPTURE
+        PREG_SPLIT_DELIM_CAPTURE,
     );
     for ($step = 0; $step < $completed; $step++) {
         $db->pdo->exec($parts[$step * 2 + 2]);
@@ -34,7 +34,7 @@ test('merged migrations preserve every historical upgrade point', function (int 
     if ($completed > 0) {
         $this->assertMatchesRegularExpression(
             '/^[a-f0-9]{32}$/D',
-            $db->one('SELECT generation FROM browser_accounts WHERE user_id=?', ['u1'])['generation']
+            $db->one('SELECT generation FROM browser_accounts WHERE user_id=?', ['u1'])['generation'],
         );
     }
     $this->assertSame([
@@ -49,10 +49,12 @@ test('merged migrations preserve every historical upgrade point', function (int 
     ], array_column($db->all('SELECT name FROM migrations ORDER BY name'), 'name'));
     $this->assertNotNull($db->one("SELECT name FROM sqlite_master WHERE type='table' AND name='media_assets'"));
     $this->assertNotNull($db->one("SELECT name FROM sqlite_master WHERE type='table' AND name='quota_alerts'"));
-    $this->assertSame([],
+    $this->assertSame(
+        [],
         $db->all(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('music_connections', 'music_browser_connections')"
-        ));
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('music_connections', 'music_browser_connections')",
+        ),
+    );
     $this->assertSame([], $db->all('PRAGMA foreign_key_check'));
 })->with([0, 1, 2, 3, 4, 5, 6]);
 
@@ -63,7 +65,7 @@ test('later standalone migrations work after the bundle and roll back failed SQL
     file_put_contents($root . '/migrations/007_test.sql', 'CREATE TABLE migration_probe (id TEXT PRIMARY KEY);');
     file_put_contents(
         $root . '/migrations/008_failure.sql',
-        'CREATE TABLE rollback_probe (id TEXT); INSERT INTO missing_table VALUES (1);'
+        'CREATE TABLE rollback_probe (id TEXT); INSERT INTO missing_table VALUES (1);',
     );
     $db = new Database(':memory:');
     try {
@@ -78,7 +80,7 @@ test('later standalone migrations work after the bundle and roll back failed SQL
         file_put_contents($root . '/migrations/008_failure.sql', 'CREATE TABLE rollback_probe (id TEXT);');
         $db->migrate($root);
         $db->migrate($root);
-        $this->assertSame(8, (int)$db->one('SELECT COUNT(*) AS n FROM migrations')['n']);
+        $this->assertSame(8, (int) $db->one('SELECT COUNT(*) AS n FROM migrations')['n']);
     } finally {
         $this->removeDir($root);
     }

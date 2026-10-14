@@ -8,7 +8,7 @@ use Nyholm\Psr7\{Stream, UploadedFile};
 use YouTubeMcp\Auth\{Google, Vault};
 use YouTubeMcp\Http\{Client, MediaClient};
 use YouTubeMcp\Operations\Receipts;
-use YouTubeMcp\Quota\Budget;
+use YouTubeMcp\Quota\Usage;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Lock;
 use YouTubeMcp\YouTube\{Api, CreatorService, MediaApi, MediaStore};
@@ -35,7 +35,7 @@ trait CreatorFixtures
                 'Fixture',
                 $vault->encrypt(['access_token' => 'dummy-access', 'expires_at' => time() + 3600]),
                 Google::YOUTUBE_SCOPE,
-                'generation-' . $user
+                'generation-' . $user,
             ]);
         }
 
@@ -43,19 +43,16 @@ trait CreatorFixtures
         $api = new class ($apiResponses) extends Api {
             public array $calls = [];
 
-            public function __construct(private array $responses)
-            {
-            }
+            public function __construct(private array $responses) {}
 
             public function call(
                 string $user,
                 string $method,
                 array $params = [],
                 ?array $body = null,
-                ?string $reservation = null,
                 ?string $operation = null,
                 ?string $token = null,
-                int $ttl = 0
+                int $ttl = 0,
             ): array {
                 $this->calls[] = [$method, $params, $body];
                 $result = array_shift($this->responses);
@@ -69,16 +66,14 @@ trait CreatorFixtures
         $http = new class ($mediaResponses) extends MediaClient {
             public array $calls = [];
 
-            public function __construct(private array $responses)
-            {
-            }
+            public function __construct(private array $responses) {}
 
             public function exchange(
                 string $method,
                 string $url,
                 array $headers,
                 ?string $body = null,
-                ?string $path = null
+                ?string $path = null,
             ): array {
                 $this->calls[] = [$method, $url, $headers, $body, $path];
                 $result = array_shift($this->responses);
@@ -93,7 +88,7 @@ trait CreatorFixtures
             }
         };
         $assets = new MediaStore($db, $cfg);
-        $media = new MediaApi($google, new Budget($db, $cfg), $vault, $http);
+        $media = new MediaApi($google, new Usage($db), $vault, $http);
         $receipts = new Receipts($db, $locks);
 
         return [
@@ -105,7 +100,7 @@ trait CreatorFixtures
             $google,
             $media,
             $receipts,
-            $locks
+            $locks,
         ];
     }
 
@@ -118,7 +113,7 @@ trait CreatorFixtures
             strlen($text),
             UPLOAD_ERR_OK,
             '../../unsafe-name.srt',
-            'text/plain'
+            'text/plain',
         );
     }
 }
@@ -146,7 +141,7 @@ test(
             [
                 ['u2', $google->connection('u2')],
                 ['u1', array_replace($connection, ['generation' => 'new'])],
-                ['u1', array_replace($connection, ['channel_id' => 'foreign'])]
+                ['u1', array_replace($connection, ['channel_id' => 'foreign'])],
             ] as [$user, $binding]
         ) {
             try {
@@ -168,19 +163,19 @@ test(
         $assets->cleanup(new Lock($this->dir . '/locks'));
         $this->assertFileDoesNotExist($file['path']);
         $this->assertSame([], $db->all('SELECT id FROM media_assets'));
-    }
+    },
 );
 
 test('creator scopes and ownership checks stop writes before dispatch', function (): void {
     [$service, , $api, $http] = $this->creators(
-        [['items' => [['id' => 'aaaaaaaaaaa', 'snippet' => ['channelId' => 'foreign']]]]]
+        [['items' => [['id' => 'aaaaaaaaaaa', 'snippet' => ['channelId' => 'foreign']]]]],
     );
     try {
         $service->execute(
             'u1',
             ['playlists.write'],
             'delete_video',
-            ['video_id' => 'aaaaaaaaaaa', 'operation_key' => 'creator-owner-test']
+            ['video_id' => 'aaaaaaaaaaa', 'operation_key' => 'creator-owner-test'],
         );
         $this->fail();
     } catch (ServiceError $error) {
@@ -192,7 +187,7 @@ test('creator scopes and ownership checks stop writes before dispatch', function
         'u1',
         ['videos.write'],
         'delete_video',
-        ['video_id' => 'aaaaaaaaaaa', 'operation_key' => 'creator-owner-test']
+        ['video_id' => 'aaaaaaaaaaa', 'operation_key' => 'creator-owner-test'],
     );
     $this->assertSame('NOT_VIDEO_OWNER', $result['error']['code']);
     $this->assertCount(1, $api->calls);
@@ -212,11 +207,11 @@ test(
                             'title' => 'Keep',
                             'description' => 'Old',
                             'categoryId' => '10',
-                            'tags' => ['keep-tag']
+                            'tags' => ['keep-tag'],
                         ],
-                        'status' => ['privacyStatus' => 'private']
-                    ]
-                ]
+                        'status' => ['privacyStatus' => 'private'],
+                    ],
+                ],
             ],
             ['id' => 'aaaaaaaaaaa'],
         ]);
@@ -230,7 +225,7 @@ test(
         $this->assertArrayNotHasKey('status', $body);
         $this->assertSame($result, $service->execute('u1', ['videos.write'], 'update_video', $args));
         $this->assertCount(2, $api->calls);
-    }
+    },
 );
 
 test(
@@ -240,7 +235,7 @@ test(
             [
                 'status' => 200,
                 'headers' => ['location' => 'https://www.googleapis.com/upload/youtube/v3/captions?upload_id=private-session'],
-                'raw' => ''
+                'raw' => '',
             ],
             new ServiceError('UPSTREAM_UNCERTAIN', 'fixture timeout'),
         ]);
@@ -254,7 +249,7 @@ test(
             ['part' => 'snippet'],
             ['snippet' => ['videoId' => 'aaaaaaaaaaa', 'language' => 'en', 'name' => '']],
             $asset,
-            $step
+            $step,
         );
         $result = $receipts->run('u1', $connection['generation'], 'upload_caption', $args, $work);
         $this->assertSame('uncertain', $result['status']);
@@ -269,7 +264,7 @@ test(
         }
 
         $this->assertCount(2, $http->calls);
-    }
+    },
 );
 
 test('upload session urls reject offsite hosts credentials nonhttps and unexpected paths', function (): void {
@@ -279,7 +274,7 @@ test('upload session urls reject offsite hosts credentials nonhttps and unexpect
             'http://www.googleapis.com/upload/youtube/v3/videos',
             'https://user@www.googleapis.com/upload/youtube/v3/videos',
             'https://www.googleapis.com/other',
-            'https://www.googleapis.com:443/upload/youtube/v3/videos'
+            'https://www.googleapis.com:443/upload/youtube/v3/videos',
         ] as $url
     ) {
         try {
@@ -300,7 +295,7 @@ test('caption download requires an exact track binding and preserves bounded raw
         'u1',
         ['captions.read'],
         'download_caption',
-        ['video_id' => 'aaaaaaaaaaa', 'caption_id' => 'track']
+        ['video_id' => 'aaaaaaaaaaa', 'caption_id' => 'track'],
     );
     $this->assertStringStartsWith('WEBVTT', $result['content']);
     $this->assertSame('GET', $http->calls[0][0]);
@@ -313,7 +308,7 @@ test('caption download requires an exact track binding and preserves bounded raw
             'u1',
             ['captions.read'],
             'download_caption',
-            ['video_id' => 'aaaaaaaaaaa', 'caption_id' => 'track']
+            ['video_id' => 'aaaaaaaaaaa', 'caption_id' => 'track'],
         );
         $this->fail();
     } catch (ServiceError $error) {
@@ -332,7 +327,7 @@ test(
             [
                 'status' => 200,
                 'headers' => ['location' => 'https://www.googleapis.com/upload/youtube/v3/videos?upload_id=secret-session'],
-                'raw' => ''
+                'raw' => '',
             ],
             ['status' => 200, 'headers' => [], 'raw' => '{"id":"aaaaaaaaaaa"}'],
         ]);
@@ -340,7 +335,7 @@ test(
         $saved = $assets->save(
             'u1',
             $google->connection('u1'),
-            new UploadedFile(Stream::create($video), strlen($video), UPLOAD_ERR_OK, 'fixture.mp4')
+            new UploadedFile(Stream::create($video), strlen($video), UPLOAD_ERR_OK, 'fixture.mp4'),
         );
         $args = ['asset_id' => $saved['asset_id'], 'title' => 'Fixture', 'operation_key' => 'video-upload-test'];
         $result = $service->execute('u1', ['videos.upload'], 'upload_video', $args);
@@ -352,7 +347,7 @@ test(
         $this->assertSame($result, $service->execute('u1', ['videos.upload'], 'upload_video', $args));
         $this->assertCount(2, $http->calls);
         $this->assertCount(1, $api->calls);
-    }
+    },
 );
 
 test('channel branding preserves other fields and foreign presentation sections cannot be changed', function (): void {
@@ -365,11 +360,11 @@ test('channel branding preserves other fields and foreign presentation sections 
                         'channel' => [
                             'description' => 'Old',
                             'keywords' => 'keep',
-                            'country' => 'NL'
-                        ]
-                    ]
-                ]
-            ]
+                            'country' => 'NL',
+                        ],
+                    ],
+                ],
+            ],
         ],
         ['id' => 'channel-u1'],
         ['items' => [['id' => 'section', 'snippet' => ['channelId' => 'foreign']]]],
@@ -378,7 +373,7 @@ test('channel branding preserves other fields and foreign presentation sections 
         'u1',
         ['channels.write'],
         'update_channel_branding',
-        ['description' => 'New', 'operation_key' => 'branding-update-test']
+        ['description' => 'New', 'operation_key' => 'branding-update-test'],
     );
     $this->assertSame('completed', $result['status']);
     $body = $api->calls[1][2];
@@ -389,7 +384,7 @@ test('channel branding preserves other fields and foreign presentation sections 
         'u1',
         ['channels.write'],
         'delete_channel_section',
-        ['section_id' => 'section', 'operation_key' => 'foreign-section-test']
+        ['section_id' => 'section', 'operation_key' => 'foreign-section-test'],
     );
     $this->assertSame('NOT_CHANNEL_OWNER', $result['error']['code']);
     $this->assertCount(3, $api->calls);
@@ -408,14 +403,14 @@ test('owned media purge removes only that users files and malformed captions are
         $assets->save(
             'u1',
             $google->connection('u1'),
-            new UploadedFile(Stream::create($bad), strlen($bad), UPLOAD_ERR_OK, 'bad.srt')
+            new UploadedFile(Stream::create($bad), strlen($bad), UPLOAD_ERR_OK, 'bad.srt'),
         );
         $this->fail();
     } catch (ServiceError $error) {
         $this->assertSame('INVALID_MEDIA', $error->reason);
     }
 
-    $this->assertSame(1, (int)$db->one('SELECT COUNT(*) AS n FROM media_assets')['n']);
+    $this->assertSame(1, (int) $db->one('SELECT COUNT(*) AS n FROM media_assets')['n']);
 });
 
 test(
@@ -430,7 +425,7 @@ test(
             'create_channel_section',
             $section + [
                 'operation_key' => 'section-constraint-test',
-            ]
+            ],
         );
 
         if (!$valid) {
@@ -446,7 +441,7 @@ test(
         $this->assertCount(1, $api->calls);
         $this->assertSame('channelSections.insert', $api->calls[0][0]);
         $this->assertSame($section['type'], $api->calls[0][2]['snippet']['type']);
-    }
+    },
 )->with([
     'single playlist' => [
         ['type' => 'singlePlaylist', 'playlist_ids' => ['PLsource00000']],

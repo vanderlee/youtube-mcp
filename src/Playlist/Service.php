@@ -6,40 +6,23 @@ namespace YouTubeMcp\Playlist;
 
 use YouTubeMcp\Auth\Google;
 use YouTubeMcp\Mcp\Arguments;
+use YouTubeMcp\Mcp\ToolCatalog;
 use YouTubeMcp\Operations\Receipts;
-use YouTubeMcp\Quota\Budget;
+use YouTubeMcp\Quota\Usage;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Lock;
 use YouTubeMcp\YouTube\Api;
-use YouTubeMcp\YouTube\CreatorService;
-use YouTubeMcp\YouTube\CreatorTools;
 use YouTubeMcp\YouTube\Service as YouTubeService;
 use YouTubeMcp\YouTube\Tools as YouTubeTools;
 
 final class Service
 {
-    public const WRITES = [
-        'rate_track',
-        'subscribe_artist',
-        'unsubscribe_artist',
-        'create_playlist',
-        'update_playlist',
-        'add_tracks',
-        'remove_tracks',
-        'move_track',
-        'delete_playlist',
-        ...YouTubeTools::WRITES,
-        ...WorkflowTools::WRITES,
-        ...CreatorTools::WRITES,
-    ];
-
     public function __construct(
         private Google $google,
         private Api $api,
-        private Budget $budget,
+        private Usage $usage,
         private Receipts $receipts,
         private Lock $locks,
-        private ?CreatorService $creator = null,
     ) {}
 
     /**
@@ -49,41 +32,17 @@ final class Service
      */
     public function execute(string $user, array $scopes, string $tool, array $a): array
     {
-        if ($tool === 'get_operation') {
-            return $this->locks->run(
-                'account:' . $user,
-                function () use ($user, $scopes, $a) {
-                    $connection = $this->google->connection($user);
-
-                    return $this->receipts->get($user, $a['operation_id'], $connection['generation'], $scopes);
-                },
-            );
-        }
-        if (isset(CreatorTools::specs()[$tool])) {
-            if (!$this->creator) {
-                throw new ServiceError('SETUP_REQUIRED', 'Creator service is unavailable.', [], 503);
-            }
-
-            return $this->creator->execute($user, $scopes, $tool, $a);
-        }
-        if (isset(YouTubeTools::specs()[$tool])) {
-            return (new YouTubeService($this->google, $this->api, $this->receipts, $this->locks))->execute($user, $scopes, $tool, $a);
-        }
-        if (isset(WorkflowTools::specs()[$tool])) {
-            return (new Workflows($this->google, $this->api, $this->receipts, $this->locks))->execute($user, $scopes, $tool, $a);
-        }
-
-        $write = in_array($tool, self::WRITES, true);
-        if (!in_array(self::scope($tool), $scopes, true)) {
+        $write = ToolCatalog::isWrite($tool);
+        if (!in_array(ToolCatalog::scope($tool), $scopes, true)) {
             throw new ServiceError(
                 'INSUFFICIENT_SERVICE_SCOPE',
-                'Authorize the required permission: ' . self::scope($tool),
+                'Authorize the required permission: ' . ToolCatalog::scope($tool),
                 [],
                 403,
             );
         }
         if ($tool === 'get_usage_status') {
-            return $this->budget->status($user);
+            return $this->usage->status($user);
         }
         $connection = $this->google->connection($user);
         if ($tool === 'get_connection_status') {
@@ -127,24 +86,6 @@ final class Service
                 );
             },
         );
-    }
-
-    public static function scope(string $tool): string
-    {
-        if (isset(CreatorTools::specs()[$tool])) {
-            return CreatorTools::scope($tool);
-        }
-        if (isset(YouTubeTools::specs()[$tool])) {
-            return YouTubeTools::scope($tool);
-        }
-
-        $group = match ($tool) {
-            'list_liked_tracks', 'get_track_ratings', 'rate_track' => 'likes',
-            'list_subscriptions', 'subscribe_artist', 'unsubscribe_artist' => 'subscriptions',
-            default => 'playlists',
-        };
-
-        return $group . (in_array($tool, self::WRITES, true) ? '.write' : '.read');
     }
 
     /**
@@ -237,24 +178,18 @@ final class Service
             return ['playlist_id' => $id, 'changed' => 0, 'links' => $id ? $this->links($id) : []];
         }
 
-        $cost = array_sum(array_map(fn($p) => $this->budget->method($p[1])[1], $planned));
-        $reservation = $this->budget->reserve($user, $cost);
         $deadline = microtime(true) + 45;
-        try {
-            foreach ($planned as [$label, $method, $params, $body]) {
-                if (microtime(true) > $deadline) {
-                    throw new ServiceError(
-                        'OPERATION_TIME_LIMIT',
-                        'Batch time limit reached. Inspect this receipt and explicitly resume pending work.',
-                        [],
-                        409,
-                    );
-                }
-
-                $step($label, fn() => $this->api->call($user, $method, $params, $body, $reservation, $operation));
+        foreach ($planned as [$label, $method, $params, $body]) {
+            if (microtime(true) > $deadline) {
+                throw new ServiceError(
+                    'OPERATION_TIME_LIMIT',
+                    'Batch time limit reached. Inspect this receipt and explicitly resume pending work.',
+                    [],
+                    409,
+                );
             }
-        } finally {
-            $this->budget->release($reservation);
+
+            $step($label, fn() => $this->api->call($user, $method, $params, $body, operation: $operation));
         }
 
         return ['playlist_id' => $id, 'changed' => count($planned), 'links' => $id ? $this->links($id) : []];

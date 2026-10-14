@@ -25,7 +25,7 @@ final class Receipts
         if (!$row) {
             throw new ServiceError('OPERATION_NOT_FOUND', 'Operation was not found for this account connection.', [], 404);
         }
-        $scope = \YouTubeMcp\Playlist\Service::scope($row['tool']);
+        $scope = \YouTubeMcp\Mcp\ToolCatalog::scope($row['tool']);
         $readScope = explode('.', $scope, 2)[0] . '.read';
         if (!in_array($scope, $scopes, true) && !in_array($readScope, $scopes, true)) {
             throw new ServiceError(

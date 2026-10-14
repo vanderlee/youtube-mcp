@@ -23,8 +23,11 @@ use YouTubeMcp\Http\MediaClient;
 use YouTubeMcp\Http\Responses;
 use YouTubeMcp\Http\View;
 use YouTubeMcp\Operations\Receipts;
+use YouTubeMcp\Mcp\Dispatcher;
+use YouTubeMcp\Playlist\Workflows;
+use YouTubeMcp\YouTube\Service as YouTubeService;
 use YouTubeMcp\Playlist\Service;
-use YouTubeMcp\Quota\Budget;
+use YouTubeMcp\Quota\Usage;
 use YouTubeMcp\Routes;
 use YouTubeMcp\Storage\Database;
 use YouTubeMcp\Storage\Lock;
@@ -59,24 +62,25 @@ final class App
         $this->locks = $locks;
         $http = new Client();
 
-        $budget = new Budget($db, $config);
+        $usage = new Usage($db);
         $google = new Google($config, $db, new Vault($config->get('APP_KEY')), $http, $locks);
-        $api = new Api($http, $budget, $db, $google, $config->int('API_READ_CACHE_TTL', 30));
+        $api = new Api($http, $usage, $db, $google, $config->int('API_READ_CACHE_TTL', 30));
         $oauth = new OAuth($db, $config, $locks);
         $this->browser = new BrowserSession($db, $config);
 
         $mediaAssets = new MediaStore($db, $config);
         $mediaApi = new MediaApi(
             $google,
-            $budget,
+            $usage,
             new Vault($config->get('APP_KEY')),
             new MediaClient(),
             new \YouTubeMcp\YouTube\ResponseCache($db),
         );
+        $receipts = new Receipts($db, $locks);
         $creator = new CreatorService(
             $google,
             $api,
-            new Receipts($db, $locks),
+            $receipts,
             $locks,
             $mediaAssets,
             $mediaApi,
@@ -84,10 +88,19 @@ final class App
         $playlists = new Service(
             $google,
             $api,
-            $budget,
-            new Receipts($db, $locks),
+            $usage,
+            $receipts,
             $locks,
+        );
+
+        $dispatcher = new Dispatcher(
+            $playlists,
+            new YouTubeService($google, $api, $receipts, $locks),
+            new Workflows($google, $api, $receipts, $locks),
             $creator,
+            $google,
+            $receipts,
+            $locks,
         );
 
         $this->view = new View(dirname(__DIR__) . '/views', $config);
@@ -102,7 +115,7 @@ final class App
             '/.well-known/oauth-protected-resource/mcp' => $resourceMetadata,
             '/oauth/register' => new Routes\RegisterClientRoute($oauth),
             '/oauth/token' => new Routes\TokenRoute($oauth, $config),
-            '/mcp' => new Routes\McpRoute($config, $oauth, $playlists),
+            '/mcp' => new Routes\McpRoute($config, $oauth, $dispatcher),
         ];
         $this->browserRoutes = [
             '/login' => new Routes\LoginRoute($flow),
@@ -111,7 +124,7 @@ final class App
             '/oauth/authorize' => new Routes\AuthorizeClientRoute($oauth, $db, $locks, $this->browser, $this->view),
         ];
         $this->accountRoutes = [
-            '/' => new Routes\DashboardRoute($db, $budget, $config, $this->view),
+            '/' => new Routes\DashboardRoute($db, $usage, $config, $this->view),
             '/media' => new Routes\MediaRoute($locks, $google, $mediaAssets, $this->view),
             '/google/connect' => new Routes\ConnectGoogleRoute($flow),
             '/google/confirm' => new Routes\ConfirmGoogleConnectionRoute($config, $google),

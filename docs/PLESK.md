@@ -252,7 +252,8 @@ php bin/console.php client:create https://EXACT_CALLBACK_URI ChatGPT
 - Confirm the task's CLI version, environment/configuration, permissions, and absolute paths are correct.
 - Monitor PHP error logs for bootstrap errors and request IDs associated with failures.
 - Compare estimated usage with Google Cloud Console after the first workflows.
-- Confirm no scheduled task replays pending writes; obsolete quota reservations are removed by cleanup.
+- Confirm no scheduled task replays pending writes; historical quota reservation/breaker records are removed by cleanup.
+- Busy accounts defer expired media to a later run while other housekeeping continues. Monitor repeated deferrals; see [operations and recovery](OPERATIONS.md).
 - Confirm PHP/proxy timeouts accommodate the bounded operations; reduce batch size if the hosting limits are shorter.
 - Set up consistent private-state backups and perform a test restore before depending on the service.
 

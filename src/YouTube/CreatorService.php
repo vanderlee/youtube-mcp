@@ -6,6 +6,7 @@ namespace YouTubeMcp\YouTube;
 
 use YouTubeMcp\Auth\Google;
 use YouTubeMcp\Mcp\Arguments;
+use YouTubeMcp\Mcp\ToolCatalog;
 use YouTubeMcp\Operations\Receipts;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Lock;
@@ -28,7 +29,7 @@ final class CreatorService
      */
     public function execute(string $user, array $scopes, string $tool, array $a): array
     {
-        $scope = CreatorTools::scope($tool);
+        $scope = ToolCatalog::scope($tool);
         if (!in_array($scope, $scopes, true)) {
             throw new ServiceError('INSUFFICIENT_SERVICE_SCOPE', 'Authorize ' . $scope . '.', [], 403);
         }
@@ -39,7 +40,7 @@ final class CreatorService
             'account:' . $user,
             function () use ($user, $tool, $a) {
                 $connection = $this->google->connection($user);
-                if (!in_array($tool, CreatorTools::WRITES, true)) {
+                if (!ToolCatalog::isWrite($tool)) {
                     return $this->read($user, $connection, $tool, $a);
                 }
 

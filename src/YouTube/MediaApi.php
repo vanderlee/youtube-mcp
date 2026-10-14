@@ -6,14 +6,14 @@ namespace YouTubeMcp\YouTube;
 
 use YouTubeMcp\Auth\{Google, Vault};
 use YouTubeMcp\Http\MediaClient;
-use YouTubeMcp\Quota\Budget;
+use YouTubeMcp\Quota\Usage;
 use YouTubeMcp\ServiceError;
 
 final class MediaApi
 {
     public function __construct(
         private Google $google,
-        private Budget $budget,
+        private Usage $usage,
         private Vault $vault,
         private MediaClient $http,
         private ?ResponseCache $cache = null,
@@ -61,7 +61,7 @@ final class MediaApi
      */
     public function caption(string $user, string $id, string $format): array
     {
-        $request = $this->budget->dispatch($user, 'captions.download');
+        $request = $this->usage->dispatch($user, 'captions.download');
         try {
             $response = $this->http->exchange(
                 'GET',
@@ -69,11 +69,11 @@ final class MediaApi
                 ['Authorization: Bearer ' . $this->google->accessToken($user)],
             );
         } catch (ServiceError $error) {
-            $this->budget->outcome($request, 'uncertain');
+            $this->usage->outcome($request, 'uncertain');
             throw $error;
         }
 
-        $this->budget->outcome($request, $response['status'] < 300 ? 'success' : 'rejected');
+        $this->usage->outcome($request, $response['status'] < 300 ? 'success' : 'rejected');
         $this->assertSuccessfulResponse($response['status']);
 
         return ['caption_id' => $id, 'format' => $format, 'content' => $response['raw']];
@@ -134,7 +134,7 @@ final class MediaApi
         $url = 'https://www.googleapis.com/upload/youtube/v3/' . $resource
             . ($method === 'thumbnails.set' ? '/set' : ($method === 'channelBanners.insert' ? '/insert' : ''))
             . '?' . http_build_query(['uploadType' => 'resumable'] + $params);
-        $id = $this->budget->dispatch($user, $method);
+        $id = $this->usage->dispatch($user, $method);
         try {
             $response = $this->http->exchange(
                 $method === 'captions.update' ? 'PUT' : 'POST',
@@ -148,11 +148,11 @@ final class MediaApi
                 json_encode((object) $metadata, JSON_THROW_ON_ERROR),
             );
         } catch (ServiceError $error) {
-            $this->budget->outcome($id, 'uncertain');
+            $this->usage->outcome($id, 'uncertain');
             throw $error;
         }
 
-        $this->budget->outcome($id, $response['status'] < 300 ? 'success' : 'rejected');
+        $this->usage->outcome($id, $response['status'] < 300 ? 'success' : 'rejected');
         $this->assertSuccessfulResponse($response['status']);
         $location = $response['headers']['location'] ?? '';
         self::validateLocation($location);

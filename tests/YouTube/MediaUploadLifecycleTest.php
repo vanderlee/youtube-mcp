@@ -7,7 +7,7 @@ namespace YouTubeMcp\Tests\YouTube;
 use YouTubeMcp\Auth\{Google, Vault};
 use YouTubeMcp\Http\{Client, MediaClient};
 use YouTubeMcp\Operations\Receipts;
-use YouTubeMcp\Quota\Budget;
+use YouTubeMcp\Quota\Usage;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Lock;
 use YouTubeMcp\YouTube\{MediaApi, ResponseCache};
@@ -72,7 +72,7 @@ test('upload phases preserve encrypted receipts and invalidate caches around con
             }
         };
         $google = new Google($config, $db, $vault, new Client(), $locks);
-        $media = new MediaApi($google, new Budget($db, $config), $vault, $http, $cache);
+        $media = new MediaApi($google, new Usage($db), $vault, $http, $cache);
         $receipts = new Receipts($db, $locks);
         $arguments = ['operation_key' => 'upload-lifecycle'];
         $receipt = $receipts->run('u1', 'generation1', 'set_video_thumbnail', $arguments, fn($step) => $media->upload(

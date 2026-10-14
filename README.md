@@ -43,7 +43,7 @@ For automated Plesk post-deployment setup, run `bash bin/post-deploy.sh --php /o
 5. Run `php bin/console.php init` to create signing keys and migrate storage.
 6. Point the domain's document root to `public/` and configure front-controller routing.
 7. Follow [Plesk installation](docs/PLESK.md) and [Google/ChatGPT connection](docs/CONNECTIONS.md).
-8. Run `php bin/console.php cleanup` hourly through a scheduled task.
+8. Run `php bin/console.php cleanup` hourly through a scheduled task. Busy accounts defer expired media until the next run; other housekeeping continues. See [operations and recovery](docs/OPERATIONS.md).
 
 Migrations 001–006 are bundled in `migrations/001_initial.sql`. The `-- Migration: <original filename>` sections retain their existing database identities, so initialization applies only unfinished steps on upgrades and is safe to repeat. Keep these sections unchanged; add future schema changes as new ordered SQL files starting at `007`.
 
@@ -69,7 +69,7 @@ After deploying this change, run `php bin/console.php migrate` before serving tr
 
 Read tools return compact data by default: essential IDs, titles, positions, privacy/counts where applicable, and pagination. Request `response_detail: "full"` for available raw details. Mutation results summarize receipts, including completed-step IDs, errors, and any uncertain pending step; use `get_operation` with `response_detail: "full"` to inspect the full persisted receipt without a YouTube request. Receipt access requires the current connection generation and the originating tool's permission or the corresponding service read permission. A playlist-only grant cannot read comment, video, caption, media or channel receipts. Compact presentation does not change stored receipts.
 
-MCP `content` contains a short summary, while the payload appears once in `structuredContent`. Music compact results omit thumbnails but retain action tokens, requested text, and truncation/bounds indicators. Refresh ChatGPT's tool definitions after deployment to pick up the changed schemas.
+MCP `content` contains a short summary, while the payload appears once in `structuredContent`. Refresh ChatGPT's tool definitions after deployment to pick up the changed schemas.
 
 `create_playlist` accepts optional `video_ids` (up to 20 IDs or HTTPS video URLs) and `duplicate_policy` (`skip`, the default, or `allow`). It creates and populates the playlist in one tool call, without a new-playlist scan or separate ownership read. Every video is validated before creation; all creation/insertion steps share one receipt. Partial resume reuses the created playlist and skips completed insertions; ambiguous writes remain blocked from automatic resume. This combines ChatGPT tool calls, not Google's per-entry write requests. Duplicate skipping here applies to repeated IDs in the initial input list.
 
@@ -109,8 +109,10 @@ Keys are scoped to the active connection generation. Reconnecting Google starts 
 
 YouTube enforces project quotas and rate limits. The app does not impose project/user budgets, headroom, reservation admission limits, local circuit breakers, or tool-call throttling. Legacy QUOTA_*, USER_QUOTA_*, and MCP_CALLS_PER_MINUTE settings are ignored.
 
-Usage status reports estimates for requests observed by this installation, grouped by Pacific day. It cannot determine remaining YouTube quota or see other project traffic. Actual YouTube quota/rate-limit errors are returned to the caller without automatic retries. Operation receipts, ownership checks, bounded batches, and time limits remain active.
+Usage status reports estimates for requests observed by this installation, grouped by Pacific day. It cannot determine remaining YouTube quota or see other project traffic. All upstream errors, including read server errors and quota/rate-limit errors, are returned to the caller without automatic retries. Operation receipts, ownership checks, bounded batches, and time limits remain active.
 ## Development and tests
+
+MCP dispatch lives in `src/Mcp/Dispatcher.php`, wired in `App.php`; tool routing and permission resolution live in `src/Mcp/ToolCatalog.php`. Domain services own validation and effects. `src/Quota/Usage.php` records informational estimates and operation attribution without quota reservation or admission checks. See the [architecture guide](docs/ARCHITECTURE.md).
 
 HTTP route handlers live in `src/Routes/`. `src/App.php` wires their dependencies, maps paths to handlers, and applies shared request validation, browser authentication, account locks, error handling, and response headers. The two protected-resource discovery paths share one handler.
 
@@ -132,9 +134,7 @@ Run `make phpstan` for PHPStan level 6, `make cs` for PHP_CodeSniffer, and
 review its diff before committing. `make qa` runs tests and all QA checks.
 Every QA target also has a matching Composer script, so Make is optional.
 
-PHPStan checks `src/`, `bin/`, and `public/` against PHP 8.2. Its initial baseline
-contains only the existing unused `Config` parameter in `Quota\Budget`'s
-constructor. New errors and obsolete baseline entries fail the check.
+PHPStan checks `src/`, `bin/`, and `public/` against PHP 8.2 without a baseline.
 Both style tools use the non-risky PER Coding Style 3.0 preset in
 `.php-cs-fixer.dist.php`, with four-space indentation and LF line endings.
 The installed fixer does not yet provide a dedicated 3.1 preset.
@@ -147,8 +147,8 @@ the fixer configuration, and exclude `HUMANS.md`.
 
 [GitHub Actions](.github/workflows/ci.yml) runs on pushes, pull requests, and
 manual dispatch. It installs locked development dependencies and runs tests on
-PHP 8.2 and 8.5, plus PHPStan on PHP 8.2. Style checks run locally through
-`make cs`, `make cs-check`, or `make qa`; CI currently gates tests and PHPStan.
+PHP 8.2 and 8.5, plus PHPStan on PHP 8.2. CI also gates the PHP-CS-Fixer formatting check on PHP 8.2. Run style checks locally through
+`make cs`, `make cs-check`, or `make qa`.
 CI uses test fixtures and needs no Google credentials or production configuration.
 
 On the current Windows development machine, required DLLs exist but are not enabled in the default PHP configuration. Run tests with:
@@ -174,7 +174,7 @@ For a local HTTP smoke test only, run `php -S 127.0.0.1:8080 -t public public/ro
 - Local locks serialize account mutations. Edits made directly on YouTube cannot be locked and may change positions between preflight and write.
 - Uncertain mutations require manual reconciliation. Exactly-once changes cannot be guaranteed by the upstream API.
 
-See [PLAN.md](PLAN.md) for the design and [operations guide](docs/OPERATIONS.md) for recovery and maintenance.
+See [architecture guide](docs/ARCHITECTURE.md) for the design and [operations guide](docs/OPERATIONS.md) for recovery and maintenance.
 
 
 ## Claude and Gemini CLI

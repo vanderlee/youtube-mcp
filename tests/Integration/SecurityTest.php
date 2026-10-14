@@ -10,9 +10,10 @@ use Nyholm\Psr7\{Response, ServerRequest};
 use YouTubeMcp\{App, Config, ServiceError};
 use YouTubeMcp\Auth\{BrowserSession, Client as OAuthClient, Google, OAuth, Scope, User, Vault};
 use YouTubeMcp\Http\Client;
+use YouTubeMcp\Mcp\Dispatcher;
 use YouTubeMcp\Operations\Receipts;
 use YouTubeMcp\Playlist\Service;
-use YouTubeMcp\Quota\Budget;
+use YouTubeMcp\Quota\Usage;
 use YouTubeMcp\Storage\{Database, Lock};
 use YouTubeMcp\YouTube\Api;
 
@@ -37,7 +38,10 @@ trait SecurityTestHelpers
         $token->setPrivateKey(new CryptKey($this->privateKey, null, false));
         $this->oauth->repository->persistNewAccessToken($token);
 
-        return new ServerRequest('POST', $this->cfg->url() . '/mcp', ['Authorization' => 'Bearer ' . $token->toString()]
+        return new ServerRequest(
+            'POST',
+            $this->cfg->url() . '/mcp',
+            ['Authorization' => 'Bearer ' . $token->toString()],
         );
     }
 
@@ -48,7 +52,7 @@ trait SecurityTestHelpers
             $this->db,
             new Vault($this->cfg->get('APP_KEY')),
             $http ?? new Client(),
-            $this->locks
+            $this->locks,
         );
     }
 
@@ -60,7 +64,7 @@ trait SecurityTestHelpers
                 'scope' => Google::YOUTUBE_SCOPE,
                 'refresh_token' => 'dummy-refresh',
                 'access_token' => 'dummy-access',
-                'expires_at' => time() + 3600
+                'expires_at' => time() + 3600,
             ],
             ['id' => $channel, 'snippet' => ['title' => $channel]],
         );
@@ -77,10 +81,10 @@ trait SecurityTestHelpers
             'scope' => 'playlists.read playlists.write',
             'resource' => $this->cfg->url() . '/mcp',
             'code_challenge_method' => 'S256',
-            'code_challenge' => rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=')
+            'code_challenge' => rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '='),
         ];
         $authorization = $this->oauth->validateAuthorization(
-            (new ServerRequest('GET', $this->cfg->url() . '/oauth/authorize'))->withQueryParams($query)
+            (new ServerRequest('GET', $this->cfg->url() . '/oauth/authorize'))->withQueryParams($query),
         );
         $authorization->setUser(new User('u1'));
         $authorization->setAuthorizationApproved(true);
@@ -93,7 +97,7 @@ trait SecurityTestHelpers
             'code' => $redirect['code'],
             'code_verifier' => $verifier,
         ]);
-        $tokens = json_decode((string)$this->oauth->exchange($request)->getBody(), true);
+        $tokens = json_decode((string) $this->oauth->exchange($request)->getBody(), true);
 
         return [$client, $tokens, $request];
     }
@@ -116,30 +120,30 @@ test(
                 } catch (\PDOException $error) {
                     $blocked = Database::errorDetails($error)['database_reason'] === 'database_locked';
                 }
-            }
+            },
         );
         $refresh = $request->withParsedBody(
             [
                 'grant_type' => 'refresh_token',
                 'client_id' => $client['client_id'],
-                'refresh_token' => $tokens['refresh_token']
-            ]
+                'refresh_token' => $tokens['refresh_token'],
+            ],
         );
-        $next = json_decode((string)$this->oauth->exchange($refresh)->getBody(), true);
+        $next = json_decode((string) $this->oauth->exchange($refresh)->getBody(), true);
         $this->assertTrue($blocked);
         $other->execute('UPDATE oauth_tokens SET revoked=1 WHERE user_id=?', ['u1']);
-        $this->assertSame(0, (int)$other->one('SELECT COUNT(*) AS n FROM oauth_tokens WHERE revoked=0')['n']);
+        $this->assertSame(0, (int) $other->one('SELECT COUNT(*) AS n FROM oauth_tokens WHERE revoked=0')['n']);
         $this->expectException(\League\OAuth2\Server\Exception\OAuthServerException::class);
         $this->oauth->exchange(
             $refresh->withParsedBody(
                 [
                     'grant_type' => 'refresh_token',
                     'client_id' => $client['client_id'],
-                    'refresh_token' => $next['refresh_token']
-                ]
-            )
+                    'refresh_token' => $next['refresh_token'],
+                ],
+            ),
         );
-    }
+    },
 );
 
 test('failed token issuance rolls back rotation and leaves the previous refresh usable', function (): void {
@@ -147,14 +151,14 @@ test('failed token issuance rolls back rotation and leaves the previous refresh 
     $count = count($this->db->all('SELECT id FROM oauth_tokens'));
     $this->oauth->server->getListenerRegistry()->subscribeOnceTo(
         'access_token.issued',
-        fn() => throw new \RuntimeException('Injected interruption')
+        fn() => throw new \RuntimeException('Injected interruption'),
     );
     $refresh = $request->withParsedBody(
         [
             'grant_type' => 'refresh_token',
             'client_id' => $client['client_id'],
-            'refresh_token' => $tokens['refresh_token']
-        ]
+            'refresh_token' => $tokens['refresh_token'],
+        ],
     );
     try {
         $this->oauth->exchange($refresh);
@@ -183,7 +187,7 @@ test(
             $this->assertSame('AUTHENTICATION_REQUIRED', $error->reason);
         }
         $this->assertFalse($called);
-    }
+    },
 );
 
 test('authenticated work holds the same account exclusion as reconnect and revoke', function (): void {
@@ -211,7 +215,7 @@ test('account deletion and recreation never revive another browser session', fun
             $this->cfg->url() . '/account/delete',
             ['Content-Type' => 'application/x-www-form-urlencoded'],
             http_build_query(['csrf' => $_SESSION['csrf']]),
-        )
+        ),
     );
     $this->assertSame(303, $response->getStatusCode());
     $this->assertNull($this->db->one('SELECT id FROM users WHERE id=?', ['u1']));
@@ -256,10 +260,27 @@ test('receipts require the originating permission and current connection generat
         ['operation_key' => 'comment-review'],
         fn($step) => $step('comment', fn() => ['id' => 'comment-id', 'snippet' => ['textOriginal' => 'private text']]),
     );
-    $service = new Service(
+    $usage = new Usage($this->db);
+    $api = new Api(new Client(), $usage, $this->db, $google);
+    $media = new \YouTubeMcp\YouTube\MediaApi(
         $google,
-        new Api(new Client(), new Budget($this->db, $this->cfg), $this->db, $google),
-        new Budget($this->db, $this->cfg),
+        $usage,
+        new Vault($this->cfg->get('APP_KEY')),
+        new \YouTubeMcp\Http\MediaClient(),
+    );
+    $service = new Dispatcher(
+        new Service($google, $api, $usage, $receipts, $this->locks),
+        new \YouTubeMcp\YouTube\Service($google, $api, $receipts, $this->locks),
+        new \YouTubeMcp\Playlist\Workflows($google, $api, $receipts, $this->locks),
+        new \YouTubeMcp\YouTube\CreatorService(
+            $google,
+            $api,
+            $receipts,
+            $this->locks,
+            new \YouTubeMcp\YouTube\MediaStore($this->db, $this->cfg),
+            $media,
+        ),
+        $google,
         $receipts,
         $this->locks,
     );
@@ -272,7 +293,7 @@ test('receipts require the originating permission and current connection generat
     foreach (['comments.read', 'comments.write'] as $scope) {
         $this->assertSame(
             $receipt,
-            $service->execute('u1', [$scope], 'get_operation', ['operation_id' => $receipt['operation_id']])
+            $service->execute('u1', [$scope], 'get_operation', ['operation_id' => $receipt['operation_id']]),
         );
     }
     $this->connect($google, 'channel-B');
@@ -300,7 +321,7 @@ test('an old response cannot populate or be served from a replacement connection
             return ['status' => 200, 'data' => ['items' => [['id' => 'response-' . $this->calls]]]];
         }
     };
-    $api = new Api($http, new Budget($this->db, $this->cfg), $this->db, $google);
+    $api = new Api($http, new Usage($this->db), $this->db, $google);
     $http->duringResponse = fn() => $this->connect($google, 'channel-B');
     try {
         $api->call('u1', 'playlists.list', ['mine' => 'true'], ttl: 30);
@@ -336,10 +357,10 @@ test(
             );
             $response = $app->handle($request);
             $this->assertSame(201, $response->getStatusCode());
-            $ids[] = json_decode((string)$response->getBody(), true)['client_id'];
+            $ids[] = json_decode((string) $response->getBody(), true)['client_id'];
         }
         $this->assertCount(1, array_unique($ids));
-        $this->assertSame(1, (int)$this->db->one('SELECT COUNT(*) AS n FROM oauth_clients')['n']);
+        $this->assertSame(1, (int) $this->db->one('SELECT COUNT(*) AS n FROM oauth_clients')['n']);
         $confidential = $app->handle(
             new ServerRequest(
                 'POST',
@@ -348,17 +369,17 @@ test(
                 json_encode(
                     [
                         'redirect_uris' => ['https://chatgpt.com/callback'],
-                        'token_endpoint_auth_method' => 'client_secret_post'
-                    ]
+                        'token_endpoint_auth_method' => 'client_secret_post',
+                    ],
                 ),
-            )
+            ),
         );
         $this->assertSame(400, $confidential->getStatusCode());
         $static = $this->oauth->register(
-            ['redirect_uris' => ['https://chatgpt.com/callback'], 'token_endpoint_auth_method' => 'client_secret_post']
+            ['redirect_uris' => ['https://chatgpt.com/callback'], 'token_endpoint_auth_method' => 'client_secret_post'],
         );
         $this->assertArrayHasKey('client_secret', $static);
-    }
+    },
 );
 
 test('lock storage stays bounded and independent owners cannot bypass held locks', function (): void {

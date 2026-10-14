@@ -21,7 +21,7 @@ test(
                         'channelId' => 'owner1',
                         'channelTitle' => 'Owner',
                     ],
-                ]
+                ],
             ],
             'nextPageToken' => 'next',
         ];
@@ -33,7 +33,7 @@ test(
         expect(strlen(json_encode($result)))->toBeLessThan(strlen(json_encode($raw)) / 10);
         expect($raw['items'][0]['snippet'])->toHaveKey('description');
         expect(Presentation::compact($tool, ['items' => []]))->toBe(['items' => [], 'next_page_token' => null]);
-    }
+    },
 )->with([
     ['search_channels', 'channelId', 'channel_id'],
     ['search_playlists', 'playlistId', 'playlist_id'],

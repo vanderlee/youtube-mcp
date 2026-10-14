@@ -7,7 +7,7 @@ namespace YouTubeMcp\YouTube;
 use InvalidArgumentException;
 use YouTubeMcp\Auth\Google;
 use YouTubeMcp\Http\Client;
-use YouTubeMcp\Quota\Budget;
+use YouTubeMcp\Quota\Usage;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Database;
 
@@ -21,7 +21,7 @@ class Api
 
     public function __construct(
         private Client $http,
-        private Budget $budget,
+        private Usage $usage,
         private Database $db,
         private ?Google $google = null,
         int $readCacheTtl = 30,
@@ -64,13 +64,12 @@ class Api
         string $method,
         array $params = [],
         ?array $body = null,
-        ?string $reservation = null,
         ?string $operation = null,
         ?string $token = null,
         int $ttl = 0,
     ): array {
         [$resource, $action] = explode('.', $method);
-        [$bucket] = $this->budget->method($method);
+        [$bucket] = $this->usage->method($method);
         [$verb, $path] = $this->route($resource, $action);
         $connection = $token === null ? $this->google?->connection($user) : null;
         // Explicit tokens (such as pending Google consent) have no confirmed connection binding.
@@ -93,44 +92,40 @@ class Api
             throw new ServiceError('GOOGLE_RECONNECT_REQUIRED', 'No connected account.', [], 401);
         }
 
-        $attempt = 0;
-        do {
-            $request = $this->budget->dispatch($user, $method, $reservation, $operation);
+        $request = $this->usage->dispatch($user, $method, $operation);
+        if ($verb !== 'GET') {
+            $cache->invalidate($user, $method, $params, $body, $playlist);
+        }
+        try {
+            $response = $this->send($request, $verb, $path, $params, $access, $body);
+        } finally {
             if ($verb !== 'GET') {
                 $cache->invalidate($user, $method, $params, $body, $playlist);
             }
-            try {
-                $response = $this->send($request, $verb, $path, $params, $access, $body);
-            } finally {
-                if ($verb !== 'GET') {
-                    $cache->invalidate($user, $method, $params, $body, $playlist);
-                }
-            }
+        }
 
-            $status = $response['status'];
-            $data = $response['data'];
-            $this->budget->outcome($request, $status < 300 ? 'success' : 'rejected');
-            if ($status < 300) {
-                if ($connection !== null) {
-                    $this->requireCurrentConnection($user, $connection, $verb);
-                }
-                if ($resource === 'playlistItems') {
-                    foreach ($data['items'] ?? [] as $entry) {
-                        if (isset($entry['id'], $entry['snippet']['playlistId'])) {
-                            $this->playlistItems[$itemBinding . $entry['id']] = $entry['snippet']['playlistId'];
-                        }
+        $status = $response['status'];
+        $data = $response['data'];
+        $this->usage->outcome($request, $status < 300 ? 'success' : 'rejected');
+        if ($status < 300) {
+            if ($connection !== null) {
+                $this->requireCurrentConnection($user, $connection, $verb);
+            }
+            if ($resource === 'playlistItems') {
+                foreach ($data['items'] ?? [] as $entry) {
+                    if (isset($entry['id'], $entry['snippet']['playlistId'])) {
+                        $this->playlistItems[$itemBinding . $entry['id']] = $entry['snippet']['playlistId'];
                     }
                 }
-                if ($verb === 'GET' && $ttl > 0) {
-                    $cache->put($user, $key, $data, $ttl, $versions);
-                }
-
-                return $data;
+            }
+            if ($verb === 'GET' && $ttl > 0) {
+                $cache->put($user, $key, $data, $ttl, $versions);
             }
 
-            $this->retryOrThrow($status, $data, $verb, $bucket, $attempt);
-            $attempt++;
-        } while (true);
+            return $data;
+        }
+
+        $this->throwUpstreamError($status, $data, $verb, $bucket);
     }
 
     /**
@@ -148,7 +143,7 @@ class Api
                 $body === null ? null : json_encode($body, JSON_THROW_ON_ERROR),
             );
         } catch (ServiceError $e) {
-            $this->budget->outcome($request, 'uncertain');
+            $this->usage->outcome($request, 'uncertain');
             throw $e;
         }
     }
@@ -178,13 +173,8 @@ class Api
         return hash('sha256', $user . '|' . $binding . '|' . $method . '|' . json_encode($params));
     }
 
-    /**
-     * Returns only when another read attempt is permitted, after its backoff.
-     * Writes and transport failures are never retried here.
-     *
-     * @param array<array-key, mixed> $data
-     */
-    private function retryOrThrow(int $status, array $data, string $verb, string $bucket, int $attempt): void
+    /** @param array<array-key, mixed> $data */
+    private function throwUpstreamError(int $status, array $data, string $verb, string $bucket): never
     {
         $reason = (string) ($data['error']['errors'][0]['reason'] ?? 'unknown');
         if (in_array($reason, ['quotaExceeded', 'dailyLimitExceeded'], true)) {
@@ -202,10 +192,6 @@ class Api
                 ['upstream_reason' => $reason],
                 429,
             );
-        }
-        if ($verb === 'GET' && $status >= 500 && $attempt < 2) {
-            usleep((int) (100000 * (2 ** $attempt) + random_int(0, 50000)));
-            return;
         }
         if ($status >= 500 && $verb !== 'GET') {
             throw new ServiceError(

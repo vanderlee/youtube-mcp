@@ -28,7 +28,7 @@ test('expanded catalog retains official tools and never restores retired music p
         'add_tracks',
         'remove_tracks',
         'move_track',
-        'delete_playlist'
+        'delete_playlist',
     ];
     $actual = array_map(fn($tool) => $tool->name, Tools::definitions());
     sort($expected);
@@ -37,7 +37,7 @@ test('expanded catalog retains official tools and never restores retired music p
     $this->assertCount(57, $actual);
     $this->assertCount(count($actual), array_unique($actual));
     foreach (Tools::definitions() as $tool) {
-        $this->assertContains(\YouTubeMcp\Playlist\Service::scope($tool->name), Scope::SUPPORTED);
+        $this->assertContains(\YouTubeMcp\Mcp\ToolCatalog::scope($tool->name), Scope::SUPPORTED);
     }
     $repo = new OAuthRepository($this->database(), 'https://music.example.test');
     foreach (
@@ -47,7 +47,7 @@ test('expanded catalog retains official tools and never restores retired music p
             'library.read',
             'library.write',
             'history.read',
-            'history.write'
+            'history.write',
         ] as $scope
     ) {
         $this->assertNull($repo->getScopeEntityByIdentifier($scope));

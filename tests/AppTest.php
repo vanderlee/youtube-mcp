@@ -195,7 +195,7 @@ test('preference tools advertise separate scopes', function (): void {
             'unsubscribe_artist' => 'subscriptions.write',
         ] as $name => $scope
     ) {
-        $this->assertSame($scope, \YouTubeMcp\Playlist\Service::scope($name));
+        $this->assertSame($scope, \YouTubeMcp\Mcp\ToolCatalog::scope($name));
         $this->assertArrayHasKey($name, $tools);
         $this->assertStringContainsString($scope, json_encode($tools[$name]));
     }

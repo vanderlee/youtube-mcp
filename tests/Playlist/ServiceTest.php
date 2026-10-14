@@ -8,7 +8,7 @@ use YouTubeMcp\Auth\{Google, Vault};
 use YouTubeMcp\Http\Client;
 use YouTubeMcp\Operations\Receipts;
 use YouTubeMcp\Playlist\Service;
-use YouTubeMcp\Quota\Budget;
+use YouTubeMcp\Quota\Usage;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Lock;
 use YouTubeMcp\YouTube\Api;
@@ -33,16 +33,13 @@ trait PlaylistTestHelpers
         $api = new class ($responses) extends Api {
             public array $calls = [];
 
-            public function __construct(private array $responses)
-            {
-            }
+            public function __construct(private array $responses) {}
 
             public function call(
                 string $user,
                 string $method,
                 array $params = [],
                 ?array $body = null,
-                ?string $reservation = null,
                 ?string $operation = null,
                 ?string $token = null,
                 int $ttl = 0,
@@ -59,7 +56,7 @@ trait PlaylistTestHelpers
                 return $r;
             }
         };
-        $service = new Service($google, $api, new Budget($db, $cfg), new Receipts($db, $locks), $locks);
+        $service = new Service($google, $api, new Usage($db), new Receipts($db, $locks), $locks);
 
         return [$service, $api];
     }
@@ -102,7 +99,7 @@ test('enhanced video search forwards validated filters without extra detail read
         'published_before' => '2021-01-01T00:00:00Z',
         'order' => 'date',
         'duration' => 'short',
-        'category_id' => '10'
+        'category_id' => '10',
     ]);
     $this->assertCount(1, $api->calls);
     $this->assertSame('short', $api->calls[0][1]['videoDuration']);
