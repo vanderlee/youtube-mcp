@@ -27,13 +27,18 @@ test('rating routes and empty write response', function (): void {
     };
     $api = new Api($http, $budget, $db);
     $api->call('a', 'videos.getRating', ['id' => 'aaaaaaaaaaa'], token: 'test');
-    $this->assertSame([],
-        $api->call('a', 'videos.rate', ['id' => 'aaaaaaaaaaa', 'rating' => 'like'], token: 'test')
+    $this->assertSame(
+        [],
+        $api->call('a', 'videos.rate', ['id' => 'aaaaaaaaaaa', 'rating' => 'like'], token: 'test'),
     );
-    $this->assertSame(['GET', 'https://www.googleapis.com/youtube/v3/videos/getRating?id=aaaaaaaaaaa', null],
-        $http->calls[0]);
-    $this->assertSame(['POST', 'https://www.googleapis.com/youtube/v3/videos/rate?id=aaaaaaaaaaa&rating=like', null],
-        $http->calls[1]);
+    $this->assertSame(
+        ['GET', 'https://www.googleapis.com/youtube/v3/videos/getRating?id=aaaaaaaaaaa', null],
+        $http->calls[0],
+    );
+    $this->assertSame(
+        ['POST', 'https://www.googleapis.com/youtube/v3/videos/rate?id=aaaaaaaaaaa&rating=like', null],
+        $http->calls[1],
+    );
     $this->assertSame(51, $budget->status('a')['buckets']['general']['user_spent']);
 });
 

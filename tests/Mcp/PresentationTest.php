@@ -16,13 +16,13 @@ test('compact listing retains ids and pagination with much smaller payload', fun
                 'snippet' => [
                     'title' => 'Playlist',
                     'description' => str_repeat('long description ', 1000),
-                    'thumbnails' => ['default' => ['url' => 'https://example.test/image']]
+                    'thumbnails' => ['default' => ['url' => 'https://example.test/image']],
                 ],
                 'status' => ['privacyStatus' => 'private'],
-                'contentDetails' => ['itemCount' => 12]
-            ]
+                'contentDetails' => ['itemCount' => 12],
+            ],
         ],
-        'nextPageToken' => 'next'
+        'nextPageToken' => 'next',
     ];
     $r = Presentation::compact('list_playlists', $raw);
     $this->assertSame('PLtest123456', $r['items'][0]['playlist_id']);
@@ -43,10 +43,10 @@ test('receipt summary preserves recovery and occurrence ids without raw snippets
                 'id' => 'occurrence1',
                 'snippet' => [
                     'resourceId' => ['videoId' => 'aaaaaaaaaaa'],
-                    'description' => str_repeat('long ', 1000)
-                ]
-            ]
-        ]
+                    'description' => str_repeat('long ', 1000),
+                ],
+            ],
+        ],
     ];
     $r = Presentation::compact('get_operation', $raw);
     $this->assertSame('occurrence1', $r['entries'][0]['id']);

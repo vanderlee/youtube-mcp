@@ -24,7 +24,7 @@ test('configuration resolves typed values and private storage paths', function (
 });
 
 test('invalid production configuration is rejected', function (array $values, string $message): void {
-    expect(fn () => $this->config($values)->validate())->toThrow(RuntimeException::class, $message);
+    expect(fn() => $this->config($values)->validate())->toThrow(RuntimeException::class, $message);
 })->with([
     'http origin' => [['APP_URL' => 'http://example.test'], 'APP_URL'],
     'origin with path' => [['APP_URL' => 'https://example.test/path'], 'APP_URL'],

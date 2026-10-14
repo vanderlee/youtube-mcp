@@ -42,10 +42,10 @@ test('caption validation retains content and size checks after MIME normalizatio
             strlen($text),
             UPLOAD_ERR_OK,
             'fixture.srt',
-            'application/x-subrip'
+            'application/x-subrip',
         );
 
-        expect(fn () => $store->save('u1', $connection, $upload))->toThrow(ServiceError::class);
+        expect(fn() => $store->save('u1', $connection, $upload))->toThrow(ServiceError::class);
         expect($db->all('SELECT * FROM media_assets'))->toBe([]);
         expect(glob($directory . '/media/*'))->toBe([]);
     } finally {
@@ -65,12 +65,12 @@ test('media cleanup deletes expired owned assets and orphans while preserving fr
         $store = new MediaStore($db, $this->config(['STORAGE_PATH' => $directory]));
         $connection = ['channel_id' => 'channel-id', 'generation' => 'generation'];
         $text = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nFixture\n";
-        $upload = fn () => new UploadedFile(
+        $upload = fn() => new UploadedFile(
             Stream::create($text),
             strlen($text),
             UPLOAD_ERR_OK,
             'fixture.vtt',
-            'text/vtt'
+            'text/vtt',
         );
         $old = $store->save('u1', $connection, $upload());
         $fresh = $store->save('u1', $connection, $upload());
@@ -86,7 +86,7 @@ test('media cleanup deletes expired owned assets and orphans while preserving fr
         $asset = $store->get('u1', $connection, $fresh['asset_id']);
         expect((int) $asset['bytes'])->toBe(strlen($text));
         expect(file_get_contents($asset['path']))->toBe($text);
-        expect(fn () => $store->get('u1', $connection, $old['asset_id']))->toThrow(ServiceError::class);
+        expect(fn() => $store->get('u1', $connection, $old['asset_id']))->toThrow(ServiceError::class);
         $store->delete('u1', $connection, $fresh['asset_id']);
         expect($store->listing('u1', $connection))->toBe([]);
     } finally {

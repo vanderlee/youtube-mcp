@@ -20,12 +20,18 @@ test('https connections are reused without retaining request bodies or other ide
         openssl_pkey_export($key, $private, null, ['config' => $config]);
         file_put_contents($directory . '/ca.pem', $public);
         file_put_contents($directory . '/server.pem', $public . $private);
-        $server = proc_open([PHP_BINARY, dirname(__DIR__) . '/fixtures/https-server.php', $directory . '/server.pem'],
-            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $serverPipes);
+        $server = proc_open(
+            [PHP_BINARY, dirname(__DIR__) . '/fixtures/https-server.php', $directory . '/server.pem'],
+            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+            $serverPipes,
+        );
         $address = trim(fgets($serverPipes[1]));
         expect($address)->toMatch('/^127\.0\.0\.1:\d+$/');
-        $client = proc_open([PHP_BINARY, '-d', 'curl.cainfo=' . $directory . '/ca.pem', dirname(__DIR__) . '/fixtures/https-client.php', $address],
-            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $clientPipes);
+        $client = proc_open(
+            [PHP_BINARY, '-d', 'curl.cainfo=' . $directory . '/ca.pem', dirname(__DIR__) . '/fixtures/https-client.php', $address],
+            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+            $clientPipes,
+        );
         $result = stream_get_contents($clientPipes[1]);
         $error = stream_get_contents($clientPipes[2]);
         fclose($clientPipes[1]);

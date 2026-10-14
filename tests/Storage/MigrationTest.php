@@ -59,7 +59,7 @@ test('later standalone migrations work after the bundle and roll back failed SQL
         file_put_contents($root . '/migrations/008_failure.sql', 'CREATE TABLE rollback_probe (id TEXT);');
         $db->migrate($root);
         $db->migrate($root);
-        $this->assertSame(8, (int)$db->one('SELECT COUNT(*) AS n FROM migrations')['n']);
+        $this->assertSame(8, (int) $db->one('SELECT COUNT(*) AS n FROM migrations')['n']);
     } finally {
         $this->removeDir($root);
     }

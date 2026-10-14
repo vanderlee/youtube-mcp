@@ -17,9 +17,7 @@ final class AccessToken implements AccessTokenEntityInterface
 
     private CryptKeyInterface $privateKey;
 
-    public function __construct(private string $issuer)
-    {
-    }
+    public function __construct(private string $issuer) {}
 
     public function setPrivateKey(CryptKeyInterface $privateKey): void
     {
@@ -38,10 +36,10 @@ final class AccessToken implements AccessTokenEntityInterface
                 'nbf' => time(),
                 'exp' => $this->getExpiryDateTime()->getTimestamp(),
                 'client_id' => $this->getClient()->getIdentifier(),
-                'scopes' => array_map(fn ($scope) => $scope->getIdentifier(), $this->getScopes())
+                'scopes' => array_map(fn($scope) => $scope->getIdentifier(), $this->getScopes()),
             ],
             $this->privateKey->getKeyContents(),
-            'RS256'
+            'RS256',
         );
     }
 }

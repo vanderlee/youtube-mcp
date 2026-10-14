@@ -23,7 +23,7 @@ test('scanner follows pages and preserves occurrence identifiers and positions',
                 ];
             }
             return ['items' => [['id' => 'second', 'snippet' => ['resourceId' => ['videoId' => 'aaaaaaaaaaa']]]]];
-        }
+        },
     );
     $entries = (new Scanner($api))->entries('u1', 'playlist-id', microtime(true) + 30);
 
@@ -39,7 +39,7 @@ test('scanner follows pages and preserves occurrence identifiers and positions',
 test('scanner rejects invalid playlist metadata', function (array $response, string $message): void {
     $api = $this->createMock(Api::class);
     $api->expects($this->once())->method('call')->willReturn($response);
-    expect(fn () => (new Scanner($api))->owned('u1', 'playlist-id', 'channel-id'))
+    expect(fn() => (new Scanner($api))->owned('u1', 'playlist-id', 'channel-id'))
         ->toThrow(ServiceError::class, $message);
 })->with([
     'missing' => [['items' => []], 'Playlist not accessible.'],
@@ -60,7 +60,7 @@ test('scanner returns confirmed owned metadata', function (): void {
 test('scanner refuses duplicated or missing occurrence ids', function (array $items): void {
     $api = $this->createMock(Api::class);
     $api->expects($this->once())->method('call')->willReturn(['items' => $items]);
-    expect(fn () => (new Scanner($api))->entries('u1', 'playlist-id', microtime(true) + 30))
+    expect(fn() => (new Scanner($api))->entries('u1', 'playlist-id', microtime(true) + 30))
         ->toThrow(ServiceError::class, 'Playlist changed during scanning.');
 })->with([
     'missing occurrence' => [[['contentDetails' => ['videoId' => 'aaaaaaaaaaa']]]],
@@ -70,7 +70,7 @@ test('scanner refuses duplicated or missing occurrence ids', function (array $it
 test('expired scan deadlines prevent any upstream request', function (): void {
     $api = $this->createMock(Api::class);
     $api->expects($this->never())->method('call');
-    expect(fn () => (new Scanner($api))->entries('u1', 'playlist-id', microtime(true) - 1))
+    expect(fn() => (new Scanner($api))->entries('u1', 'playlist-id', microtime(true) - 1))
         ->toThrow(ServiceError::class, 'time bound');
 });
 
@@ -80,6 +80,6 @@ test('scanner fails instead of silently truncating a continuing library', functi
     $api->expects($this->exactly(20))->method('call')->willReturnCallback(function () use (&$page): array {
         return ['items' => [['id' => 'occurrence-' . ++$page]], 'nextPageToken' => 'next-' . $page];
     });
-    expect(fn () => (new Scanner($api))->entries('u1', 'playlist-id', microtime(true) + 30))
+    expect(fn() => (new Scanner($api))->entries('u1', 'playlist-id', microtime(true) + 30))
         ->toThrow(ServiceError::class, 'complete scan is limited');
 });

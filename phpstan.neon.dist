@@ -4,6 +4,8 @@ includes:
 parameters:
     level: 6
     phpVersion: 80200
+    bootstrapFiles:
+        - vendor/squizlabs/php_codesniffer/autoload.php
     paths:
         - src
         - bin

@@ -33,11 +33,11 @@ trait CreatorFixtures
         }
 
         $google = new Google($cfg, $db, $vault, new Client(), $locks);
-        $api = new class($apiResponses) extends Api {
+        $api = new class ($apiResponses) extends Api {
             public array $calls = [];
-            public function __construct(private array $responses) {
-            }
-            public function call(string $user, string $method, array $params = [], ?array $body = null, ?string $reservation = null, ?string $operation = null, ?string $token = null, int $ttl = 0): array {
+            public function __construct(private array $responses) {}
+            public function call(string $user, string $method, array $params = [], ?array $body = null, ?string $reservation = null, ?string $operation = null, ?string $token = null, int $ttl = 0): array
+            {
                 $this->calls[] = [$method, $params, $body];
                 $result = array_shift($this->responses);
                 if ($result === null) {
@@ -47,11 +47,11 @@ trait CreatorFixtures
                 return $result;
             }
         };
-        $http = new class($mediaResponses) extends MediaClient {
+        $http = new class ($mediaResponses) extends MediaClient {
             public array $calls = [];
-            public function __construct(private array $responses) {
-            }
-            public function exchange(string $method, string $url, array $headers, ?string $body = null, ?string $path = null): array {
+            public function __construct(private array $responses) {}
+            public function exchange(string $method, string $url, array $headers, ?string $body = null, ?string $path = null): array
+            {
                 $this->calls[] = [$method, $url, $headers, $body, $path];
                 $result = array_shift($this->responses);
                 if ($result instanceof \Throwable) {
@@ -264,7 +264,7 @@ test('owned media purge removes only that users files and malformed captions are
         $this->assertSame('INVALID_MEDIA', $error->reason);
     }
 
-    $this->assertSame(1, (int)$db->one('SELECT COUNT(*) AS n FROM media_assets')['n']);
+    $this->assertSame(1, (int) $db->one('SELECT COUNT(*) AS n FROM media_assets')['n']);
 });
 
 test('section types enforce their reference and title constraints before writing', function (array $section, bool $valid): void {

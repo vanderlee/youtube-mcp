@@ -18,7 +18,7 @@ test('database commits return values and rolls back changes on failures', functi
         return 'result';
     });
     expect($value)->toBe('result');
-    expect(fn () => $db->transaction(function () use ($db): void {
+    expect(fn() => $db->transaction(function () use ($db): void {
         $db->execute('UPDATE fixture SET value=? WHERE id=?', ['rolled back', 1]);
         throw new RuntimeException('abort');
     }))->toThrow(RuntimeException::class, 'abort');

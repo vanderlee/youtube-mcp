@@ -19,9 +19,11 @@ test('separate php workers are not locally quota limited', function (): void {
     $workers = [];
     try {
         foreach (['a', 'b'] as $user) {
-            $command = array_merge([PHP_BINARY],
+            $command = array_merge(
+                [PHP_BINARY],
                 $flags,
-                [dirname(__DIR__) . '/concurrent-reserve.php', $dir . '/test.sqlite', $user]);
+                [dirname(__DIR__) . '/concurrent-reserve.php', $dir . '/test.sqlite', $user],
+            );
             $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
             $this->assertIsResource($process);
             $workers[] = [$process, $pipes];

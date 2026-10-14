@@ -59,7 +59,7 @@ test('partial resume skips completed steps', function (): void {
                 return ++$calls;
             });
             return $step('two', fn() => 2);
-        }
+        },
     );
     $this->assertSame('completed', $b['status']);
     $this->assertSame(1, $calls);

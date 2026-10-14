@@ -126,16 +126,20 @@ Every QA target also has a matching Composer script, so Make is optional.
 PHPStan checks `src/`, `bin/`, and `public/` against PHP 8.2. Its initial baseline
 contains only the existing unused `Config` parameter in `Quota\Budget`'s
 constructor. New errors and obsolete baseline entries fail the check.
-PHP_CodeSniffer uses PSR-12; PHP-CS-Fixer uses the non-risky PER Coding Style 3.0
-preset (the installed tool does not yet provide a dedicated 3.1 preset).
+Both style tools use the non-risky PER Coding Style 3.0 preset in
+`.php-cs-fixer.dist.php`, with four-space indentation and LF line endings.
+The installed fixer does not yet provide a dedicated 3.1 preset.
+PHP_CodeSniffer has no bundled PER standard, so a local read-only sniff runs the
+same fixer rules in memory. It reports files needing changes and the applicable
+fixer names; `composer cs-check` shows the diff and `composer cs-fix` writes it.
+Use PHP-CS-Fixer for repairs; this sniff does not provide PHPCBF fixes.
 Both style tools check PHP files in `src/`, `tests/`, `bin/`, and `public/`, plus
-the fixer configuration, and exclude `HUMANS.md`. Existing style violations
-remain visible; this tooling change does not reformat the application.
+the fixer configuration, and exclude `HUMANS.md`.
 
 [GitHub Actions](.github/workflows/ci.yml) runs on pushes, pull requests, and
 manual dispatch. It installs locked development dependencies and runs tests on
-PHP 8.2 and 8.5, plus PHPStan on PHP 8.2. Style checks remain local until the
-existing violations are addressed; `make qa` currently reports those violations.
+PHP 8.2 and 8.5, plus PHPStan on PHP 8.2. Style checks run locally through
+`make cs`, `make cs-check`, or `make qa`; CI currently gates tests and PHPStan.
 CI uses test fixtures and needs no Google credentials or production configuration.
 
 On the current Windows development machine, required DLLs exist but are not enabled in the default PHP configuration. Run tests with:

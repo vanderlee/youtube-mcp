@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ruleset name="YouTube MCP">
-    <description>PSR-12 checks; PHP-CS-Fixer adds the PER Coding Style rules.</description>
+    <description>PER Coding Style, using the shared PHP-CS-Fixer preset through a read-only sniff.</description>
     <arg name="extensions" value="php"/>
     <arg value="p"/>
     <file>src</file>
@@ -9,5 +9,5 @@
     <file>public</file>
     <file>.php-cs-fixer.dist.php</file>
     <exclude-pattern>*/HUMANS.md</exclude-pattern>
-    <rule ref="PSR12"/>
+    <rule ref="./src/Quality/Sniffs/Formatting/PerCodingStyleSniff.php"/>
 </ruleset>

@@ -24,6 +24,6 @@ test('comment mutations require receipts and reads retain explicit page bounds',
 test('search filters accept documented values and reject invalid filters', function (): void {
     $filters = Tools::searchFilters();
     Arguments::validate(['duration' => 'short', 'order' => 'date', 'category_id' => '10'], $filters, []);
-    expect(fn () => Arguments::validate(['duration' => 'unbounded'], $filters, []))->toThrow(ServiceError::class);
-    expect(fn () => Arguments::validate(['channel_id' => 'video-id'], $filters, []))->toThrow(ServiceError::class);
+    expect(fn() => Arguments::validate(['duration' => 'unbounded'], $filters, []))->toThrow(ServiceError::class);
+    expect(fn() => Arguments::validate(['channel_id' => 'video-id'], $filters, []))->toThrow(ServiceError::class);
 });

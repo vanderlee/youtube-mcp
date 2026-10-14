@@ -19,7 +19,7 @@ test('creator writes require receipt keys and valid upload privacy', function ()
     [, $properties, $required] = $specs['upload_video'];
     expect($properties['privacy']['enum'])->toContain('private');
     $arguments = ['asset_id' => str_repeat('a', 48), 'title' => 'Fixture', 'operation_key' => 'fixture-operation'];
-    expect(fn () => Arguments::validate($arguments, $properties, $required))->not->toThrow(ServiceError::class);
+    expect(fn() => Arguments::validate($arguments, $properties, $required))->not->toThrow(ServiceError::class);
     $arguments['privacy'] = 'unknown';
-    expect(fn () => Arguments::validate($arguments, $properties, $required))->toThrow(ServiceError::class);
+    expect(fn() => Arguments::validate($arguments, $properties, $required))->toThrow(ServiceError::class);
 });

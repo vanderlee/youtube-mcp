@@ -46,7 +46,7 @@ test('browser sign in binds the account generation and never grants a different 
     expect($_SESSION['user'])->toBe('u1');
     expect($_SESSION['user_generation'])->toBe($generation);
     expect($_SESSION['signed_in_at'])->toBeGreaterThan(0);
-    expect(fn () => $browser->requireUser('u2'))->toThrow(ServiceError::class, 'Sign in again.');
+    expect(fn() => $browser->requireUser('u2'))->toThrow(ServiceError::class, 'Sign in again.');
     $db->execute('UPDATE browser_accounts SET generation=? WHERE user_id=?', ['replacement', 'u1']);
     $browser->validate();
     expect($_SESSION)->toBe([]);
@@ -55,7 +55,7 @@ test('browser sign in binds the account generation and never grants a different 
 test('unknown users cannot create a browser account', function (): void {
     $db = $this->database();
     $browser = new BrowserSession($db, $this->config());
-    expect(fn () => $browser->signIn('missing'))->toThrow(ServiceError::class);
+    expect(fn() => $browser->signIn('missing'))->toThrow(ServiceError::class);
     expect($db->all('SELECT * FROM browser_accounts'))->toBe([]);
     expect($_SESSION)->toBe([]);
 });

@@ -23,7 +23,7 @@ try {
                 'openssl',
                 'mbstring',
                 'session',
-                'json'
+                'json',
             ] as $ext
         ) {
             if (!extension_loaded($ext)) {
@@ -96,13 +96,13 @@ try {
             }
             if (file_exists($storage . '/service.sqlite') || file_exists($storage . '/oauth-private.pem')) {
                 throw new RuntimeException(
-                    'Existing state found without APP_KEY. Restore its original configuration instead of generating a new key.'
+                    'Existing state found without APP_KEY. Restore its original configuration instead of generating a new key.',
                 );
             }
             $values['APP_KEY'] = base64_encode(random_bytes(32));
         } elseif (empty($values['APP_KEY'])) {
             throw new RuntimeException(
-                'Existing .env has no APP_KEY. Restore the original key, or generate one manually only if no state exists.'
+                'Existing .env has no APP_KEY. Restore the original key, or generate one manually only if no state exists.',
             );
         }
         $config = new \YouTubeMcp\Config($values, $root);
@@ -111,7 +111,7 @@ try {
         foreach (['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'] as $name) {
             if (empty($values[$name])) {
                 throw new RuntimeException(
-                    'Configure ' . $name . ' using private .env or DEPLOY_' . $name . ' before running setup.'
+                    'Configure ' . $name . ' using private .env or DEPLOY_' . $name . ' before running setup.',
                 );
             }
         }
@@ -125,9 +125,9 @@ try {
         }
         foreach ($config->list('OAUTH_REDIRECT_URIS') as $uri) {
             if (!filter_var($uri, FILTER_VALIDATE_URL) || !str_starts_with($uri, 'https://') || parse_url(
-                    $uri,
-                    PHP_URL_FRAGMENT
-                ) !== null) {
+                $uri,
+                PHP_URL_FRAGMENT,
+            ) !== null) {
                 throw new RuntimeException('OAuth callbacks must be exact HTTPS URLs without fragments.');
             }
         }
@@ -139,7 +139,7 @@ try {
         };
         $text = $template;
         foreach ($values as $name => $value) {
-            $line = $name . '=' . $quote((string)$value);
+            $line = $name . '=' . $quote((string) $value);
             $pattern = '/^' . preg_quote($name, '/') . '\s*=.*$/m';
             if (preg_match($pattern, $text)) {
                 $text = preg_replace_callback($pattern, fn() => $line, $text);
@@ -208,12 +208,12 @@ try {
         $uris = $config->list('OAUTH_REDIRECT_URIS');
         if (count($uris) !== 1) {
             throw new RuntimeException(
-                'Static creation requires exactly one callback; otherwise use client:create manually.'
+                'Static creation requires exactly one callback; otherwise use client:create manually.',
             );
         }
         $db = new \YouTubeMcp\Storage\Database($config->storage() . '/service.sqlite');
         $credentials = (new \YouTubeMcp\Auth\OAuth($db, $config))->register(
-            ['redirect_uris' => $uris, 'client_name' => 'ChatGPT', 'token_endpoint_auth_method' => 'client_secret_post']
+            ['redirect_uris' => $uris, 'client_name' => 'ChatGPT', 'token_endpoint_auth_method' => 'client_secret_post'],
         );
         file_put_contents($file, json_encode($credentials, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
         chmod($file, 0600);
@@ -267,11 +267,11 @@ try {
                     CURLOPT_FOLLOWLOCATION => false,
                     CURLOPT_CONNECTTIMEOUT => 5,
                     CURLOPT_TIMEOUT => 20,
-                    CURLOPT_PROTOCOLS => CURLPROTO_HTTPS
-                ]
+                    CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+                ],
             );
             $body = curl_exec($ch);
-            $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+            $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
             unset($ch);
             if ($body === false) {
                 throw new RuntimeException('HTTPS probe failed. Check DNS, certificate, and routing.');
@@ -298,11 +298,11 @@ try {
         foreach (['/.env', '/composer.json', '/var/oauth-private.pem'] as $path) {
             [$status, $body] = $get($config->url() . $path);
             if ($status === 200 && (str_contains($body, 'APP_KEY=') || str_contains(
-                        $body,
-                        'PRIVATE KEY-----'
-                    ) || (json_decode($body, true)['name'] ?? null) === 'youtube-music-mcp/service')) {
+                $body,
+                'PRIVATE KEY-----',
+            ) || (json_decode($body, true)['name'] ?? null) === 'youtube-music-mcp/service')) {
                 throw new RuntimeException(
-                    'Private project file appears publicly accessible. Fix the document root immediately.'
+                    'Private project file appears publicly accessible. Fix the document root immediately.',
                 );
             }
         }

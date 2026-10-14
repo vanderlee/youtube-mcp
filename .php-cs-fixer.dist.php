@@ -13,5 +13,7 @@ $finder = Finder::create()
 return (new Config())
     ->setRiskyAllowed(false)
     ->setRules(['@PER-CS3x0' => true])
+    ->setIndent('    ')
+    ->setLineEnding("\n")
     ->setCacheFile(__DIR__ . '/.php-cs-fixer.cache')
     ->setFinder($finder);

@@ -39,8 +39,11 @@ test('google preserves compatibility with existing broader youtube grants', func
     $this->user($db);
     $cfg = $this->config();
     $google = new Google($cfg, $db, new Vault($cfg->get('APP_KEY')), new Client(), new Lock($this->dir));
-    $google->connect('u1', ['scope' => 'https://www.googleapis.com/auth/youtube', 'refresh_token' => 'dummy-refresh', 'access_token' => 'dummy-access'],
-        ['id' => 'dummy-channel', 'snippet' => ['title' => 'Dummy']]);
+    $google->connect(
+        'u1',
+        ['scope' => 'https://www.googleapis.com/auth/youtube', 'refresh_token' => 'dummy-refresh', 'access_token' => 'dummy-access'],
+        ['id' => 'dummy-channel', 'snippet' => ['title' => 'Dummy']],
+    );
     $this->assertSame('https://www.googleapis.com/auth/youtube', $google->connection('u1')['scopes']);
 });
 
@@ -72,11 +75,11 @@ test('refresh updates only the connected users encrypted tokens', function (): v
                 'channel-' . $u,
                 'name',
                 $v->encrypt(
-                    ['access_token' => 'expired-' . $u, 'refresh_token' => 'refresh-' . $u, 'expires_at' => 0]
+                    ['access_token' => 'expired-' . $u, 'refresh_token' => 'refresh-' . $u, 'expires_at' => 0],
                 ),
                 Google::YOUTUBE_SCOPE,
-                'g'
-            ]
+                'g',
+            ],
         );
     }
     $http = new class extends Client {
@@ -85,7 +88,7 @@ test('refresh updates only the connected users encrypted tokens', function (): v
             parse_str($body, $p);
             return [
                 'status' => 200,
-                'data' => ['access_token' => 'new-' . $p['refresh_token'], 'expires_in' => 3600]
+                'data' => ['access_token' => 'new-' . $p['refresh_token'], 'expires_in' => 3600],
             ];
         }
     };
@@ -94,14 +97,14 @@ test('refresh updates only the connected users encrypted tokens', function (): v
     $this->assertSame(
         'expired-u2',
         $v->decrypt(
-            $db->one('SELECT tokens FROM google_connections WHERE user_id=?', ['u2'])['tokens']
-        )['access_token']
+            $db->one('SELECT tokens FROM google_connections WHERE user_id=?', ['u2'])['tokens'],
+        )['access_token'],
     );
     $this->assertSame(
         'refresh-u1',
         $v->decrypt(
-            $db->one('SELECT tokens FROM google_connections WHERE user_id=?', ['u1'])['tokens']
-        )['refresh_token']
+            $db->one('SELECT tokens FROM google_connections WHERE user_id=?', ['u1'])['tokens'],
+        )['refresh_token'],
     );
 });
 

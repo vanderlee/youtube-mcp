@@ -24,11 +24,11 @@ trait ExtendedYouTubeFixtures
         $db->execute('INSERT INTO google_connections VALUES (?,?,?,?,?,?)', ['u1', 'UC' . str_repeat('a', 22), 'Fixture', 'unused', 'scope', 'generation']);
         $lock = new Lock($this->dir);
         $google = new Google($cfg, $db, new Vault($cfg->get('APP_KEY')), new Client(), $lock);
-        $api = new class($responses) extends Api {
+        $api = new class ($responses) extends Api {
             public array $calls = [];
-            public function __construct(private array $responses) {
-            }
-            public function call(string $user, string $method, array $params = [], ?array $body = null, ?string $reservation = null, ?string $operation = null, ?string $token = null, int $ttl = 0): array {
+            public function __construct(private array $responses) {}
+            public function call(string $user, string $method, array $params = [], ?array $body = null, ?string $reservation = null, ?string $operation = null, ?string $token = null, int $ttl = 0): array
+            {
                 $this->calls[] = [$user, $method, $params, $body];
                 $response = array_shift($this->responses);
                 if ($response instanceof \Throwable) {

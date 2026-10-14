@@ -14,12 +14,12 @@ test('legacy limits and breakers do not block requests', function (): void {
         'QUOTA_GENERAL' => '1',
         'USER_QUOTA_GENERAL' => '1',
         'USER_QUOTA_SEARCH' => '1',
-        'QUOTA_METHOD_COSTS' => 'invalid'
+        'QUOTA_METHOD_COSTS' => 'invalid',
     ]);
     $budget = new Budget($database, $config);
     $database->execute(
         'INSERT INTO quota_circuit_breakers VALUES (?,?,?)',
-        ['general', time() + 86400, 'YOUTUBE_QUOTA_EXHAUSTED']
+        ['general', time() + 86400, 'YOUTUBE_QUOTA_EXHAUSTED'],
     );
     $reservationId = $budget->reserve('a', 1000000);
     for ($requestPair = 0; $requestPair < 20; $requestPair++) {
@@ -49,7 +49,7 @@ test('cleanup removes legacy gates without deleting usage', function (): void {
     $budget->dispatch('a', 'videos.list');
     $database->execute(
         'INSERT INTO quota_reservations VALUES (?,?,?,?,?,?)',
-        ['old', 'a', $budget->window(), 'general', 50, time() + 300]
+        ['old', 'a', $budget->window(), 'general', 50, time() + 300],
     );
 
     $budget->cleanup();

@@ -41,9 +41,9 @@ try {
                 'file' => basename($e->getFile()),
                 'line' => $e->getLine(),
                 'reason' => $bootstrapReason ?? 'initialization_failed',
-                'missing_class' => $missingClass ?? null
-            ]
-        )
+                'missing_class' => $missingClass ?? null,
+            ],
+        ),
     );
     http_response_code(503);
     header('Content-Type: application/json');

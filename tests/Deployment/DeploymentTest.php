@@ -19,7 +19,7 @@ trait DeploymentTestHelpers
             '-d',
             'extension=sodium',
             $this->dir . '/bin/deploy-config.php',
-            'prepare'
+            'prepare',
         ];
         $process = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, array_merge(getenv(), $env));
         $out = stream_get_contents($pipes[1]);
@@ -35,7 +35,7 @@ trait DeploymentTestHelpers
             'DEPLOY_APP_URL' => 'https://music.example.test',
             'DEPLOY_ALLOWED_EMAILS' => 'owner@example.test',
             'DEPLOY_GOOGLE_CLIENT_ID' => 'client-test',
-            'DEPLOY_GOOGLE_CLIENT_SECRET' => 'secret$with"quotes\\and#hash'
+            'DEPLOY_GOOGLE_CLIENT_SECRET' => 'secret$with"quotes\\and#hash',
         ];
     }
 }
@@ -66,7 +66,7 @@ test('existing state without configuration cannot generate replacement key', fun
 
 test('storage inside public is rejected without writing configuration', function (): void {
     [$status, , $err] = $this->runHelper(
-        $this->inputs() + ['DEPLOY_STORAGE_PATH' => $this->dir . '/public/private']
+        $this->inputs() + ['DEPLOY_STORAGE_PATH' => $this->dir . '/public/private'],
     );
     $this->assertSame(1, $status);
     $this->assertStringContainsString('outside public', $err);
@@ -82,7 +82,7 @@ beforeEach(function (): void {
     copy(dirname(__DIR__, 2) . '/.env.example', $this->dir . '/.env.example');
     file_put_contents(
         $this->dir . '/vendor/autoload.php',
-        '<?php require ' . var_export(dirname(__DIR__, 2) . '/vendor/autoload.php', true) . ';'
+        '<?php require ' . var_export(dirname(__DIR__, 2) . '/vendor/autoload.php', true) . ';',
     );
 });
 

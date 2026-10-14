@@ -10,15 +10,13 @@ use YouTubeMcp\Storage\Database;
 /** Browser authentication is independent of the stable identity used for usage history. */
 final class BrowserSession
 {
-    public function __construct(private Database $db, private Config $config)
-    {
-    }
+    public function __construct(private Database $db, private Config $config) {}
 
     public function signIn(string $user): void
     {
         $this->db->execute(
             'INSERT INTO browser_accounts(user_id,generation) SELECT id,? FROM users WHERE id=? ON CONFLICT(user_id) DO NOTHING',
-            [bin2hex(random_bytes(16)), $user]
+            [bin2hex(random_bytes(16)), $user],
         );
         $account = $this->db->one('SELECT generation FROM browser_accounts WHERE user_id=?', [$user]);
         if (!$account) {

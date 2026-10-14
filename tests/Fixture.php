@@ -20,7 +20,7 @@ trait Fixture
     {
         return new Config(
             $values + ['APP_URL' => 'https://music.example.test', 'APP_KEY' => base64_encode(str_repeat('k', 32))],
-            dirname(__DIR__)
+            dirname(__DIR__),
         );
     }
 

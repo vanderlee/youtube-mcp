@@ -30,6 +30,6 @@ test('retirement migration removes only music credentials and preserves official
         $this->assertNull($db->one("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [$table]));
     }
     $this->assertSame('dummy-encrypted-official', $db->one('SELECT tokens FROM google_connections WHERE user_id=?', ['u1'])['tokens']);
-    $this->assertSame(0, (int)$db->one('SELECT revoked FROM oauth_tokens WHERE id=?', ['token'])['revoked']);
+    $this->assertSame(0, (int) $db->one('SELECT revoked FROM oauth_tokens WHERE id=?', ['token'])['revoked']);
     $this->assertSame('completed', $db->one('SELECT status FROM operations WHERE id=?', ['operation'])['status']);
 });

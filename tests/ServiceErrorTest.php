@@ -13,7 +13,7 @@ test('service error details cannot replace the public code or message', function
         'NOT_OWNER',
         'Access denied.',
         ['code' => 'spoofed', 'message' => 'spoofed', 'retry' => false],
-        403
+        403,
     );
 
     expect($error->payload())->toBe(['code' => 'NOT_OWNER', 'message' => 'Access denied.', 'retry' => false]);

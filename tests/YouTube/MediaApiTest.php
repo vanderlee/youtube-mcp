@@ -15,7 +15,7 @@ test('upload session locations allow only the official https upload endpoints', 
 })->with(['www.googleapis.com', 'youtube.googleapis.com']);
 
 test('upload locations reject unsafe URLs', function (string $location): void {
-    expect(fn () => MediaApi::validateLocation($location))->toThrow(ServiceError::class, 'no file was transmitted');
+    expect(fn() => MediaApi::validateLocation($location))->toThrow(ServiceError::class, 'no file was transmitted');
 })->with([
     'http://www.googleapis.com/upload/youtube/v3/videos',
     'https://attacker.test/upload/youtube/v3/videos',
