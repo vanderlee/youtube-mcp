@@ -28,6 +28,7 @@ COPY --from=dependencies /app/vendor/ ./vendor/
 COPY composer.json composer.lock ./
 COPY src/ ./src/
 COPY public/ ./public/
+COPY views/ ./views/
 COPY migrations/ ./migrations/
 COPY bin/console.php ./bin/console.php
 COPY docker/php.ini /usr/local/etc/php/conf.d/app.ini

@@ -7,6 +7,8 @@
 !src/**
 !public/
 !public/**
+!views/
+!views/**
 !migrations/
 !migrations/*.sql
 !bin/

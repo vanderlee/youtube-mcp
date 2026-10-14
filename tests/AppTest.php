@@ -438,6 +438,54 @@ test('same origin allowed but null and foreign origins rejected', function (): v
     }
 });
 
+test('discovery aliases and health routes work without starting a browser session', function (): void {
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+    foreach (['/health/live' => 'ok', '/health/ready' => 'ready'] as $path => $status) {
+        $response = $this->app->handle(new ServerRequest('GET', 'https://music.example.test' . $path));
+        expect($response->getStatusCode())->toBe(200)
+            ->and(json_decode((string) $response->getBody(), true))->toBe(['status' => $status]);
+    }
+    $bodies = [];
+    foreach (['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp'] as $path) {
+        $response = $this->app->handle(new ServerRequest('GET', 'https://music.example.test' . $path));
+        expect($response->getStatusCode())->toBe(200);
+        $bodies[] = (string) $response->getBody();
+    }
+    expect($bodies[0])->toBe($bodies[1])
+        ->and(json_decode($bodies[0], true)['resource'])->toBe('https://music.example.test/mcp')
+        ->and(session_status())->not->toBe(PHP_SESSION_ACTIVE);
+});
+
+test('protocol write routes retain method json and resource validation', function (): void {
+    foreach (['/oauth/register', '/oauth/token'] as $path) {
+        $response = $this->app->handle(new ServerRequest('GET', 'https://music.example.test' . $path));
+        expect($response->getStatusCode())->toBe(405);
+        $response = $this->app->handle(new ServerRequest('POST', 'https://music.example.test' . $path, ['Content-Type' => 'application/json'], '{'));
+        expect($response->getStatusCode())->toBe(400)
+            ->and((string) $response->getBody())->toContain('INVALID_JSON');
+    }
+    $response = $this->app->handle(new ServerRequest('POST', 'https://music.example.test/oauth/token', ['Content-Type' => 'application/json'], '{"resource":"https://other.example.test/mcp"}'));
+    expect($response->getStatusCode())->toBe(400)
+        ->and((string) $response->getBody())->toContain('invalid_target');
+});
+
+test('invalid google callbacks consume the flow without connecting an account', function (): void {
+    $this->app->handle(new ServerRequest('GET', 'https://music.example.test/'));
+    $_SESSION['google_flow'] = ['state' => 'expected', 'at' => time()];
+    try {
+        $response = $this->app->handle((new ServerRequest('GET', 'https://music.example.test/google/callback'))
+            ->withQueryParams(['state' => 'wrong', 'code' => 'dummy-code']));
+        expect($response->getStatusCode())->toBe(400)
+            ->and((string) $response->getBody())->toContain('INVALID_GOOGLE_STATE')
+            ->and($_SESSION)->not->toHaveKey('google_flow');
+    } finally {
+        $_SESSION = [];
+        session_write_close();
+    }
+});
+
 beforeEach(function (): void {
     $this->dir = $this->tempDir();
     $key = openssl_pkey_new(['private_key_bits' => 2048]);

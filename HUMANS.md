@@ -7,22 +7,5 @@ other work despite not being explicitly asked to do so.
 
 ## To do
 
-- Keep session open for longer by default
-- Add support for other LLM's
-  - Claude
-  - Gemini
-- Better tests
-  - Organize into directory structure
-  - Full blackbox test coverage
-- Enable rollout on other platforms
-  - Docker image
-  - Native PHP
-- Refactor code
-    - Readability
-    - Formal scanners
-    - App.php; use templates (PHP-as-template?) and decent routing
-    - Simplify unnecessary complexity
-    - Split up large methods into smaller ones
-    - Reduce cognitive load on methods
-- CI Pipeline
+- App.php; use templates (PHP-as-template?) and decent routing
 - Detach "Toyls" branding

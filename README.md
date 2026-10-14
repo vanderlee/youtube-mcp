@@ -110,6 +110,10 @@ YouTube enforces project quotas and rate limits. The app does not impose project
 Usage status reports estimates for requests observed by this installation, grouped by Pacific day. It cannot determine remaining YouTube quota or see other project traffic. Actual YouTube quota/rate-limit errors are returned to the caller without automatic retries. Operation receipts, ownership checks, bounded batches, and time limits remain active.
 ## Development and tests
 
+HTTP route handlers live in `src/Routes/`. `src/App.php` wires their dependencies, maps paths to handlers, and applies shared request validation, browser authentication, account locks, error handling, and response headers. The two protected-resource discovery paths share one handler.
+
+Browser markup lives in plain PHP templates under `views/`, outside the public web root. `src/Http/View.php` renders page templates inside `layout.php` and provides a shared `form.php` partial. Templates receive handler data, an `$escape()` helper for text and attributes, and the current CSRF token. Escape dynamic values; only rendered template output should be emitted as trusted HTML. Include `views/` when deploying the application (the Docker image does this automatically).
+
 The suite uses Pest 3 for PHP 8.2 compatibility. `composer test` runs all tests; use `vendor/bin/pest tests/Auth/OAuthTest.php` or `--filter` for focused runs. Shared fixtures are registered in `tests/Pest.php`; `phpunit.xml` remains the runner configuration.
 
 Tests mirror the `YouTubeMcp` namespace: root classes have root test files, and `Auth`, `Http`, `Mcp`, `Operations`, `Playlist`, `Quota`, `Storage`, and `YouTube` each have a matching directory under `tests/`. Each application class has a dedicated behavior test file. Cross-component security regressions are in `tests/Integration`; private deployment-helper checks are in `tests/Deployment`. Tests use dummy identities, mocked upstream calls, in-memory SQLite, temporary private storage, and a local TLS fixture rather than live Google accounts. Class coverage declarations identify test ownership; they do not imply full line or branch coverage.

@@ -7,6 +7,7 @@
     <file>tests</file>
     <file>bin</file>
     <file>public</file>
+    <file>views</file>
     <file>.php-cs-fixer.dist.php</file>
     <exclude-pattern>*/HUMANS.md</exclude-pattern>
     <rule ref="./src/Quality/Sniffs/Formatting/PerCodingStyleSniff.php"/>
