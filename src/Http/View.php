@@ -23,6 +23,7 @@ final class View
             'signedIn' => !empty($_SESSION['user']),
             'brandName' => $this->config->get('BRAND_NAME', 'Toyls'),
             'brandUrl' => $this->config->get('BRAND_URL', 'https://toyls.com'),
+            'appUrl' => $this->config->url(),
             'brandTagline' => $this->config->get('BRAND_TAGLINE', 'tools, toys & toils'),
         ]);
 

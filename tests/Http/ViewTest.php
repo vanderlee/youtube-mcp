@@ -53,7 +53,7 @@ test('template names cannot escape the views directory', function (): void {
 test('browser branding keeps its defaults and escapes configured values everywhere', function (): void {
     $directory = dirname(__DIR__, 2) . '/views';
     $default = (string) (new View($directory, $this->config()))->page('Welcome', 'welcome')->getBody();
-    expect($default)->toContain('class="brand" href="https://toyls.com" aria-label="Toyls home"');
+    expect($default)->toContain('href="https://toyls.com" aria-label="Toyls home"');
     expect($default)->toContain('<title>Welcome · Toyls</title>', '<strong>Toyls</strong>', '<small>tools, toys &amp; toils</small>', '<footer>Toyls · tools, toys &amp; toils</footer>');
 
     $config = $this->config([
@@ -70,4 +70,22 @@ test('browser branding keeps its defaults and escapes configured values everywhe
         '<small>&lt;script&gt;alert(&quot;tagline&quot;)&lt;/script&gt;</small>',
         '<footer>Brand &quot;&lt;&amp; · &lt;script&gt;alert(&quot;tagline&quot;)&lt;/script&gt;</footer>',
     )->not->toContain('<script>', 'Toyls', 'tools, toys');
+});
+
+test('header links the brand and youtube separately with an unlinked separator', function (): void {
+    $config = $this->config([
+        'BRAND_URL' => 'https://brand.example.test',
+        'APP_URL' => 'https://youtube.example.test',
+    ]);
+    $html = (string) (new View(dirname(__DIR__, 2) . '/views', $config))->page('Welcome', 'welcome')->getBody();
+    $document = new \DOMDocument();
+    $document->loadHTML($html, LIBXML_NOERROR | LIBXML_NOWARNING);
+    $xpath = new \DOMXPath($document);
+    $links = $xpath->query('//header//div[@class="brand"]//a');
+    expect($links->length)->toBe(2)
+        ->and($links->item(0)->getAttribute('href'))->toBe('https://brand.example.test')
+        ->and($links->item(0)->textContent)->toBe('Toyls')
+        ->and($links->item(1)->getAttribute('href'))->toBe('https://youtube.example.test')
+        ->and($links->item(1)->textContent)->toBe('youtube')
+        ->and($xpath->query('//span[@class="brand-divider"]/ancestor::a')->length)->toBe(0);
 });

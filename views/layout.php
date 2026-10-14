@@ -17,10 +17,14 @@ declare(strict_types=1);
 <a class="skip-link" href="#main">Skip to content</a>
 <header class="site-header">
     <div class="header-inner">
-        <a class="brand" href="<?= $escape($brandUrl) ?>" aria-label="<?= $escape($brandName) ?> home">
-            <span><strong><?= $escape($brandName) ?></strong><span class="brand-divider">/</span><span class="brand-product">youtube</span></span>
+        <div class="brand">
+            <span>
+                <a href="<?= $escape($brandUrl) ?>" aria-label="<?= $escape($brandName) ?> home"><strong><?= $escape($brandName) ?></strong></a>
+                <span class="brand-divider">/</span>
+                <a class="brand-product" href="<?= $escape($appUrl) ?>" aria-label="YouTube home">youtube</a>
+            </span>
             <small><?= $escape($brandTagline) ?></small>
-        </a>
+        </div>
         <?php if ($signedIn): ?>
             <?= $this->form('/logout', 'Sign out', 'text-button') ?>
         <?php endif; ?>

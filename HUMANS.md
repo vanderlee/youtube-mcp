@@ -7,4 +7,4 @@ other work despite not being explicitly asked to do so.
 
 ## To do
 
-- Investigate readability refactoring
+- Investigate further readability refactoring

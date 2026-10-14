@@ -38,7 +38,7 @@ For automated Plesk post-deployment setup, run `bash bin/post-deploy.sh --php /o
 2. Copy `.env.example` to `.env` outside the web root.
 3. Set `APP_URL` to the exact HTTPS origin, your Google client credentials, and invited email addresses.
    Optionally set `BRAND_NAME` and `BRAND_TAGLINE` for the browser title, header, and footer. They default to `Toyls` and `tools, toys & toils`; values are rendered as escaped text.
-   Set `BRAND_URL` to the header brand link destination; it defaults to `https://toyls.com`.
+   Set `BRAND_URL` to the header brand name link destination; it defaults to `https://toyls.com`. The `/` separator is unlinked, and `youtube` links to `APP_URL`.
 4. Run `php bin/console.php key:generate`, then place the generated value in `APP_KEY`. Keep it private and back it up.
 5. Run `php bin/console.php init` to create signing keys and migrate storage.
 6. Point the domain's document root to `public/` and configure front-controller routing.
