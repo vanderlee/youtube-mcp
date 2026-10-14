@@ -48,7 +48,7 @@ final class App
 
         $this->budget = new Budget($this->db, $config);
         $this->google = new Google($config, $this->db, new Vault($config->get('APP_KEY')), $http, $locks);
-        $this->api = new Api($http, $this->budget, $this->db, $this->google);
+        $this->api = new Api($http, $this->budget, $this->db, $this->google, $config->int('API_READ_CACHE_TTL', 30));
         $this->oauth = new OAuth($this->db, $config, $locks);
         $this->browser = new BrowserSession($this->db, $config);
 
@@ -57,7 +57,8 @@ final class App
             $this->google,
             $this->budget,
             new Vault($config->get('APP_KEY')),
-            new MediaClient()
+            new MediaClient(),
+            new \YouTubeMcp\YouTube\ResponseCache($this->db)
         );
         $creator = new CreatorService(
             $this->google,
@@ -300,6 +301,7 @@ final class App
             $this->locks->run('account:' . $user, function () use ($user) {
                 $this->mediaAssets->purge($user);
                 $this->db->execute('DELETE FROM audit_events WHERE user_id=?', [$user]);
+                $this->db->execute('DELETE FROM api_cache_versions WHERE user_id=?', [$user]);
                 $this->db->execute('DELETE FROM users WHERE id=?', [$user]);
             });
             $_SESSION = [];

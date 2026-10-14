@@ -49,6 +49,10 @@ final class Config
 
     public function validate(): void
     {
+        $ttl = $this->get('API_READ_CACHE_TTL', '30');
+        if (!ctype_digit($ttl) || (int) $ttl > 300) {
+            throw new RuntimeException('API_READ_CACHE_TTL must be an integer between 0 and 300 seconds.');
+        }
         foreach (['SESSION_IDLE_SECONDS' => 1800, 'SESSION_ABSOLUTE_SECONDS' => 43200] as $name => $default) {
             if ($this->int($name, $default) < 1) {
                 throw new RuntimeException($name . ' must be a positive number of seconds.');

@@ -12,12 +12,30 @@ use YouTubeMcp\Storage\Database;
 
 class Api
 {
+    private int $readCacheTtl = 30;
+    private array $playlistItems = [];
+
     public function __construct(
         private Client $http,
         private Budget $budget,
         private Database $db,
-        private ?Google $google = null
+        private ?Google $google = null,
+        int $readCacheTtl = 30
     ) {
+        if ($readCacheTtl < 0 || $readCacheTtl > 300) {
+            throw new \InvalidArgumentException('Read cache TTL must be between 0 and 300 seconds.');
+        }
+        $this->readCacheTtl = $readCacheTtl;
+    }
+
+    /** Opt-in for user-facing reads only; mutation checks keep call()'s zero-TTL default. */
+    public function read(string $user, string $method, array $params): array
+    {
+        if (!str_ends_with($method, '.list') && !str_ends_with($method, '.getRating')) {
+            throw new \InvalidArgumentException('Only reads may use the response cache.');
+        }
+
+        return $this->call($user, $method, $params, ttl: $this->readCacheTtl);
     }
 
     public function call(
@@ -46,15 +64,17 @@ class Api
         // Explicit tokens (such as pending Google consent) have no confirmed connection binding.
         $cacheBinding = $connection === null ? hash('sha256', $token ?? '') : $connection['channel_id'] . '|' . $connection['generation'];
         $key = hash('sha256', $user . '|' . $cacheBinding . '|' . $method . '|' . json_encode($params));
+        $cache = new ResponseCache($this->db);
+        $tags = $cache->tags($method, $params);
         if ($verb === 'GET' && $ttl > 0) {
-            $cached = $this->db->one(
-                'SELECT value FROM api_cache WHERE cache_key=? AND user_id=? AND expires_at>?',
-                [$key, $user, time()]
-            );
-            if ($cached) {
-                return json_decode($cached['value'], true);
+            $cached = $cache->get($user, $key);
+            if ($cached !== null) {
+                return $cached;
             }
         }
+        $versions = $verb === 'GET' && $ttl > 0 ? $cache->versions($user, $tags) : [];
+        $itemBinding = $user . '|' . $cacheBinding . '|';
+        $playlist = $body['snippet']['playlistId'] ?? (isset($params['id']) ? $this->playlistItems[$itemBinding . $params['id']] ?? null : null);
 
         $access = $token ?? $this->google?->accessToken($user);
         if (!$access) {
@@ -64,6 +84,9 @@ class Api
         $attempt = 0;
         do {
             $request = $this->budget->dispatch($user, $method, $reservation, $operation);
+            if ($verb !== 'GET') {
+                $cache->invalidate($user, $method, $params, $body, $playlist);
+            }
             try {
                 $response = $this->http->request(
                     $verb,
@@ -74,6 +97,10 @@ class Api
             } catch (ServiceError $e) {
                 $this->budget->outcome($request, 'uncertain');
                 throw $e;
+            } finally {
+                if ($verb !== 'GET') {
+                    $cache->invalidate($user, $method, $params, $body, $playlist);
+                }
             }
 
             $status = $response['status'];
@@ -89,13 +116,15 @@ class Api
                         throw new ServiceError('GOOGLE_CONNECTION_CHANGED', 'The account connection changed during this request. Start a new request.', [], 409);
                     }
                 }
-                if ($verb !== 'GET') {
-                    $this->db->execute('DELETE FROM api_cache WHERE user_id=?', [$user]);
-                } elseif ($ttl > 0) {
-                    $this->db->execute(
-                        'INSERT INTO api_cache VALUES (?,?,?,?) ON CONFLICT(cache_key) DO UPDATE SET value=excluded.value,expires_at=excluded.expires_at',
-                        [$key, $user, json_encode($data), time() + $ttl]
-                    );
+                if ($resource === 'playlistItems') {
+                    foreach ($data['items'] ?? [] as $entry) {
+                        if (isset($entry['id'], $entry['snippet']['playlistId'])) {
+                            $this->playlistItems[$itemBinding . $entry['id']] = $entry['snippet']['playlistId'];
+                        }
+                    }
+                }
+                if ($verb === 'GET' && $ttl > 0) {
+                    $cache->put($user, $key, $data, $ttl, $versions);
                 }
 
                 return $data;

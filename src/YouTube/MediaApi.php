@@ -15,7 +15,8 @@ final class MediaApi
         private Google $google,
         private Budget $budget,
         private Vault $vault,
-        private MediaClient $http
+        private MediaClient $http,
+        private ?ResponseCache $cache = null
     ) {
     }
 
@@ -50,9 +51,15 @@ final class MediaApi
         $location = $this->vault->decrypt($session['session'])['location'];
         self::validateLocation($location);
 
-        return $step('upload-content', function () use ($user, $location, $asset) {
-            $response = $this->http->exchange('PUT', $location, ['Authorization: Bearer ' . $this->google->accessToken($user),
-                'Content-Type: ' . $asset['mime'], 'Content-Length: ' . $asset['bytes']], path: $asset['path']);
+        return $step('upload-content', function () use ($user, $location, $asset, $method, $params, $metadata) {
+            $access = $this->google->accessToken($user);
+            $this->cache?->invalidate($user, $method, $params, $metadata, null);
+            try {
+                $response = $this->http->exchange('PUT', $location, ['Authorization: Bearer ' . $access,
+                    'Content-Type: ' . $asset['mime'], 'Content-Length: ' . $asset['bytes']], path: $asset['path']);
+            } finally {
+                $this->cache?->invalidate($user, $method, $params, $metadata, null);
+            }
             if ($response['status'] === 308) {
                 throw new ServiceError('UPSTREAM_UNCERTAIN', 'Upload is incomplete. Reconcile its saved receipt; automatic retransmission is disabled.', [], 502);
             }

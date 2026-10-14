@@ -50,6 +50,16 @@ No OpenAI API key is needed: the service exposes tools to ChatGPT and does not c
 
 ## Tools
 
+### Read caching and connection reuse
+
+`API_READ_CACHE_TTL` controls additional caching for read-only playlist metadata, video/channel details, channel uploads, and comments. The default is 30 seconds; values from 0 to 300 are accepted, with 0 disabling these additional caches. Existing search and listing tools retain their explicit cache lifetimes. Ownership checks, duplicate scans, mutation planning, and receipt verification continue to request fresh upstream data.
+
+Responses remain partitioned by user, selected channel, and connection generation. Writes invalidate dependent resources instead of deleting unrelated searches, playlists, ratings, and subscriptions. Invalidations happen around dispatch, including uncertain writes. Version checks prevent an in-flight read from restoring an invalidated cache entry. Deleting an occurrence without a known playlist conservatively invalidates playlist data; full reconnect/disconnect still clears the account's caches.
+
+The JSON HTTP client reuses a bounded pool of connections within one PHP request, partitioned by upstream origin and authorization headers. Request options are reset between calls, so methods, bodies, and headers cannot carry over. Connections are not persisted between PHP-FPM requests; streaming media transport is unchanged. Cache hits avoid API calls, while connection reuse reduces setup overhead without reducing quota costs.
+
+After deploying this change, run `php bin/console.php migrate` before serving traffic. Migration `008_response_cache_dependencies.sql` creates dependency/version tables and clears only old untagged cache entries. Keys, connections, receipts, and usage history are preserved. Changes made directly in YouTube may appear after the applicable cache lifetime; shorten the configured TTL when fresher read-only results are needed.
+
 ### Fewer API calls and smaller ChatGPT results
 
 Read tools return compact data by default: essential IDs, titles, positions, privacy/counts where applicable, and pagination. Request `response_detail: "full"` for available raw details. Mutation results summarize receipts, including completed-step IDs, errors, and any uncertain pending step; use `get_operation` with `response_detail: "full"` to inspect the full persisted receipt without a YouTube request. Receipt access requires the current connection generation and the originating tool's permission or the corresponding service read permission. A playlist-only grant cannot read comment, video, caption, media or channel receipts. Compact presentation does not change stored receipts.

@@ -133,7 +133,7 @@ final class Service
             );
         }
         if ($tool === 'get_playlist') {
-            $metadata = $this->metadata($user, $a['playlist_id']);
+            $metadata = $this->metadata($user, $a['playlist_id'], fresh: false);
             $contents = $this->api->call(
                 $user,
                 'playlistItems.list',
@@ -534,14 +534,12 @@ final class Service
         ];
     }
 
-    private function metadata(string $user, string $id): array
+    private function metadata(string $user, string $id, bool $fresh = true): array
     {
-        $response = $this->api->call(
-            $user,
-            'playlists.list',
-            ['part' => 'snippet,status,contentDetails', 'id' => $id],
-            ttl: 0
-        );
+        $params = ['part' => 'snippet,status,contentDetails', 'id' => $id];
+        $response = $fresh
+            ? $this->api->call($user, 'playlists.list', $params)
+            : $this->api->read($user, 'playlists.list', $params);
 
         return $response['items'][0] ?? throw new ServiceError(
             'PLAYLIST_NOT_FOUND',

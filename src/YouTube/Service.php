@@ -62,7 +62,7 @@ final class Service
     {
         $page = ['maxResults' => $arguments['page_size'] ?? 25] + (isset($arguments['page_token']) ? ['pageToken' => $arguments['page_token']] : []);
         if ($tool === 'get_video_details') {
-            $response = $this->api->call($user, 'videos.list', ['part' => 'snippet,contentDetails,statistics,status', 'id' => implode(',', $arguments['video_ids'])]);
+            $response = $this->api->read($user, 'videos.list', ['part' => 'snippet,contentDetails,statistics,status', 'id' => implode(',', $arguments['video_ids'])]);
 
             return ['items' => $response['items'] ?? [], 'not_returned_video_ids' => array_values(array_diff($arguments['video_ids'], array_column($response['items'] ?? [], 'id'))),
                 'availability_note' => 'Omitted videos may be private, deleted or inaccessible; metadata alone does not prove playback availability.'];
@@ -74,27 +74,27 @@ final class Service
 
             $filter = isset($arguments['channel_id']) ? ['id' => $arguments['channel_id']] : (isset($arguments['handle']) ? ['forHandle' => $arguments['handle']] : ['id' => $connection['channel_id']]);
 
-            return $this->api->call($user, 'channels.list', ['part' => 'snippet,statistics,contentDetails'] + $filter);
+            return $this->api->read($user, 'channels.list', ['part' => 'snippet,statistics,contentDetails'] + $filter);
         }
         if ($tool === 'list_channel_uploads') {
-            $channel = $this->api->call($user, 'channels.list', ['part' => 'contentDetails', 'id' => $arguments['channel_id'] ?? $connection['channel_id']]);
+            $channel = $this->api->read($user, 'channels.list', ['part' => 'contentDetails', 'id' => $arguments['channel_id'] ?? $connection['channel_id']]);
             $uploads = $channel['items'][0]['contentDetails']['relatedPlaylists']['uploads'] ?? null;
             if (!is_string($uploads) || $uploads === '') {
                 throw new ServiceError('CHANNEL_NOT_FOUND', 'No accessible uploads playlist was returned.', [], 404);
             }
 
-            return $this->api->call($user, 'playlistItems.list', ['part' => 'snippet,contentDetails', 'playlistId' => $uploads] + $page);
+            return $this->api->read($user, 'playlistItems.list', ['part' => 'snippet,contentDetails', 'playlistId' => $uploads] + $page);
         }
         if ($tool === 'search_channels' || $tool === 'search_playlists') {
-            return $this->api->call($user, 'search.list', ['part' => 'snippet', 'type' => $tool === 'search_channels' ? 'channel' : 'playlist', 'q' => $arguments['query']]
+            return $this->api->read($user, 'search.list', ['part' => 'snippet', 'type' => $tool === 'search_channels' ? 'channel' : 'playlist', 'q' => $arguments['query']]
                 + $page + self::searchParameters($arguments));
         }
         if ($tool === 'list_comments') {
-            return $this->api->call($user, 'commentThreads.list', ['part' => 'snippet,replies', 'videoId' => $arguments['video_id'], 'textFormat' => 'plainText', 'order' => $arguments['order'] ?? 'time'] + $page)
+            return $this->api->read($user, 'commentThreads.list', ['part' => 'snippet,replies', 'videoId' => $arguments['video_id'], 'textFormat' => 'plainText', 'order' => $arguments['order'] ?? 'time'] + $page)
                 + ['embedded_replies_may_be_incomplete' => true];
         }
 
-        return $this->api->call($user, 'comments.list', ['part' => 'snippet', 'parentId' => $arguments['comment_id'], 'textFormat' => 'plainText'] + $page);
+        return $this->api->read($user, 'comments.list', ['part' => 'snippet', 'parentId' => $arguments['comment_id'], 'textFormat' => 'plainText'] + $page);
     }
 
     private function write(string $user, array $connection, string $tool, array $arguments, callable $step, string $operation): array

@@ -32,7 +32,7 @@ test('merged migrations preserve every historical upgrade point', function (int 
     $this->assertSame([
         '001_initial.sql', '002_quota_alerts.sql', '003_music_connections.sql',
         '004_music_browser_connections.sql', '005_remove_music_authentication.sql', '006_media_assets.sql',
-        '007_browser_sessions.sql',
+        '007_browser_sessions.sql', '008_response_cache_dependencies.sql',
     ], array_column($db->all('SELECT name FROM migrations ORDER BY name'), 'name'));
     $this->assertNotNull($db->one("SELECT name FROM sqlite_master WHERE type='table' AND name='media_assets'"));
     $this->assertNotNull($db->one("SELECT name FROM sqlite_master WHERE type='table' AND name='quota_alerts'"));

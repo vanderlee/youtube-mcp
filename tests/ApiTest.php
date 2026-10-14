@@ -8,6 +8,8 @@ use YouTubeMcp\Http\Client;
 use YouTubeMcp\Quota\Budget;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\YouTube\Api;
+use YouTubeMcp\Auth\{Google, Vault};
+use YouTubeMcp\Storage\Lock;
 
 test('rating routes and empty write response', function (): void {
     $db = $this->database();
@@ -74,4 +76,105 @@ test('daily exhaustion does not retry', function (): void {
         }
     }
     $this->assertSame(2, $http->calls);
+});
+
+test('new read cache skips network calls while default mutation checks stay fresh', function (): void {
+    $db = $this->database();
+    $http = new class extends Client {
+        public int $calls = 0;
+        public function request(string $method, string $url, array $headers = [], ?string $body = null): array
+        {
+            $this->calls++;
+            return ['status' => 200, 'data' => ['items' => []]];
+        }
+    };
+    $api = new Api($http, new Budget($db, $this->config()), $db);
+    $params = ['part' => 'snippet', 'id' => 'P1'];
+    $api->call('a', 'playlists.list', $params, token: 'test', ttl: 30);
+    $api->call('a', 'playlists.list', $params, token: 'test', ttl: 30);
+    $api->call('a', 'playlists.list', $params, token: 'test');
+    expect($http->calls)->toBe(2);
+});
+
+test('failed and uncertain writes invalidate dependent caches but preserve search', function (): void {
+    $db = $this->database();
+    $http = new class extends Client {
+        public array $methods = [];
+        public function request(string $method, string $url, array $headers = [], ?string $body = null): array
+        {
+            $this->methods[] = $method;
+            if ($method !== 'GET') {
+                throw new ServiceError('UPSTREAM_UNCERTAIN', 'test timeout');
+            }
+            return ['status' => 200, 'data' => ['items' => []]];
+        }
+    };
+    $api = new Api($http, new Budget($db, $this->config()), $db);
+    $api->call('a', 'playlists.list', ['id' => 'P1'], token: 'test', ttl: 30);
+    $api->call('a', 'search.list', ['q' => 'song'], token: 'test', ttl: 30);
+    try {
+        $api->call('a', 'playlists.update', [], ['id' => 'P1'], token: 'test');
+        $this->fail();
+    } catch (ServiceError $e) {
+        expect($e->reason)->toBe('UPSTREAM_UNCERTAIN');
+    }
+    $api->call('a', 'search.list', ['q' => 'song'], token: 'test', ttl: 30);
+    $api->call('a', 'playlists.list', ['id' => 'P1'], token: 'test', ttl: 30);
+    expect($http->methods)->toBe(['GET', 'GET', 'PUT', 'GET']);
+});
+
+test('lookup maps a deleted occurrence to its playlist without clearing unrelated metadata', function (): void {
+    $db = $this->database();
+    $http = new class extends Client {
+        public int $calls = 0;
+        public function request(string $method, string $url, array $headers = [], ?string $body = null): array
+        {
+            $this->calls++;
+            return ['status' => 200, 'data' => str_contains($url, 'playlistItems?part=snippet')
+                ? ['items' => [['id' => 'entry1', 'snippet' => ['playlistId' => 'P1']]]]
+                : ['items' => []]];
+        }
+    };
+    $api = new Api($http, new Budget($db, $this->config()), $db);
+    $api->call('a', 'playlists.list', ['id' => 'P1'], token: 'test', ttl: 30);
+    $api->call('a', 'playlists.list', ['id' => 'P2'], token: 'test', ttl: 30);
+    $api->call('a', 'playlistItems.list', ['part' => 'snippet', 'id' => 'entry1'], token: 'test');
+    $api->call('a', 'playlistItems.delete', ['id' => 'entry1'], token: 'test');
+    $api->call('a', 'playlists.list', ['id' => 'P2'], token: 'test', ttl: 30);
+    $api->call('a', 'playlists.list', ['id' => 'P1'], token: 'test', ttl: 30);
+    expect($http->calls)->toBe(5);
+});
+
+test('configured read ttl caches confirmed connections and zero disables additional reads', function (): void {
+    $db = $this->database();
+    $this->user($db);
+    $config = $this->config();
+    $vault = new Vault($config->get('APP_KEY'));
+    $db->execute('INSERT INTO google_connections VALUES (?,?,?,?,?,?)', ['u1', 'channel1', 'Test',
+        $vault->encrypt(['access_token' => 'dummy-token', 'expires_at' => time() + 3600]), 'scope', 'generation1']);
+    $directory = $this->tempDir();
+    try {
+        $http = new class extends Client {
+            public int $calls = 0;
+            public function request(string $method, string $url, array $headers = [], ?string $body = null): array
+            {
+                $this->calls++;
+                return ['status' => 200, 'data' => ['items' => []]];
+            }
+        };
+        $google = new Google($config, $db, $vault, $http, new Lock($directory));
+        $cached = new Api($http, new Budget($db, $config), $db, $google, 30);
+        $cached->read('u1', 'channels.list', ['id' => 'channel1']);
+        $cached->read('u1', 'channels.list', ['id' => 'channel1']);
+        expect($http->calls)->toBe(1);
+        $fresh = new Api($http, new Budget($db, $config), $db, $google, 0);
+        $fresh->read('u1', 'channels.list', ['id' => 'channel1']);
+        $fresh->read('u1', 'channels.list', ['id' => 'channel1']);
+        expect($http->calls)->toBe(3);
+        $db->execute('UPDATE google_connections SET generation=? WHERE user_id=?', ['generation2', 'u1']);
+        $cached->read('u1', 'channels.list', ['id' => 'channel1']);
+        expect($http->calls)->toBe(4);
+    } finally {
+        $this->removeDir($directory);
+    }
 });

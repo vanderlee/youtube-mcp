@@ -88,6 +88,14 @@ Run as the same subscription account with storage access. This cleans expired ca
 
 ## Smoke checks
 
+### Deploying selective caching
+
+Deploy the application, configuration example, and `008_response_cache_dependencies.sql` together. As the subscription user, run migrations using the domain's PHP CLI before reopening traffic. The migration clears old untagged API cache entries and adds dependency tracking; it does not reset credentials, signing keys, receipts, or usage history.
+
+Set `API_READ_CACHE_TTL=30` for the new read-only caches, or 0 to disable them. Maximum is 300 seconds. Existing search/list TTLs remain explicit, and mutation ownership/scan checks remain fresh. No new PHP extensions or services are required. OPcache settings remain independent of this cache; reload the domain's worker as appropriate for your deployment's OPcache policy.
+
+Verify repeated metadata reads avoid upstream calls, a mutation refreshes the affected playlist, and unrelated searches remain cached. Do these live checks with disposable resources. Transport reuse is limited to each JSON client's PHP request; media streaming and cross-request connection persistence are unchanged.
+
 ### Bootstrap failure after a namespace or release change
 
 If `/mcp` and all OAuth metadata endpoints return 503 with a bootstrap `Error` at the entry point's application-construction line, first check application autoloading. The project namespace is `YouTubeMcp`; an older generated Composer map may still reference the previous namespace. Missing or mixed-release source files can cause the same symptom. This failure precedes OAuth, so changing callback allowlists or renewing Google consent will not repair it.
