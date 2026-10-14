@@ -1,3 +1,4 @@
+-- Migration: 001_initial.sql
 CREATE TABLE users
 (
     id         TEXT PRIMARY KEY,
@@ -107,3 +108,52 @@ CREATE TABLE audit_events
 CREATE INDEX operations_age ON operations (updated_at);
 CREATE INDEX cache_expiry ON api_cache (expires_at);
 CREATE INDEX tokens_expiry ON oauth_tokens (expires_at);
+
+-- Migration: 002_quota_alerts.sql
+CREATE TABLE quota_alerts
+(
+    window    TEXT    NOT NULL,
+    bucket    TEXT    NOT NULL,
+    threshold INTEGER NOT NULL,
+    PRIMARY KEY (window, bucket, threshold)
+);
+
+-- Migration: 003_music_connections.sql
+CREATE TABLE music_connections (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    channel_id TEXT NOT NULL,
+    google_generation TEXT NOT NULL,
+    generation TEXT NOT NULL,
+    client_id_hash TEXT NOT NULL,
+    tokens TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+-- Migration: 004_music_browser_connections.sql
+CREATE TABLE music_browser_connections (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    channel_id TEXT NOT NULL,
+    google_generation TEXT NOT NULL,
+    generation TEXT NOT NULL,
+    credentials TEXT NOT NULL,
+    channel_handle TEXT NOT NULL,
+    expires_at INTEGER NOT NULL
+);
+
+-- Migration: 005_remove_music_authentication.sql
+-- Retire only the separate Music credentials. Official OAuth and receipts remain.
+DROP TABLE IF EXISTS music_browser_connections;
+DROP TABLE IF EXISTS music_connections;
+
+-- Migration: 006_media_assets.sql
+CREATE TABLE media_assets (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    channel_id TEXT NOT NULL,
+    generation TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    bytes INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX media_assets_owner ON media_assets(user_id, created_at);

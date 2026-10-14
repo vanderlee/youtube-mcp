@@ -53,7 +53,7 @@ The existing Google `youtube.force-ssl` scope supports these official operations
 
 ### Stage files safely
 
-1. Deploy migration `006_media_assets.sql` through the existing initialization.
+1. Apply the `006_media_assets.sql` section of `migrations/001_initial.sql` through the existing initialization.
 2. Sign into the HTTPS dashboard and choose **Stage media** (`/media`). The form requires the browser session and CSRF token.
 3. Choose a file: video MP4/WebM/MOV/AVI up to 64 MiB; PNG/JPEG image up to 2 MiB; UTF-8 timed SRT/VTT up to 1 MiB. MIME/content checks apply. The original filename is ignored.
 4. Use the returned `asset_id` in a creator tool. Alternatively grant `media.read` and use `list_media_assets`. Staging itself does not upload or publish anything to YouTube.

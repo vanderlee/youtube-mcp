@@ -68,14 +68,42 @@ final class Database
     {
         $this->pdo->exec('CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY)');
         foreach (glob($root . '/migrations/*.sql') ?: [] as $file) {
-            $name = basename($file);
-            if (!$this->one('SELECT name FROM migrations WHERE name=?', [$name])) {
-                $this->transaction(function () use ($file, $name) {
-                    $this->pdo->exec(file_get_contents($file));
+            foreach ($this->migrationSections($file) as $name => $sql) {
+                if ($this->one('SELECT name FROM migrations WHERE name=?', [$name])) {
+                    continue;
+                }
+                $this->transaction(function () use ($sql, $name) {
+                    $this->pdo->exec($sql);
                     $this->execute('INSERT INTO migrations VALUES (?)', [$name]);
                 });
             }
         }
+    }
+
+    /** @return array<string, string> */
+    private function migrationSections(string $file): array
+    {
+        $sql = file_get_contents($file);
+        if ($sql === false) {
+            throw new \RuntimeException('Cannot read migration SQL.');
+        }
+        // Bundled sections retain the original identities for existing databases.
+        $parts = preg_split('/^-- Migration: ([a-zA-Z0-9_]+\.sql)\h*\r?\n/m', $sql, -1, PREG_SPLIT_DELIM_CAPTURE);
+        if (count($parts) === 1) {
+            return [basename($file) => $sql];
+        }
+        if (trim($parts[0]) !== '') {
+            throw new \RuntimeException('SQL must follow a migration section marker.');
+        }
+        $sections = [];
+        for ($index = 1; $index < count($parts); $index += 2) {
+            $name = $parts[$index];
+            if (isset($sections[$name])) {
+                throw new \RuntimeException('Duplicate migration section.');
+            }
+            $sections[$name] = $parts[$index + 1];
+        }
+        return $sections;
     }
 
     public function one(string $sql, array $params = []): ?array

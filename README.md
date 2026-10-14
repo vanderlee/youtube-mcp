@@ -40,6 +40,8 @@ For automated Plesk post-deployment setup, run `bash bin/post-deploy.sh --php /o
 7. Follow [Plesk installation](docs/PLESK.md) and [Google/ChatGPT connection](docs/CONNECTIONS.md).
 8. Run `php bin/console.php cleanup` hourly through a scheduled task.
 
+Migrations 001–006 are bundled in `migrations/001_initial.sql`. The `-- Migration: <original filename>` sections retain their existing database identities, so initialization applies only unfinished steps on upgrades and is safe to repeat. Keep these sections unchanged; add future schema changes as new ordered SQL files starting at `007`.
+
 No OpenAI API key is needed: the service exposes tools to ChatGPT and does not call OpenAI's model API itself.
 
 ## Tools

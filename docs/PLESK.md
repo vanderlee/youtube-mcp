@@ -58,7 +58,7 @@ Generate `APP_KEY`, then run:
 php bin/console.php init
 ```
 
-Initialization creates OAuth RSA signing keys if missing and applies migrations. Re-running it preserves existing keys. Protect `oauth-private.pem` and `.env` with restrictive permissions. Keep `APP_KEY` and signing keys stable across upgrades.
+Initialization creates OAuth RSA signing keys if missing and applies migrations. Migrations 001–006 are bundled in `migrations/001_initial.sql` with their original filenames as section identities; existing databases skip completed sections. Future migrations remain separate ordered SQL files starting at `007`. Re-running initialization preserves existing keys. Protect `oauth-private.pem` and `.env` with restrictive permissions. Keep `APP_KEY` and signing keys stable across upgrades.
 
 Root-owned files can pass CLI initialization yet fail under PHP-FPM. SQLite needs directory write access to create WAL/shared-memory files, and session/lock directories need write access too. If root was used accidentally, identify the subscription owner/group and repair only application-owned private files with administrator assistance. Preserve the keys/database; do not regenerate keys or use world-writable permissions to fix ownership. Retest through HTTPS.
 

@@ -32,8 +32,10 @@ test('retirement migration removes only music credentials and preserves official
     $db = new Database(':memory:');
     $db->execute('CREATE TABLE migrations (name TEXT PRIMARY KEY)');
     $root = dirname(__DIR__);
-    foreach (['001_initial.sql', '002_quota_alerts.sql', '003_music_connections.sql', '004_music_browser_connections.sql'] as $name) {
-        $db->pdo->exec(file_get_contents($root . '/migrations/' . $name));
+    $sections = preg_split('/^-- Migration: ([a-zA-Z0-9_]+\.sql)\h*\r?\n/m', file_get_contents($root . '/migrations/001_initial.sql'), -1, PREG_SPLIT_DELIM_CAPTURE);
+    for ($index = 1; $index <= 7; $index += 2) {
+        $name = $sections[$index];
+        $db->pdo->exec($sections[$index + 1]);
         $db->execute('INSERT INTO migrations VALUES (?)', [$name]);
     }
     $this->user($db);
