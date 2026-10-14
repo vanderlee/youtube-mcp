@@ -10,7 +10,7 @@ test('page templates escape text attributes and csrf fields', function (): void 
     $session = $_SESSION ?? [];
     $_SESSION = ['user' => 'fixture', 'csrf' => 'token"<&'];
     try {
-        $view = new View(dirname(__DIR__, 2) . '/views');
+        $view = new View(dirname(__DIR__, 2) . '/views', $this->config());
         $response = $view->page('Authorize <script>alert("x")</script>', 'authorization', [
             'scopes' => 'read <img src=x onerror=alert(1)>',
         ]);
@@ -35,7 +35,7 @@ test('rendering failures restore the callers output buffer and propagate the exc
     ob_start();
     try {
         echo 'caller output';
-        expect(fn() => (new View($directory))->render('broken'))->toThrow(\RuntimeException::class, 'fixture failure');
+        expect(fn() => (new View($directory, $this->config()))->render('broken'))->toThrow(\RuntimeException::class, 'fixture failure');
         expect(ob_get_level())->toBe($level + 1)
             ->and(ob_get_contents())->toBe('caller output');
     } finally {
@@ -45,7 +45,26 @@ test('rendering failures restore the callers output buffer and propagate the exc
 });
 
 test('template names cannot escape the views directory', function (): void {
-    $view = new View(dirname(__DIR__, 2) . '/views');
+    $view = new View(dirname(__DIR__, 2) . '/views', $this->config());
     expect(fn() => $view->render('../layout'))->toThrow(\InvalidArgumentException::class)
         ->and(fn() => $view->render('missing'))->toThrow(\RuntimeException::class);
+});
+
+test('browser branding keeps its defaults and escapes configured values everywhere', function (): void {
+    $directory = dirname(__DIR__, 2) . '/views';
+    $default = (string) (new View($directory, $this->config()))->page('Welcome', 'welcome')->getBody();
+    expect($default)->toContain('<title>Welcome · toyls</title>', '<strong>toyls</strong>', '<small>tools, toys &amp; toils</small>', '<footer>toyls · tools, toys &amp; toils</footer>');
+
+    $config = $this->config([
+        'BRAND_NAME' => 'Brand "<&',
+        'BRAND_TAGLINE' => '<script>alert("tagline")</script>',
+    ]);
+    $custom = (string) (new View($directory, $config))->page('Welcome', 'welcome')->getBody();
+    expect($custom)->toContain(
+        '<title>Welcome · Brand &quot;&lt;&amp;</title>',
+        '<strong>Brand &quot;&lt;&amp;</strong>',
+        'aria-label="Brand &quot;&lt;&amp; YouTube home"',
+        '<small>&lt;script&gt;alert(&quot;tagline&quot;)&lt;/script&gt;</small>',
+        '<footer>Brand &quot;&lt;&amp; · &lt;script&gt;alert(&quot;tagline&quot;)&lt;/script&gt;</footer>',
+    )->not->toContain('<script>', 'toyls', 'tools, toys');
 });

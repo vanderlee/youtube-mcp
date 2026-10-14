@@ -7,10 +7,11 @@ namespace YouTubeMcp\Http;
 use Nyholm\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
 use Throwable;
+use YouTubeMcp\Config;
 
 final class View
 {
-    public function __construct(private string $directory) {}
+    public function __construct(private string $directory, private Config $config) {}
 
     /** @param array<string, mixed> $data */
     public function page(string $title, string $template, array $data = []): ResponseInterface
@@ -20,6 +21,8 @@ final class View
             'title' => $title,
             'body' => $body,
             'signedIn' => !empty($_SESSION['user']),
+            'brandName' => $this->config->get('BRAND_NAME', 'toyls'),
+            'brandTagline' => $this->config->get('BRAND_TAGLINE', 'tools, toys & toils'),
         ]);
 
         return new Response(200, ['Content-Type' => 'text/html; charset=utf-8'], $html);

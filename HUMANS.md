@@ -7,5 +7,4 @@ other work despite not being explicitly asked to do so.
 
 ## To do
 
-- App.php; use templates (PHP-as-template?) and decent routing
-- Detach "Toyls" branding
+- Investigate readability refactoring

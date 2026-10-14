@@ -9,7 +9,7 @@ declare(strict_types=1);
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width">
     <meta name="color-scheme" content="dark">
-    <title><?= $escape($title) ?> · toyls</title>
+    <title><?= $escape($title) ?> · <?= $escape($brandName) ?></title>
     <link rel="icon" type="image/png" sizes="256x256" href="/assets/favicon.png">
     <link rel="stylesheet" href="/assets/app.css">
 </head>
@@ -17,9 +17,9 @@ declare(strict_types=1);
 <a class="skip-link" href="#main">Skip to content</a>
 <header class="site-header">
     <div class="header-inner">
-        <a class="brand" href="/" aria-label="Toyls YouTube home">
-            <span><strong>toyls</strong><span class="brand-divider">/</span><span class="brand-product">youtube</span></span>
-            <small>tools, toys &amp; toils</small>
+        <a class="brand" href="/" aria-label="<?= $escape($brandName) ?> YouTube home">
+            <span><strong><?= $escape($brandName) ?></strong><span class="brand-divider">/</span><span class="brand-product">youtube</span></span>
+            <small><?= $escape($brandTagline) ?></small>
         </a>
         <?php if ($signedIn): ?>
             <?= $this->form('/logout', 'Sign out', 'text-button') ?>
@@ -30,6 +30,6 @@ declare(strict_types=1);
     <h1><?= $escape($title) ?></h1>
     <?= $body ?>
 </main>
-<footer>toyls · tools, toys &amp; toils</footer>
+<footer><?= $escape($brandName) ?> · <?= $escape($brandTagline) ?></footer>
 </body>
 </html>

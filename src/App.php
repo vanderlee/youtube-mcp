@@ -90,7 +90,7 @@ final class App
             $creator,
         );
 
-        $this->view = new View(dirname(__DIR__) . '/views');
+        $this->view = new View(dirname(__DIR__) . '/views', $config);
         $this->browserRequests = new BrowserRequests($config, $this->browser);
         $flow = new GoogleFlow($google);
         $resourceMetadata = new Routes\ResourceMetadataRoute($config);
