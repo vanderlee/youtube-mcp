@@ -44,7 +44,7 @@ test('google preserves compatibility with existing broader youtube grants', func
         [
             'scope' => 'https://www.googleapis.com/auth/youtube',
             'refresh_token' => 'dummy-refresh',
-            'access_token' => 'dummy-access'
+            'access_token' => 'dummy-access',
         ],
         ['id' => 'dummy-channel', 'snippet' => ['title' => 'Dummy']],
     );
@@ -119,6 +119,53 @@ test('invite only onboarding rejects unknown email', function (): void {
     $this->expectException(ServiceError::class);
     $g->signIn(['subject' => 'issuer|other', 'email' => 'other@example.test']);
 });
+
+test('google refresh failures preserve credentials and independent mcp authorization', function (int $status, array $data, string $reason): void {
+    $db = $this->database();
+    $this->user($db);
+    $cfg = $this->config();
+    $vault = new Vault($cfg->get('APP_KEY'));
+    $tokens = $vault->encrypt(['access_token' => 'expired', 'refresh_token' => 'dummy-refresh', 'expires_at' => 0]);
+    $db->execute(
+        'INSERT INTO google_connections VALUES (?,?,?,?,?,?)',
+        ['u1', 'dummy-channel', 'Dummy', $tokens, Google::YOUTUBE_SCOPE, 'generation'],
+    );
+    $db->execute('INSERT INTO oauth_clients VALUES (?,?,?,?,?)', ['client', 'Dummy', '[]', null, 0]);
+    foreach (['access', 'refresh'] as $kind) {
+        $db->execute(
+            'INSERT INTO oauth_tokens(id,kind,user_id,client_id,expires_at) VALUES (?,?,?,?,?)',
+            [hash('sha256', $kind), $kind, 'u1', 'client', time() + 3600],
+        );
+    }
+    $http = new class ($status, $data) extends Client {
+        public function __construct(private int $status, private array $data) {}
+
+        public function request(string $method, string $url, array $headers = [], ?string $body = null): array
+        {
+            return ['status' => $this->status, 'data' => $this->data];
+        }
+    };
+    $google = new Google($cfg, $db, $vault, $http, new Lock($this->dir));
+
+    try {
+        $google->accessToken('u1');
+        $this->fail('Refresh failure must be reported.');
+    } catch (ServiceError $error) {
+        $this->assertSame($reason, $error->reason);
+    }
+
+    $this->assertSame($tokens, $google->connection('u1')['tokens']);
+    $this->assertSame('generation', $google->connection('u1')['generation']);
+    $repository = new \YouTubeMcp\Auth\OAuthRepository($db, $cfg->url());
+    $this->assertFalse($repository->isAccessTokenRevoked('access'));
+    $this->assertFalse($repository->isRefreshTokenRevoked('refresh'));
+})->with([
+    'expired Google grant' => [400, ['error' => 'invalid_grant'], 'GOOGLE_RECONNECT_REQUIRED'],
+    'invalid service credentials' => [401, ['error' => 'invalid_client'], 'GOOGLE_UNAVAILABLE'],
+    'rejected service request' => [400, ['error' => 'invalid_request'], 'GOOGLE_UNAVAILABLE'],
+    'rate limit' => [429, [], 'GOOGLE_UNAVAILABLE'],
+    'Google outage' => [503, [], 'GOOGLE_UNAVAILABLE'],
+]);
 
 beforeEach(function (): void {
     $this->dir = $this->tempDir();

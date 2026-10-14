@@ -175,16 +175,10 @@ final class Google
                 $connection = $this->connection($user);
                 $tokens = $this->vault->decrypt($connection['tokens']);
                 if (($tokens['expires_at'] ?? 0) <= time() + 60) {
-                    try {
-                        $refreshedTokens = $this->token(
-                            ['grant_type' => 'refresh_token', 'refresh_token' => $tokens['refresh_token']],
-                        );
-                    } catch (ServiceError $e) {
-                        if ($e->reason === 'GOOGLE_RECONNECT_REQUIRED') {
-                            $this->db->execute('UPDATE oauth_tokens SET revoked=1 WHERE user_id=?', [$user]);
-                        }
-                        throw $e;
-                    }
+                    // Google authorization failures do not revoke the independent MCP authorization.
+                    $refreshedTokens = $this->token(
+                        ['grant_type' => 'refresh_token', 'refresh_token' => $tokens['refresh_token']],
+                    );
 
                     $tokens = array_replace($tokens, $refreshedTokens);
                     $this->db->execute(
@@ -288,6 +282,15 @@ final class Google
             );
         }
         if ($response['status'] !== 200) {
+            if (($response['data']['error'] ?? null) !== 'invalid_grant') {
+                throw new ServiceError(
+                    'GOOGLE_UNAVAILABLE',
+                    'Google authorization failed. Check the service OAuth configuration or retry later.',
+                    [],
+                    503,
+                );
+            }
+
             throw new ServiceError(
                 'GOOGLE_RECONNECT_REQUIRED',
                 'Google authorization failed. Reconnect your account.',

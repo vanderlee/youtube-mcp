@@ -11,6 +11,7 @@ TV/Devices OAuth, browser-cookie login, unofficial Music tools and Music diagnos
 - Official PHP MCP SDK with Streamable HTTP at `/mcp`.
 - Google sign-in, invite-only onboarding, explicit channel confirmation, offline token refresh, and encrypted credentials.
 - OAuth authorization code with PKCE S256, expiring service tokens, refresh rotation, revocation, and audience validation.
+- Google refresh failures preserve stored credentials and independent ChatGPT authorization; only an invalid Google grant requests Google reconnection.
 - Playlist listing, inspection, search, creation, metadata updates, track addition/removal/movement, and deletion.
 - Video/channel details, uploads listing, channel/playlist search, enhanced video search and scoped comment management.
 - Copy/merge/sort/deduplicate/reorder/transfer workflows, playlist comparison, paged export and read-only availability audits.

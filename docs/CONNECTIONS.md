@@ -47,6 +47,8 @@ Browser sign-in expires after 30 minutes of inactivity or 12 hours in total by d
 
 Reconnect replaces the active connection and revokes existing ChatGPT service tokens. Connect ChatGPT again afterward. Disconnect removes local Google credentials and attempts Google revocation; if that call fails, the dashboard explains that access should also be removed in Google account settings.
 
+Google token refresh failures preserve stored Google credentials and do not revoke ChatGPT access or refresh tokens. An `invalid_grant` response requires Google reconnection; other Google rejections report `GOOGLE_UNAVAILABLE` so operators can repair OAuth configuration or wait for recovery without disconnecting users. Normal MCP token expiry and rotation still apply. Explicit Google reconnection continues to invalidate previous service authorization and connection-bound data.
+
 ## ChatGPT connection
 
 The expanded official tools use separate `videos.read/write/upload`, `channels.read/write`, `comments.read/write/moderate`, `captions.read/write` and `media.read/write` service permissions. Existing playlist, like and subscription grants remain independent. Reconnect ChatGPT to request desired new permissions; merely deploying does not expand a grant. No TV/device client, cookies or new Google scope are required. See [tool-permission mapping](DATA_API_TOOLS.md).
