@@ -55,8 +55,8 @@ test('cached search does not consume another search call', function (): void {
         }
     };
     $api = new Api($http, $budget, $db);
-    $api->call('a', 'search.list', ['q' => 'song'], token: 'test', ttl: 300);
-    $api->call('a', 'search.list', ['q' => 'song'], token: 'test', ttl: 300);
+    $api->call('a', 'search.list', ['q' => 'song', 'part' => 'snippet'], token: 'test', ttl: 300);
+    $api->call('a', 'search.list', ['part' => 'snippet', 'q' => 'song'], token: 'test', ttl: 300);
     $this->assertSame(1, $http->calls);
     $this->assertSame(1, $budget->status('a')['buckets']['search']['user_spent']);
 });

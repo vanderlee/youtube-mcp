@@ -84,7 +84,9 @@ class Api
         $connection = $token === null ? $this->google?->connection($user) : null;
         // Explicit tokens (such as pending Google consent) have no confirmed connection binding.
         $cacheBinding = $connection === null ? hash('sha256', $token ?? '') : $connection['channel_id'] . '|' . $connection['generation'];
-        $key = hash('sha256', $user . '|' . $cacheBinding . '|' . $method . '|' . json_encode($params));
+        $cacheParams = $params;
+        ksort($cacheParams);
+        $key = hash('sha256', $user . '|' . $cacheBinding . '|' . $method . '|' . json_encode($cacheParams));
         $cache = new ResponseCache($this->db);
         $tags = $cache->tags($method, $params);
         if ($verb === 'GET' && $ttl > 0) {

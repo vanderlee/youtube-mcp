@@ -52,6 +52,8 @@ No OpenAI API key is needed: the service exposes tools to ChatGPT and does not c
 
 ### Read caching and connection reuse
 
+Equivalent cached reads share an entry regardless of query parameter order. Channel and playlist searches return compact IDs, titles, channel information and pagination by default, reducing model input size; use `response_detail: "full"` when descriptions or upstream metadata are needed. No items are truncated from the returned page.
+
 `API_READ_CACHE_TTL` controls additional caching for read-only playlist metadata, video/channel details, channel uploads, and comments. The default is 30 seconds; values from 0 to 300 are accepted, with 0 disabling these additional caches. Existing search and listing tools retain their explicit cache lifetimes. Ownership checks, duplicate scans, mutation planning, and receipt verification continue to request fresh upstream data.
 
 Responses remain partitioned by user, selected channel, and connection generation. Writes invalidate dependent resources instead of deleting unrelated searches, playlists, ratings, and subscriptions. Invalidations happen around dispatch, including uncertain writes. Version checks prevent an in-flight read from restoring an invalidated cache entry. Deleting an occurrence without a known playlist conservatively invalidates playlist data; full reconnect/disconnect still clears the account's caches.

@@ -16,6 +16,22 @@ final class Presentation
         if (isset($data['operation_id'], $data['completed'])) {
             return self::receipt($data);
         }
+        if (in_array($tool, ['search_channels', 'search_playlists'], true)) {
+            $id = $tool === 'search_channels' ? 'channelId' : 'playlistId';
+            $field = $tool === 'search_channels' ? 'channel_id' : 'playlist_id';
+
+            return [
+                'items' => array_map(
+                    fn($item) => [$field => $item['id'][$id]] + [
+                        'title' => $item['snippet']['title'] ?? '',
+                        'channel_id' => $item['snippet']['channelId'] ?? null,
+                        'channel' => $item['snippet']['channelTitle'] ?? '',
+                    ],
+                    $data['items'] ?? [],
+                ),
+                'next_page_token' => $data['nextPageToken'] ?? null,
+            ];
+        }
         if ($tool === 'get_playlist') {
             return [
                 'playlist' => self::playlist($data['playlist']),

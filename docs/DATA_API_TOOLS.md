@@ -4,6 +4,8 @@ The catalog contains 57 tools: the original 18 plus 39 additions below. All upst
 
 ## Browsing and comments
 
+Channel and playlist searches default to compact results containing resource IDs, titles, channel information and `next_page_token`. Descriptions and upstream metadata are available with `response_detail: "full"`. Compact results preserve every returned item; follow the page token when more results are needed.
+
 | Tools | Permission | Behavior |
 |---|---|---|
 | `get_video_details` | `videos.read` | Up to 50 video IDs; snippet, statistics, duration, status and returned region restrictions. Omitted IDs are reported, not assumed deleted. |
