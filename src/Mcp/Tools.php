@@ -7,7 +7,7 @@ namespace YouTubeMcp\Mcp;
 use Mcp\Schema\{Tool, ToolAnnotations};
 use Mcp\Schema\Content\TextContent;
 use Mcp\Schema\Result\CallToolResult;
-use Mcp\Server\{ClientGateway};
+use Mcp\Server\ClientGateway;
 use Mcp\Server\Handler\ToolHandlerInterface;
 use stdClass;
 use YouTubeMcp\Auth\OAuth;
@@ -32,7 +32,7 @@ final class Tools
         $privacy = ['type' => 'string', 'enum' => ['private', 'unlisted', 'public']];
         $title = ['type' => 'string', 'minLength' => 1, 'maxLength' => 150];
         $description = ['type' => 'string', 'maxLength' => 5000];
-        $array = fn($schema) => ['type' => 'array', 'minItems' => 1, 'maxItems' => 20, 'items' => $schema];
+        $array = fn ($schema) => ['type' => 'array', 'minItems' => 1, 'maxItems' => 20, 'items' => $schema];
         $specs = [
             'list_liked_tracks' => [
                 'List your liked YouTube videos, including non-music content, one page at a time.',
@@ -191,10 +191,23 @@ final class Tools
                                 'move_track',
                                 'rate_track',
                                 'unsubscribe_artist',
-                                'update_comment', 'delete_comment', 'moderate_comments',
-                                'sort_playlist', 'remove_playlist_duplicates', 'reorder_playlist', 'transfer_tracks',
-                                'update_video', 'delete_video', 'set_video_thumbnail', 'update_caption', 'delete_caption',
-                                'update_channel_branding', 'set_channel_banner', 'update_channel_section', 'delete_channel_section', 'delete_media_asset',
+                                'update_comment',
+                                'delete_comment',
+                                'moderate_comments',
+                                'sort_playlist',
+                                'remove_playlist_duplicates',
+                                'reorder_playlist',
+                                'transfer_tracks',
+                                'update_video',
+                                'delete_video',
+                                'set_video_thumbnail',
+                                'update_caption',
+                                'delete_caption',
+                                'update_channel_branding',
+                                'set_channel_banner',
+                                'update_channel_section',
+                                'delete_channel_section',
+                                'delete_media_asset',
                             ],
                             true
                         ),
@@ -219,8 +232,12 @@ final class Tools
     public static function handler(Service $service, array $identity, string $name, OAuth $oauth): ToolHandlerInterface
     {
         return new class($service, $identity, $name, $oauth) implements ToolHandlerInterface {
-            public function __construct(private Service $service, private array $identity, private string $name, private OAuth $oauth)
-            {
+            public function __construct(
+                private Service $service,
+                private array $identity,
+                private string $name,
+                private OAuth $oauth
+            ) {
             }
 
             public function execute(array $arguments, ClientGateway $gateway): mixed
@@ -228,12 +245,15 @@ final class Tools
                 try {
                     $detail = $arguments['response_detail'] ?? 'compact';
                     unset($arguments['response_detail']);
-                    $result = $this->oauth->runAuthenticated($this->identity, fn() => $this->service->execute(
-                        $this->identity['id'],
-                        $this->identity['scopes'],
-                        $this->name,
-                        $arguments
-                    ));
+                    $result = $this->oauth->runAuthenticated(
+                        $this->identity,
+                        fn () => $this->service->execute(
+                            $this->identity['id'],
+                            $this->identity['scopes'],
+                            $this->name,
+                            $arguments
+                        )
+                    );
                     $result = $detail === 'full' ? $result : Presentation::compact($this->name, $result);
 
                     return new CallToolResult(
@@ -246,9 +266,11 @@ final class Tools
                         $result
                     );
                 } catch (ServiceError $e) {
-                    return new CallToolResult([new TextContent($e->reason . ': ' . $e->getMessage())],
+                    return new CallToolResult(
+                        [new TextContent($e->reason . ': ' . $e->getMessage())],
                         true,
-                        $e->payload());
+                        $e->payload()
+                    );
                 }
             }
         };

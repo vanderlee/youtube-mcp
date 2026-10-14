@@ -20,7 +20,7 @@ final class MediaStore
     {
         $size = $upload->getSize();
         $active = $this->db->one('SELECT COUNT(*) AS n FROM media_assets WHERE user_id=? AND created_at>?', [$user, time() - 86400]);
-        if ((int)$active['n'] >= 50) {
+        if ((int) $active['n'] >= 50) {
             throw new ServiceError('MEDIA_LIMIT', 'Delete an asset before staging more than 50 active files.');
         }
         if ($upload->getError() !== UPLOAD_ERR_OK || !is_int($size) || $size < 1 || $size > self::MAX_BYTES) {
@@ -43,7 +43,19 @@ final class MediaStore
 
             $mime = $this->validateFile($path, $size);
 
-            $this->db->execute('INSERT INTO media_assets VALUES (?,?,?,?,?,?,?,?)', [$id, $user, $connection['channel_id'], $connection['generation'], $mime, $size, hash_file('sha256', $path), time()]);
+            $this->db->execute(
+                'INSERT INTO media_assets VALUES (?,?,?,?,?,?,?,?)',
+                [
+                    $id,
+                    $user,
+                    $connection['channel_id'],
+                    $connection['generation'],
+                    $mime,
+                    $size,
+                    hash_file('sha256', $path),
+                    time()
+                ]
+            );
 
             return ['asset_id' => $id, 'mime' => $mime, 'bytes' => $size];
         } catch (\Throwable $error) {
@@ -57,7 +69,16 @@ final class MediaStore
     private function validateFile(string $path, int $size): string
     {
         $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($path);
-        $allowed = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'image/jpeg', 'image/png', 'text/plain', 'text/vtt'];
+        $allowed = [
+            'video/mp4',
+            'video/webm',
+            'video/quicktime',
+            'video/x-msvideo',
+            'image/jpeg',
+            'image/png',
+            'text/plain',
+            'text/vtt'
+        ];
         if (!in_array($mime, $allowed, true)) {
             throw new ServiceError('INVALID_MEDIA', 'Use MP4, WebM, MOV, AVI, PNG, JPEG, SRT or VTT media.');
         }
@@ -69,8 +90,11 @@ final class MediaStore
         }
         if (str_starts_with($mime, 'text/')) {
             $text = file_get_contents($path);
-            if (!mb_check_encoding($text, 'UTF-8') || (!str_starts_with(ltrim($text, "\xEF\xBB\xBF"), 'WEBVTT')
-                && !preg_match('/\d{2}:\d{2}:\d{2}[,.]\d{3}\s+-->\s+\d{2}:\d{2}:\d{2}[,.]\d{3}/', $text))) {
+            if (
+                !mb_check_encoding($text, 'UTF-8')
+                || (!str_starts_with(ltrim($text, "\xEF\xBB\xBF"), 'WEBVTT')
+                    && !preg_match('/\d{2}:\d{2}:\d{2}[,.]\d{3}\s+-->\s+\d{2}:\d{2}:\d{2}[,.]\d{3}/', $text))
+            ) {
                 throw new ServiceError('INVALID_MEDIA', 'Caption assets must be UTF-8 timed SRT or VTT files.');
             }
         }
@@ -84,11 +108,24 @@ final class MediaStore
             throw new ServiceError('INVALID_ARGUMENT', 'Invalid asset ID.');
         }
 
-        $row = $this->db->one('SELECT * FROM media_assets WHERE id=? AND user_id=? AND channel_id=? AND generation=? AND created_at>?',
-            [$id, $user, $connection['channel_id'], $connection['generation'], time() - 86400]);
+        $row = $this->db->one(
+            'SELECT * FROM media_assets WHERE id=? AND user_id=? AND channel_id=? AND generation=? AND created_at>?',
+            [$id, $user, $connection['channel_id'], $connection['generation'], time() - 86400]
+        );
         $path = $this->config->storage() . '/media/' . $id;
-        if (!$row || !is_file($path) || is_link($path) || filesize($path) !== (int)$row['bytes'] || !hash_equals($row['sha256'], hash_file('sha256', $path))) {
-            throw new ServiceError('MEDIA_NOT_FOUND', 'Asset is missing, expired, changed or belongs to a different account connection.', [], 404);
+        if (
+            !$row
+            || !is_file($path)
+            || is_link($path)
+            || filesize($path) !== (int) $row['bytes']
+            || !hash_equals($row['sha256'], hash_file('sha256', $path))
+        ) {
+            throw new ServiceError(
+                'MEDIA_NOT_FOUND',
+                'Asset is missing, expired, changed or belongs to a different account connection.',
+                [],
+                404
+            );
         }
 
         return $row + ['path' => $path];
@@ -96,8 +133,10 @@ final class MediaStore
 
     public function listing(string $user, array $connection): array
     {
-        return $this->db->all('SELECT id AS asset_id,mime,bytes,created_at FROM media_assets WHERE user_id=? AND channel_id=? AND generation=? AND created_at>? ORDER BY created_at DESC LIMIT 51',
-            [$user, $connection['channel_id'], $connection['generation'], time() - 86400]);
+        return $this->db->all(
+            'SELECT id AS asset_id,mime,bytes,created_at FROM media_assets WHERE user_id=? AND channel_id=? AND generation=? AND created_at>? ORDER BY created_at DESC LIMIT 51',
+            [$user, $connection['channel_id'], $connection['generation'], time() - 86400]
+        );
     }
 
     public function delete(string $user, array $connection, string $id): void
@@ -130,18 +169,21 @@ final class MediaStore
     public function cleanup(\YouTubeMcp\Storage\Lock $locks): void
     {
         foreach ($this->db->all('SELECT id,user_id FROM media_assets WHERE created_at<=?', [time() - 86400]) as $row) {
-            $locks->run('account:' . $row['user_id'], function () use ($row) {
-                if (!preg_match('/^[a-f0-9]{48}$/D', $row['id'])) {
-                    return;
-                }
+            $locks->run(
+                'account:' . $row['user_id'],
+                function () use ($row) {
+                    if (!preg_match('/^[a-f0-9]{48}$/D', $row['id'])) {
+                        return;
+                    }
 
-                $path = $this->config->storage() . '/media/' . $row['id'];
-                if (is_file($path) && !is_link($path) && !unlink($path)) {
-                    throw new ServiceError('STORAGE_UNAVAILABLE', 'Expired media could not be removed.', [], 503);
-                }
+                    $path = $this->config->storage() . '/media/' . $row['id'];
+                    if (is_file($path) && !is_link($path) && !unlink($path)) {
+                        throw new ServiceError('STORAGE_UNAVAILABLE', 'Expired media could not be removed.', [], 503);
+                    }
 
-                $this->db->execute('DELETE FROM media_assets WHERE id=? AND created_at<=?', [$row['id'], time() - 86400]);
-            });
+                    $this->db->execute('DELETE FROM media_assets WHERE id=? AND created_at<=?', [$row['id'], time() - 86400]);
+                }
+            );
         }
 
         $directory = $this->config->storage() . '/media';

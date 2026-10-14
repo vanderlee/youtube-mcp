@@ -38,7 +38,7 @@ final class AccessToken implements AccessTokenEntityInterface
                 'nbf' => time(),
                 'exp' => $this->getExpiryDateTime()->getTimestamp(),
                 'client_id' => $this->getClient()->getIdentifier(),
-                'scopes' => array_map(fn($scope) => $scope->getIdentifier(), $this->getScopes())
+                'scopes' => array_map(fn ($scope) => $scope->getIdentifier(), $this->getScopes())
             ],
             $this->privateKey->getKeyContents(),
             'RS256'

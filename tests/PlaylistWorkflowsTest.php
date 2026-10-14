@@ -249,3 +249,42 @@ test('reorder validates an exact permutation and added-date sorting compares tim
     $this->assertSame('completed', $result['status']);
     $this->assertSame(['second', 'first'], array_column($api->playlists['PLtarget00000']['items'], 'id'));
 });
+
+test('partial transfer verifies both snapshots and never repeats a completed addition', function (bool $sourceChanged): void {
+    [$service, $api] = $this->workflows([
+        'PLsource00000' => ['owner' => 'channel-u1', 'items' => [$this->occurrence('source', 'aaaaaaaaaaa')]],
+        'PLtarget00000' => ['owner' => 'channel-u1', 'items' => []],
+    ]);
+    $arguments = [
+        'source_playlist_id' => 'PLsource00000',
+        'playlist_id' => 'PLtarget00000',
+        'playlist_item_ids' => ['source'],
+        'move' => true,
+        'operation_key' => 'resume-transfer-snapshots',
+    ];
+    $api->failAt = 2;
+
+    $first = $service->execute('u1', ['playlists.write'], 'transfer_tracks', $arguments);
+    $this->assertSame('partial', $first['status']);
+    $this->assertSame('YOUTUBE_REQUEST_REJECTED', $first['error']['code']);
+    $this->assertCount(1, $api->playlists['PLsource00000']['items']);
+    $this->assertCount(1, $api->playlists['PLtarget00000']['items']);
+    if ($sourceChanged) {
+        $api->playlists['PLsource00000']['items'][] = $this->occurrence('external', 'bbbbbbbbbbb');
+    }
+
+    $resumed = $service->execute('u1', ['playlists.write'], 'transfer_tracks', $arguments + ['resume' => true]);
+    $this->assertCount(1, $api->playlists['PLtarget00000']['items']);
+    $this->assertSame(1, count(array_filter($api->calls, fn ($call) => $call[1] === 'playlistItems.insert')));
+    if ($sourceChanged) {
+        $this->assertSame('PLAYLIST_CHANGED', $resumed['error']['code']);
+        $this->assertSame(2, $api->writes);
+        $this->assertCount(2, $api->playlists['PLsource00000']['items']);
+
+        return;
+    }
+
+    $this->assertSame('completed', $resumed['status']);
+    $this->assertSame(3, $api->writes);
+    $this->assertSame([], $api->playlists['PLsource00000']['items']);
+})->with(['unchanged source' => false, 'externally changed source' => true]);

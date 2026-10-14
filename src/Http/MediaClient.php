@@ -9,37 +9,45 @@ use YouTubeMcp\ServiceError;
 /** Streaming official uploads and bounded caption downloads; never follows redirects. */
 class MediaClient
 {
-    public function exchange(string $method, string $url, array $headers, ?string $body = null, ?string $path = null): array
-    {
+    public function exchange(
+        string $method,
+        string $url,
+        array $headers,
+        ?string $body = null,
+        ?string $path = null
+    ): array {
         $raw = '';
         $responseHeaders = [];
         $file = null;
         $curl = curl_init($url);
-        curl_setopt_array($curl, [
-            CURLOPT_CUSTOMREQUEST => $method,
-            CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_CONNECTTIMEOUT => 5,
-            CURLOPT_TIMEOUT => 20,
-            CURLOPT_FOLLOWLOCATION => false,
-            CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
-            CURLOPT_WRITEFUNCTION => static function ($handle, string $chunk) use (&$raw): int {
-                if (strlen($raw) + strlen($chunk) > 1_048_576) {
-                    return 0;
+        curl_setopt_array(
+            $curl,
+            [
+                CURLOPT_CUSTOMREQUEST => $method,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_TIMEOUT => 20,
+                CURLOPT_FOLLOWLOCATION => false,
+                CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+                CURLOPT_WRITEFUNCTION => static function ($handle, string $chunk) use (&$raw): int {
+                    if (strlen($raw) + strlen($chunk) > 1_048_576) {
+                        return 0;
+                    }
+
+                    $raw .= $chunk;
+
+                    return strlen($chunk);
+                },
+                CURLOPT_HEADERFUNCTION => static function ($handle, string $line) use (&$responseHeaders): int {
+                    $parts = explode(':', $line, 2);
+                    if (count($parts) === 2 && strtolower($parts[0]) === 'location') {
+                        $responseHeaders['location'] = trim($parts[1]);
+                    }
+
+                    return strlen($line);
                 }
-
-                $raw .= $chunk;
-
-                return strlen($chunk);
-            },
-            CURLOPT_HEADERFUNCTION => static function ($handle, string $line) use (&$responseHeaders): int {
-                $parts = explode(':', $line, 2);
-                if (count($parts) === 2 && strtolower($parts[0]) === 'location') {
-                    $responseHeaders['location'] = trim($parts[1]);
-                }
-
-                return strlen($line);
-            }
-        ]);
+            ]
+        );
 
         try {
             if ($path !== null) {
@@ -54,9 +62,14 @@ class MediaClient
             }
 
             $result = curl_exec($curl);
-            $status = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+            $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
             if ($result === false || curl_errno($curl)) {
-                throw new ServiceError('UPSTREAM_UNCERTAIN', 'Media request did not complete; inspect the operation before retrying.', [], 502);
+                throw new ServiceError(
+                    'UPSTREAM_UNCERTAIN',
+                    'Media request did not complete; inspect the operation before retrying.',
+                    [],
+                    502
+                );
             }
 
             return ['status' => $status, 'headers' => $responseHeaders, 'raw' => $raw];

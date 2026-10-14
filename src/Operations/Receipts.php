@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace YouTubeMcp\Operations;
 
 use Throwable;
-use YouTubeMcp\{ServiceError};
+use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\{Database, Lock};
 
 final class Receipts
@@ -16,14 +16,22 @@ final class Receipts
 
     public function get(string $user, string $id, string $generation, array $scopes): array
     {
-        $row = $this->db->one('SELECT receipt,tool FROM operations WHERE id=? AND user_id=? AND generation=?', [$id, $user, $generation]);
+        $row = $this->db->one(
+            'SELECT receipt,tool FROM operations WHERE id=? AND user_id=? AND generation=?',
+            [$id, $user, $generation]
+        );
         if (!$row) {
             throw new ServiceError('OPERATION_NOT_FOUND', 'Operation was not found for this account connection.', [], 404);
         }
         $scope = \YouTubeMcp\Playlist\Service::scope($row['tool']);
         $readScope = explode('.', $scope, 2)[0] . '.read';
         if (!in_array($scope, $scopes, true) && !in_array($readScope, $scopes, true)) {
-            throw new ServiceError('INSUFFICIENT_SERVICE_SCOPE', 'Authorize ' . $readScope . ' or ' . $scope . ' to read this receipt.', [], 403);
+            throw new ServiceError(
+                'INSUFFICIENT_SERVICE_SCOPE',
+                'Authorize ' . $readScope . ' or ' . $scope . ' to read this receipt.',
+                [],
+                403
+            );
         }
 
         return json_decode($row['receipt'], true);
@@ -96,15 +104,7 @@ final class Receipts
                 }
 
                 $save = function () use (&$receipt) {
-                    $this->db->execute(
-                        'UPDATE operations SET status=?,receipt=?,updated_at=? WHERE id=?',
-                        [
-                            $receipt['status'],
-                            json_encode($receipt, JSON_THROW_ON_ERROR),
-                            time(),
-                            $receipt['operation_id']
-                        ]
-                    );
+                    $this->saveReceipt($receipt);
                 };
                 $step = function (string $id, callable $fn) use (&$receipt, $save) {
                     if (array_key_exists($id, $receipt['completed'])) {
@@ -153,6 +153,19 @@ final class Receipts
         );
     }
 
+    private function saveReceipt(array $receipt): void
+    {
+        $this->db->execute(
+            'UPDATE operations SET status=?,receipt=?,updated_at=? WHERE id=?',
+            [
+                $receipt['status'],
+                json_encode($receipt, JSON_THROW_ON_ERROR),
+                time(),
+                $receipt['operation_id']
+            ]
+        );
+    }
+
     private function normalized(mixed $value): mixed
     {
         if (!is_array($value)) {
@@ -162,6 +175,6 @@ final class Receipts
             ksort($value);
         }
 
-        return array_map(fn($item) => $this->normalized($item), $value);
+        return array_map(fn ($item) => $this->normalized($item), $value);
     }
 }

@@ -4,21 +4,24 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Auth;
 
-use League\OAuth2\Server\Entities\{AccessTokenEntityInterface,
-    AuthCodeEntityInterface,
-    ClientEntityInterface,
-    RefreshTokenEntityInterface,
-    ScopeEntityInterface};
-use League\OAuth2\Server\Repositories\{AccessTokenRepositoryInterface,
-    AuthCodeRepositoryInterface,
-    ClientRepositoryInterface,
-    RefreshTokenRepositoryInterface,
-    ScopeRepositoryInterface};
+use League\OAuth2\Server\Entities\AccessTokenEntityInterface;
+use League\OAuth2\Server\Entities\AuthCodeEntityInterface;
+use League\OAuth2\Server\Entities\ClientEntityInterface;
+use League\OAuth2\Server\Entities\RefreshTokenEntityInterface;
+use League\OAuth2\Server\Entities\ScopeEntityInterface;
+use League\OAuth2\Server\Repositories\AccessTokenRepositoryInterface;
+use League\OAuth2\Server\Repositories\AuthCodeRepositoryInterface;
+use League\OAuth2\Server\Repositories\ClientRepositoryInterface;
+use League\OAuth2\Server\Repositories\RefreshTokenRepositoryInterface;
+use League\OAuth2\Server\Repositories\ScopeRepositoryInterface;
 use YouTubeMcp\Storage\Database;
 
-final class OAuthRepository implements ClientRepositoryInterface, AccessTokenRepositoryInterface,
-                                       AuthCodeRepositoryInterface, RefreshTokenRepositoryInterface,
-                                       ScopeRepositoryInterface
+final class OAuthRepository implements
+    ClientRepositoryInterface,
+    AccessTokenRepositoryInterface,
+    AuthCodeRepositoryInterface,
+    RefreshTokenRepositoryInterface,
+    ScopeRepositoryInterface
 {
     public function __construct(private Database $db, private string $issuer)
     {
@@ -29,7 +32,10 @@ final class OAuthRepository implements ClientRepositoryInterface, AccessTokenRep
         $row = $this->db->one('SELECT * FROM oauth_clients WHERE id=?', [$clientIdentifier]);
 
         return $row ? new Client(
-            $row['id'], $row['name'], json_decode($row['redirect_uris'], true), (bool)$row['confidential']
+            $row['id'],
+            $row['name'],
+            json_decode($row['redirect_uris'], true),
+            (bool) $row['confidential']
         ) : null;
     }
 
@@ -37,15 +43,19 @@ final class OAuthRepository implements ClientRepositoryInterface, AccessTokenRep
     {
         $row = $this->db->one('SELECT * FROM oauth_clients WHERE id=?', [$clientIdentifier]);
 
-        return $row && (!$row['confidential'] || ($clientSecret !== null && password_verify(
-                        $clientSecret,
-                        $row['secret_hash']
-                    )));
+        if (!$row) {
+            return false;
+        }
+        if (!$row['confidential']) {
+            return true;
+        }
+
+        return $clientSecret !== null && password_verify($clientSecret, $row['secret_hash']);
     }
 
     public function getScopeEntityByIdentifier(string $identifier): ?ScopeEntityInterface
     {
-        return in_array($identifier, \YouTubeMcp\Auth\Scope::SUPPORTED, true) ? new Scope($identifier) : null;
+        return in_array($identifier, Scope::SUPPORTED, true) ? new Scope($identifier) : null;
     }
 
     public function finalizeScopes(
@@ -81,14 +91,6 @@ final class OAuthRepository implements ClientRepositoryInterface, AccessTokenRep
             $accessTokenEntity->getUserIdentifier(),
             $accessTokenEntity->getClient()->getIdentifier(),
             $accessTokenEntity->getExpiryDateTime()->getTimestamp()
-        );
-    }
-
-    private function persist(string $kind, string $id, ?string $user, string $client, int $expiry): void
-    {
-        $this->db->execute(
-            'INSERT INTO oauth_tokens(id,kind,user_id,client_id,expires_at) VALUES (?,?,?,?,?)',
-            [hash('sha256', $id), $kind, $user, $client, $expiry]
         );
     }
 
@@ -130,21 +132,9 @@ final class OAuthRepository implements ClientRepositoryInterface, AccessTokenRep
         $this->revoke($tokenId);
     }
 
-    private function revoke(string $id): void
-    {
-        $this->db->execute('UPDATE oauth_tokens SET revoked=1 WHERE id=?', [hash('sha256', $id)]);
-    }
-
     public function isAccessTokenRevoked(string $tokenId): bool
     {
         return $this->revoked($tokenId, 'access');
-    }
-
-    private function revoked(string $id, string $kind): bool
-    {
-        $row = $this->db->one('SELECT * FROM oauth_tokens WHERE id=? AND kind=?', [hash('sha256', $id), $kind]);
-
-        return !$row || $row['revoked'] || $row['expires_at'] <= time();
     }
 
     public function revokeAuthCode(string $codeId): void
@@ -165,5 +155,25 @@ final class OAuthRepository implements ClientRepositoryInterface, AccessTokenRep
     public function isRefreshTokenRevoked(string $tokenId): bool
     {
         return $this->revoked($tokenId, 'refresh');
+    }
+
+    private function persist(string $kind, string $id, ?string $user, string $client, int $expiry): void
+    {
+        $this->db->execute(
+            'INSERT INTO oauth_tokens(id,kind,user_id,client_id,expires_at) VALUES (?,?,?,?,?)',
+            [hash('sha256', $id), $kind, $user, $client, $expiry]
+        );
+    }
+
+    private function revoke(string $id): void
+    {
+        $this->db->execute('UPDATE oauth_tokens SET revoked=1 WHERE id=?', [hash('sha256', $id)]);
+    }
+
+    private function revoked(string $id, string $kind): bool
+    {
+        $row = $this->db->one('SELECT * FROM oauth_tokens WHERE id=? AND kind=?', [hash('sha256', $id), $kind]);
+
+        return !$row || $row['revoked'] || $row['expires_at'] <= time();
     }
 }

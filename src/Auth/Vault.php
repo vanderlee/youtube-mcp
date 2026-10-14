@@ -32,7 +32,10 @@ final class Vault
     public function decrypt(string $value): array
     {
         $raw = base64_decode($value, true);
-        if ($raw === false || strlen($raw) < SODIUM_CRYPTO_SECRETBOX_NONCEBYTES + SODIUM_CRYPTO_SECRETBOX_MACBYTES) {
+        if (
+            $raw === false
+            || strlen($raw) < SODIUM_CRYPTO_SECRETBOX_NONCEBYTES + SODIUM_CRYPTO_SECRETBOX_MACBYTES
+        ) {
             throw new RuntimeException('Invalid encrypted credentials.');
         }
 

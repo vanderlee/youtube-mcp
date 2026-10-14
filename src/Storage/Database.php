@@ -25,12 +25,18 @@ final class Database
             str_contains($message, 'columns but') => 'column_count_mismatch',
             default => 'unclassified',
         };
-        $details = ['database_reason' => $reason, 'database_sqlstate' => (string)($error->errorInfo[0] ?? $error->getCode())];
+        $details = [
+            'database_reason' => $reason,
+            'database_sqlstate' => (string) ($error->errorInfo[0] ?? $error->getCode())
+        ];
         if (isset($error->errorInfo[1]) && is_numeric($error->errorInfo[1])) {
-            $details['database_driver_code'] = (int)$error->errorInfo[1];
+            $details['database_driver_code'] = (int) $error->errorInfo[1];
         }
-        if ($reason === 'missing_table' && preg_match('/no such table: ([a-z_]+)/', $message, $match)
-            && in_array($match[1], ['google_connections', 'oauth_tokens', 'quota_windows', 'quota_requests'], true)) {
+        if (
+            $reason === 'missing_table'
+            && preg_match('/no such table: ([a-z_]+)/', $message, $match)
+            && in_array($match[1], ['google_connections', 'oauth_tokens', 'quota_windows', 'quota_requests'], true)
+        ) {
             $details['database_table'] = $match[1];
         }
 
@@ -76,11 +82,32 @@ final class Database
                     continue;
                 }
 
-                $this->transaction(function () use ($sql, $name) {
-                    $this->pdo->exec($sql);
-                    $this->execute('INSERT INTO migrations VALUES (?)', [$name]);
-                });
+                $this->transaction(
+                    function () use ($sql, $name) {
+                        $this->pdo->exec($sql);
+                        $this->execute('INSERT INTO migrations VALUES (?)', [$name]);
+                    }
+                );
             }
+        }
+    }
+
+    public function one(string $sql, array $params = []): ?array
+    {
+        return $this->execute($sql, $params)->fetch() ?: null;
+    }
+
+    public function transaction(callable $fn): mixed
+    {
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            $result = $fn();
+            $this->pdo->exec('COMMIT');
+
+            return $result;
+        } catch (Throwable $e) {
+            $this->pdo->exec('ROLLBACK');
+            throw $e;
         }
     }
 
@@ -111,24 +138,5 @@ final class Database
         }
 
         return $sections;
-    }
-
-    public function one(string $sql, array $params = []): ?array
-    {
-        return $this->execute($sql, $params)->fetch() ?: null;
-    }
-
-    public function transaction(callable $fn): mixed
-    {
-        $this->pdo->exec('BEGIN IMMEDIATE');
-        try {
-            $result = $fn();
-            $this->pdo->exec('COMMIT');
-
-            return $result;
-        } catch (Throwable $e) {
-            $this->pdo->exec('ROLLBACK');
-            throw $e;
-        }
     }
 }

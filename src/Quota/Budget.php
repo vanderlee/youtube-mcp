@@ -55,11 +55,12 @@ final class Budget
         'channelSections.update' => 50,
         'channelSections.delete' => 50,
     ];
+
     private Closure $clock;
 
     public function __construct(private Database $db, Config $config, ?callable $clock = null)
     {
-        $this->clock = $clock ? Closure::fromCallable($clock) : fn() => time();
+        $this->clock = $clock ? Closure::fromCallable($clock) : fn () => time();
     }
 
     // Compatibility with existing operation plans; there are no admission or expiry gates.
@@ -74,11 +75,13 @@ final class Budget
 
     public function cleanup(): void
     {
-        $this->db->transaction(function () {
-            $this->db->execute('DELETE FROM quota_reservations');
-            $this->db->execute('UPDATE quota_windows SET reserved=0 WHERE reserved<>0');
-            $this->db->execute('DELETE FROM quota_circuit_breakers');
-        });
+        $this->db->transaction(
+            function () {
+                $this->db->execute('DELETE FROM quota_reservations');
+                $this->db->execute('UPDATE quota_windows SET reserved=0 WHERE reserved<>0');
+                $this->db->execute('DELETE FROM quota_circuit_breakers');
+            }
+        );
     }
 
     public function dispatch(
@@ -89,23 +92,25 @@ final class Budget
     ): string {
         [$bucket, $cost] = $this->method($method);
 
-        return $this->db->transaction(function () use ($user, $method, $operation, $bucket, $cost) {
-            $window = $this->window();
-            foreach (['project', 'user:' . $user] as $owner) {
+        return $this->db->transaction(
+            function () use ($user, $method, $operation, $bucket, $cost) {
+                $window = $this->window();
+                foreach (['project', 'user:' . $user] as $owner) {
+                    $this->db->execute(
+                        'INSERT INTO quota_windows(window,owner,bucket,spent) VALUES (?,?,?,?) ON CONFLICT(window,owner,bucket) DO UPDATE SET spent=spent+excluded.spent',
+                        [$window, $owner, $bucket, $cost]
+                    );
+                }
+
+                $id = bin2hex(random_bytes(16));
                 $this->db->execute(
-                    'INSERT INTO quota_windows(window,owner,bucket,spent) VALUES (?,?,?,?) ON CONFLICT(window,owner,bucket) DO UPDATE SET spent=spent+excluded.spent',
-                    [$window, $owner, $bucket, $cost]
+                    'INSERT INTO quota_requests VALUES (?,?,?,?,?,?,?,?,?)',
+                    [$id, $user, $operation, $method, $bucket, $cost, $window, 'dispatched', $this->now()]
                 );
+
+                return $id;
             }
-
-            $id = bin2hex(random_bytes(16));
-            $this->db->execute(
-                'INSERT INTO quota_requests VALUES (?,?,?,?,?,?,?,?,?)',
-                [$id, $user, $operation, $method, $bucket, $cost, $window, 'dispatched', $this->now()]
-            );
-
-            return $id;
-        });
+        );
     }
 
     public function method(string $method): array
@@ -153,8 +158,8 @@ final class Budget
                 [$this->window(), 'project', $bucket]
             );
             $result['buckets'][$bucket] = [
-                'user_spent' => (int)($userUsage['spent'] ?? 0),
-                'project_spent' => (int)($projectUsage['spent'] ?? 0)
+                'user_spent' => (int) ($userUsage['spent'] ?? 0),
+                'project_spent' => (int) ($projectUsage['spent'] ?? 0)
             ];
         }
 

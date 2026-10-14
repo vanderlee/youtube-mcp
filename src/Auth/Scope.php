@@ -10,6 +10,9 @@ use League\OAuth2\Server\Entities\Traits\ScopeTrait;
 
 final class Scope implements ScopeEntityInterface
 {
+    use EntityTrait;
+    use ScopeTrait;
+
     public const SUPPORTED = [
         'playlists.read',
         'playlists.write',
@@ -30,8 +33,6 @@ final class Scope implements ScopeEntityInterface
         'media.read',
         'media.write',
     ];
-    use EntityTrait;
-    use ScopeTrait;
 
     public function __construct(string $id)
     {

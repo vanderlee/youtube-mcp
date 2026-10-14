@@ -31,22 +31,34 @@ final class CreatorService
         [, $properties, $required] = CreatorTools::specs()[$tool];
         Arguments::validate($a, $properties, $required);
 
-        return $this->locks->run('account:' . $user, function () use ($user, $tool, $a) {
-            $connection = $this->google->connection($user);
-            if (!in_array($tool, CreatorTools::WRITES, true)) {
-                return $this->read($user, $connection, $tool, $a);
-            }
+        return $this->locks->run(
+            'account:' . $user,
+            function () use ($user, $tool, $a) {
+                $connection = $this->google->connection($user);
+                if (!in_array($tool, CreatorTools::WRITES, true)) {
+                    return $this->read($user, $connection, $tool, $a);
+                }
 
-            return $this->receipts->run($user, $connection['generation'], $tool, $a,
-                fn($step, $operation, $done) => $this->write($user, $connection, $tool, $a, $step, $operation, $done));
-        });
+                return $this->receipts->run(
+                    $user,
+                    $connection['generation'],
+                    $tool,
+                    $a,
+                    fn ($step, $operation, $done) => $this->write($user, $connection, $tool, $a, $step, $operation, $done)
+                );
+            }
+        );
     }
 
     private function ownedVideo(string $user, array $connection, string $video): array
     {
         $response = $this->api->call($user, 'videos.list', ['part' => 'snippet,status', 'id' => $video]);
         $metadata = $response['items'][0] ?? null;
-        if (!$metadata || ($metadata['id'] ?? '') !== $video || ($metadata['snippet']['channelId'] ?? '') !== $connection['channel_id']) {
+        if (
+            !$metadata
+            || ($metadata['id'] ?? '') !== $video
+            || ($metadata['snippet']['channelId'] ?? '') !== $connection['channel_id']
+        ) {
             throw new ServiceError('NOT_VIDEO_OWNER', 'This video must be owned by your confirmed channel.', [], 403);
         }
 
@@ -56,9 +68,16 @@ final class CreatorService
     private function caption(string $user, array $connection, array $arguments): array
     {
         $this->ownedVideo($user, $connection, $arguments['video_id']);
-        $response = $this->api->call($user, 'captions.list', ['part' => 'snippet', 'videoId' => $arguments['video_id'], 'id' => $arguments['caption_id']]);
+        $response = $this->api->call(
+            $user,
+            'captions.list',
+            ['part' => 'snippet', 'videoId' => $arguments['video_id'], 'id' => $arguments['caption_id']]
+        );
         foreach ($response['items'] ?? [] as $caption) {
-            if ($caption['id'] === $arguments['caption_id'] && ($caption['snippet']['videoId'] ?? '') === $arguments['video_id']) {
+            if (
+                $caption['id'] === $arguments['caption_id']
+                && ($caption['snippet']['videoId'] ?? '') === $arguments['video_id']
+            ) {
                 return $caption;
             }
         }
@@ -76,7 +95,11 @@ final class CreatorService
             return $this->api->call($user, 'videoCategories.list', ['part' => 'snippet', 'regionCode' => $arguments['region'] ?? 'US']);
         }
         if ($tool === 'list_channel_sections') {
-            return $this->api->call($user, 'channelSections.list', ['part' => 'snippet,contentDetails', 'channelId' => $connection['channel_id']]);
+            return $this->api->call(
+                $user,
+                'channelSections.list',
+                ['part' => 'snippet,contentDetails', 'channelId' => $connection['channel_id']]
+            );
         }
         if ($tool === 'download_caption') {
             $this->caption($user, $connection, $arguments);
@@ -89,14 +112,24 @@ final class CreatorService
         return $this->api->call($user, 'captions.list', ['part' => 'snippet', 'videoId' => $arguments['video_id']]);
     }
 
-    private function write(string $user, array $connection, string $tool, array $arguments, callable $step, string $operation, array $done): array
-    {
+    private function write(
+        string $user,
+        array $connection,
+        string $tool,
+        array $arguments,
+        callable $step,
+        string $operation,
+        array $done
+    ): array {
         if ($tool === 'delete_media_asset') {
-            $step('delete-asset', function () use ($user, $connection, $arguments) {
-                $this->assets->delete($user, $connection, $arguments['asset_id']);
+            $step(
+                'delete-asset',
+                function () use ($user, $connection, $arguments) {
+                    $this->assets->delete($user, $connection, $arguments['asset_id']);
 
-                return ['deleted' => true];
-            });
+                    return ['deleted' => true];
+                }
+            );
 
             return ['asset_id' => $arguments['asset_id'], 'deleted' => true];
         }
@@ -110,13 +143,29 @@ final class CreatorService
         if ($tool === 'upload_video') {
             $this->assertMime($asset, 'video/');
             $current = $this->api->call($user, 'channels.list', ['part' => 'id', 'mine' => 'true']);
-            if (count($current['items'] ?? []) !== 1 || ($current['items'][0]['id'] ?? '') !== $connection['channel_id']) {
+            if (
+                count($current['items'] ?? []) !== 1
+                || ($current['items'][0]['id'] ?? '') !== $connection['channel_id']
+            ) {
                 throw new ServiceError('GOOGLE_ACCOUNT_MISMATCH', 'Google upload identity differs from your confirmed channel.', [], 403);
             }
 
-            $result = $this->media->upload($user, 'videos.insert', ['part' => 'snippet,status'],
-                ['snippet' => ['title' => $arguments['title'], 'description' => $arguments['description'] ?? '', 'categoryId' => $arguments['category_id'] ?? '22', 'tags' => $arguments['tags'] ?? []],
-                    'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private']], $asset, $step);
+            $result = $this->media->upload(
+                $user,
+                'videos.insert',
+                ['part' => 'snippet,status'],
+                [
+                    'snippet' => [
+                        'title' => $arguments['title'],
+                        'description' => $arguments['description'] ?? '',
+                        'categoryId' => $arguments['category_id'] ?? '22',
+                        'tags' => $arguments['tags'] ?? []
+                    ],
+                    'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private']
+                ],
+                $asset,
+                $step
+            );
             if (!is_string($result['id'] ?? null) || !preg_match('/^[A-Za-z0-9_-]{11}$/D', $result['id'])) {
                 throw new ServiceError('UPSTREAM_UNCERTAIN', 'Upload returned no valid video ID.', [], 502);
             }
@@ -142,50 +191,110 @@ final class CreatorService
         return $this->sectionChange($user, $connection, $tool, $arguments, $step, $operation);
     }
 
-    private function videoChange(string $user, string $tool, array $arguments, array $video, callable $step, string $operation): array
-    {
+    private function videoChange(
+        string $user,
+        string $tool,
+        array $arguments,
+        array $video,
+        callable $step,
+        string $operation
+    ): array {
         if ($tool === 'delete_video') {
-            $step('video-change', fn() => $this->api->call($user, 'videos.delete', ['id' => $arguments['video_id']], operation: $operation));
+            $step(
+                'video-change',
+                fn () => $this->api->call($user, 'videos.delete', ['id' => $arguments['video_id']], operation: $operation)
+            );
         } else {
-            $body = ['id' => $arguments['video_id']];
-            $snippet = array_intersect_key($video['snippet'], array_flip(['title', 'description', 'categoryId', 'tags', 'defaultLanguage', 'defaultAudioLanguage']));
-            $supplied = false;
-            foreach (['title' => 'title', 'description' => 'description', 'category_id' => 'categoryId', 'tags' => 'tags'] as $arg => $field) {
-                if (array_key_exists($arg, $arguments)) {
-                    $snippet[$field] = $arguments[$arg];
-                    $supplied = true;
-                }
-            }
-            if ($supplied) {
-                $body['snippet'] = $snippet;
-            }
-            if (isset($arguments['privacy'])) {
-                $body['status'] = array_intersect_key($video['status'] ?? [], array_flip(['privacyStatus', 'embeddable', 'license', 'publicStatsViewable', 'selfDeclaredMadeForKids', 'publishAt']));
-                $body['status']['privacyStatus'] = $arguments['privacy'];
-                if ($arguments['privacy'] !== 'private') {
-                    unset($body['status']['publishAt']);
-                }
-            }
-            if (count($body) === 1) {
-                throw new ServiceError('INVALID_ARGUMENT', 'Supply a video metadata or privacy change.');
-            }
+            $body = $this->videoUpdateBody($arguments, $video);
 
-            $step('video-change', fn() => $this->api->call($user, 'videos.update', ['part' => implode(',', array_diff(array_keys($body), ['id']))], $body, operation: $operation));
+            $step(
+                'video-change',
+                fn () => $this->api->call(
+                    $user,
+                    'videos.update',
+                    ['part' => implode(',', array_diff(array_keys($body), ['id']))],
+                    $body,
+                    operation: $operation
+                )
+            );
         }
 
         return ['video_id' => $arguments['video_id'], 'changed' => true];
     }
 
-    private function captionChange(string $user, array $connection, string $tool, array $arguments, ?array $asset, callable $step, string $operation): array
+    private function videoUpdateBody(array $arguments, array $video): array
     {
+        $body = ['id' => $arguments['video_id']];
+        $snippet = array_intersect_key(
+            $video['snippet'],
+            array_flip(['title', 'description', 'categoryId', 'tags', 'defaultLanguage', 'defaultAudioLanguage'])
+        );
+        $supplied = false;
+        foreach ([
+                'title' => 'title',
+                'description' => 'description',
+                'category_id' => 'categoryId',
+                'tags' => 'tags'
+            ] as $arg => $field) {
+            if (array_key_exists($arg, $arguments)) {
+                $snippet[$field] = $arguments[$arg];
+                $supplied = true;
+            }
+        }
+        if ($supplied) {
+            $body['snippet'] = $snippet;
+        }
+        if (isset($arguments['privacy'])) {
+            $body['status'] = array_intersect_key(
+                $video['status'] ?? [],
+                array_flip(
+                    [
+                        'privacyStatus',
+                        'embeddable',
+                        'license',
+                        'publicStatsViewable',
+                        'selfDeclaredMadeForKids',
+                        'publishAt'
+                    ]
+                )
+            );
+            $body['status']['privacyStatus'] = $arguments['privacy'];
+            if ($arguments['privacy'] !== 'private') {
+                unset($body['status']['publishAt']);
+            }
+        }
+        if (count($body) === 1) {
+            throw new ServiceError('INVALID_ARGUMENT', 'Supply a video metadata or privacy change.');
+        }
+
+        return $body;
+    }
+
+    private function captionChange(
+        string $user,
+        array $connection,
+        string $tool,
+        array $arguments,
+        ?array $asset,
+        callable $step,
+        string $operation
+    ): array {
         $existing = isset($arguments['caption_id']) ? $this->caption($user, $connection, $arguments) : null;
         if ($tool === 'delete_caption') {
-            $step('caption-change', fn() => $this->api->call($user, 'captions.delete', ['id' => $arguments['caption_id']], operation: $operation));
+            $step(
+                'caption-change',
+                fn () => $this->api->call($user, 'captions.delete', ['id' => $arguments['caption_id']], operation: $operation)
+            );
 
             return ['deleted' => true];
         }
 
-        $snippet = $existing ? array_intersect_key($existing['snippet'], array_flip(['name', 'isDraft'])) : ['videoId' => $arguments['video_id'], 'language' => $arguments['language'], 'name' => $arguments['name'] ?? '', 'isDraft' => $arguments['is_draft'] ?? false];
+        $snippet = $existing ? array_intersect_key($existing['snippet'], array_flip(['name', 'isDraft'])) : [
+            'videoId' => $arguments['video_id'],
+            'language' => $arguments['language'],
+            'name' => $arguments['name'] ?? '',
+            'isDraft' => $arguments['is_draft'] ?? false
+        ];
         foreach (['name' => 'name', 'is_draft' => 'isDraft'] as $arg => $field) {
             if (array_key_exists($arg, $arguments)) {
                 $snippet[$field] = $arguments[$arg];
@@ -195,13 +304,23 @@ final class CreatorService
         $body = ['snippet' => $snippet] + (isset($arguments['caption_id']) ? ['id' => $arguments['caption_id']] : []);
         if ($asset !== null) {
             $this->assertMime($asset, 'text/');
-            $result = $this->media->upload($user, $existing ? 'captions.update' : 'captions.insert', ['part' => 'snippet'], $body, $asset, $step);
+            $result = $this->media->upload(
+                $user,
+                $existing ? 'captions.update' : 'captions.insert',
+                ['part' => 'snippet'],
+                $body,
+                $asset,
+                $step
+            );
         } else {
             if (!isset($arguments['name']) && !array_key_exists('is_draft', $arguments)) {
                 throw new ServiceError('INVALID_ARGUMENT', 'Supply caption metadata or an asset replacement.');
             }
 
-            $result = $step('caption-change', fn() => $this->api->call($user, 'captions.update', ['part' => 'snippet'], $body, operation: $operation));
+            $result = $step(
+                'caption-change',
+                fn () => $this->api->call($user, 'captions.update', ['part' => 'snippet'], $body, operation: $operation)
+            );
         }
 
         $id = $result['id'] ?? $arguments['caption_id'] ?? null;
@@ -212,8 +331,15 @@ final class CreatorService
         return ['caption_id' => $id];
     }
 
-    private function brandingChange(string $user, array $connection, string $tool, array $arguments, ?array $asset, callable $step, string $operation): array
-    {
+    private function brandingChange(
+        string $user,
+        array $connection,
+        string $tool,
+        array $arguments,
+        ?array $asset,
+        callable $step,
+        string $operation
+    ): array {
         $channel = $this->api->call($user, 'channels.list', ['part' => 'brandingSettings', 'id' => $connection['channel_id']])['items'][0] ?? null;
         if (!$channel || ($channel['id'] ?? '') !== $connection['channel_id']) {
             throw new ServiceError('CHANNEL_NOT_FOUND', 'Your confirmed channel was not returned.', [], 404);
@@ -243,22 +369,47 @@ final class CreatorService
             }
         }
 
-        $step('branding-change', fn() => $this->api->call($user, 'channels.update', ['part' => 'brandingSettings'], ['id' => $connection['channel_id'], 'brandingSettings' => $branding], operation: $operation));
+        $step(
+            'branding-change',
+            fn () => $this->api->call(
+                $user,
+                'channels.update',
+                ['part' => 'brandingSettings'],
+                ['id' => $connection['channel_id'], 'brandingSettings' => $branding],
+                operation: $operation
+            )
+        );
 
         return ['channel_id' => $connection['channel_id'], 'changed' => true];
     }
 
-    private function sectionChange(string $user, array $connection, string $tool, array $arguments, callable $step, string $operation): array
-    {
+    private function sectionChange(
+        string $user,
+        array $connection,
+        string $tool,
+        array $arguments,
+        callable $step,
+        string $operation
+    ): array {
         $section = null;
         if (isset($arguments['section_id'])) {
-            $section = $this->api->call($user, 'channelSections.list', ['part' => 'snippet,contentDetails', 'id' => $arguments['section_id']])['items'][0] ?? null;
-            if (($section['id'] ?? '') !== $arguments['section_id'] || ($section['snippet']['channelId'] ?? '') !== $connection['channel_id']) {
+            $section = $this->api->call(
+                $user,
+                'channelSections.list',
+                ['part' => 'snippet,contentDetails', 'id' => $arguments['section_id']]
+            )['items'][0] ?? null;
+            if (
+                ($section['id'] ?? '') !== $arguments['section_id']
+                || ($section['snippet']['channelId'] ?? '') !== $connection['channel_id']
+            ) {
                 throw new ServiceError('NOT_CHANNEL_OWNER', 'Section must belong to your confirmed channel.', [], 403);
             }
         }
         if ($tool === 'delete_channel_section') {
-            $step('section-change', fn() => $this->api->call($user, 'channelSections.delete', ['id' => $arguments['section_id']], operation: $operation));
+            $step(
+                'section-change',
+                fn () => $this->api->call($user, 'channelSections.delete', ['id' => $arguments['section_id']], operation: $operation)
+            );
 
             return ['deleted' => true];
         }
@@ -279,7 +430,16 @@ final class CreatorService
 
         $this->validateSection($snippet, $details, $connection['channel_id']);
         $body = ['snippet' => $snippet, 'contentDetails' => $details] + (isset($arguments['section_id']) ? ['id' => $arguments['section_id']] : []);
-        $result = $step('section-change', fn() => $this->api->call($user, $section ? 'channelSections.update' : 'channelSections.insert', ['part' => 'snippet,contentDetails'], $body, operation: $operation));
+        $result = $step(
+            'section-change',
+            fn () => $this->api->call(
+                $user,
+                $section ? 'channelSections.update' : 'channelSections.insert',
+                ['part' => 'snippet,contentDetails'],
+                $body,
+                operation: $operation
+            )
+        );
         $id = $result['id'] ?? $arguments['section_id'] ?? null;
         if (!is_string($id) || $id === '') {
             throw new ServiceError('UPSTREAM_UNCERTAIN', 'Section creation returned no ID.', [], 502);
@@ -300,10 +460,16 @@ final class CreatorService
         $type = $snippet['type'] ?? '';
         $playlists = $details['playlists'] ?? [];
         $channels = $details['channels'] ?? [];
-        if (($type === 'singlePlaylist' && (count($playlists) !== 1 || $channels))
-            || ($type === 'multiplePlaylists' && (!$playlists || $channels || empty($snippet['title'])))
-            || ($type === 'multipleChannels' && (!$channels || $playlists || empty($snippet['title']) || in_array($channel, $channels, true)))
-            || !in_array($type, ['singlePlaylist', 'multiplePlaylists', 'multipleChannels'], true)) {
+        $invalidSection = match ($type) {
+            'singlePlaylist' => count($playlists) !== 1 || $channels,
+            'multiplePlaylists' => !$playlists || $channels || empty($snippet['title']),
+            'multipleChannels' => !$channels
+                || $playlists
+                || empty($snippet['title'])
+                || in_array($channel, $channels, true),
+            default => true,
+        };
+        if ($invalidSection) {
             throw new ServiceError('INVALID_ARGUMENT', 'Section type, title and playlist/channel references are inconsistent.');
         }
     }

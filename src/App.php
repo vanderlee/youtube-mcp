@@ -82,52 +82,7 @@ final class App
     {
         $requestId = bin2hex(random_bytes(12));
         try {
-            if (strtolower($request->getUri()->getHost()) !== strtolower(
-                    (string)parse_url($this->config->url(), PHP_URL_HOST)
-                )) {
-                throw new ServiceError('INVALID_HOST', 'Unexpected host.', [], 400);
-            }
-            if ($request->getHeaderLine('Origin') !== '' && !in_array(
-                    $request->getHeaderLine('Origin'),
-                    [$this->config->url(), 'https://chatgpt.com'],
-                    true
-                )) {
-                error_log(json_encode([
-                    'event' => 'request_origin_rejected',
-                    'request_id' => $requestId,
-                    'path' => $request->getUri()->getPath(),
-                    'origin' => substr($request->getHeaderLine('Origin'), 0, 512),
-                ]));
-                throw new ServiceError('INVALID_ORIGIN', 'Unexpected origin.', [], 403);
-            }
-
-            $mediaUpload = $request->getUri()->getPath() === '/media' && $request->getMethod() === 'POST';
-            $maxBytes = $mediaUpload ? MediaStore::MAX_BYTES + 65536 : 65536;
-            if ((int)$request->getHeaderLine('Content-Length') > $maxBytes || $request->getBody()->getSize() > $maxBytes) {
-                throw new ServiceError('REQUEST_TOO_LARGE', $mediaUpload ? 'Media request exceeds 64 MiB plus form overhead.' : 'Request exceeds 64 KiB.', [], 413);
-            }
-            // Multipart upload files are already represented by UploadedFile objects.
-            // Do not load their raw request body into PHP memory.
-            $raw = $mediaUpload ? '' : $request->getBody()->read(65537);
-            if (strlen($raw) > $maxBytes) {
-                throw new ServiceError('REQUEST_TOO_LARGE', 'Request exceeds 64 KiB.', [], 413);
-            }
-
-            $request = $request->withBody((new Psr17Factory())->createStream($raw));
-            if (!$mediaUpload && str_contains($request->getHeaderLine('Content-Type'), 'application/x-www-form-urlencoded')) {
-                parse_str($raw, $parsed);
-                $request = $request->withParsedBody($parsed);
-            }
-            // External origin is configured; forwarded headers never determine OAuth URLs.
-            $request = $request->withUri(
-                (new Uri($this->config->url()))->withPath($request->getUri()->getPath())->withQuery(
-                    $request->getUri()->getQuery()
-                ),
-                true
-            );
-            // Some proxy/client combinations supply duplicate Host values. The
-            // URI host was validated above; pass one canonical authority to the SDK.
-            $request = $request->withHeader('Host', (new Uri($this->config->url()))->getAuthority());
+            $request = $this->prepareRequest($request, $requestId);
             $response = $this->route($request);
         } catch (OAuthServerException $e) {
             $response = $e->generateHttpResponse(new Response());
@@ -162,13 +117,85 @@ final class App
             );
         }
 
-        return $response->withHeader('X-Request-Id', $requestId)->withHeader('Cache-Control', 'no-store')->withHeader(
-            'X-Content-Type-Options',
-            'nosniff'
-        )->withHeader('Referrer-Policy', 'same-origin')->withHeader(
-            'Content-Security-Policy',
-            "default-src 'none'; style-src 'self'; form-action 'self' https://accounts.google.com https://chatgpt.com; frame-ancestors 'none'; base-uri 'none'"
+        return $response
+            ->withHeader('X-Request-Id', $requestId)
+            ->withHeader('Cache-Control', 'no-store')
+            ->withHeader('X-Content-Type-Options', 'nosniff')
+            ->withHeader('Referrer-Policy', 'same-origin')
+            ->withHeader(
+                'Content-Security-Policy',
+                "default-src 'none'; style-src 'self'; form-action 'self' https://accounts.google.com https://chatgpt.com; frame-ancestors 'none'; base-uri 'none'"
+            );
+    }
+
+    private function prepareRequest(ServerRequestInterface $request, string $requestId): ServerRequestInterface
+    {
+        if (
+            strtolower($request->getUri()->getHost()) !== strtolower(
+                (string) parse_url($this->config->url(), PHP_URL_HOST)
+            )
+        ) {
+            throw new ServiceError('INVALID_HOST', 'Unexpected host.', [], 400);
+        }
+        if (
+            $request->getHeaderLine('Origin') !== ''
+            && !in_array(
+                $request->getHeaderLine('Origin'),
+                [$this->config->url(), 'https://chatgpt.com'],
+                true
+            )
+        ) {
+            error_log(
+                json_encode(
+                    [
+                        'event' => 'request_origin_rejected',
+                        'request_id' => $requestId,
+                        'path' => $request->getUri()->getPath(),
+                        'origin' => substr($request->getHeaderLine('Origin'), 0, 512),
+                    ]
+                )
+            );
+            throw new ServiceError('INVALID_ORIGIN', 'Unexpected origin.', [], 403);
+        }
+
+        $mediaUpload = $request->getUri()->getPath() === '/media' && $request->getMethod() === 'POST';
+        $maxBytes = $mediaUpload ? MediaStore::MAX_BYTES + 65536 : 65536;
+        if (
+            (int) $request->getHeaderLine('Content-Length') > $maxBytes
+            || $request->getBody()->getSize() > $maxBytes
+        ) {
+            throw new ServiceError(
+                'REQUEST_TOO_LARGE',
+                $mediaUpload ? 'Media request exceeds 64 MiB plus form overhead.' : 'Request exceeds 64 KiB.',
+                [],
+                413
+            );
+        }
+        // Multipart upload files are already represented by UploadedFile objects.
+        // Do not load their raw request body into PHP memory.
+        $raw = $mediaUpload ? '' : $request->getBody()->read(65537);
+        if (strlen($raw) > $maxBytes) {
+            throw new ServiceError('REQUEST_TOO_LARGE', 'Request exceeds 64 KiB.', [], 413);
+        }
+
+        $request = $request->withBody((new Psr17Factory())->createStream($raw));
+        if (
+            !$mediaUpload
+            && str_contains($request->getHeaderLine('Content-Type'), 'application/x-www-form-urlencoded')
+        ) {
+            parse_str($raw, $parsed);
+            $request = $request->withParsedBody($parsed);
+        }
+        // External origin is configured; forwarded headers never determine OAuth URLs.
+        $request = $request->withUri(
+            (new Uri($this->config->url()))->withPath($request->getUri()->getPath())->withQuery(
+                $request->getUri()->getQuery()
+            ),
+            true
         );
+        // Some proxy/client combinations supply duplicate Host values. The
+        // URI host was validated above; pass one canonical authority to the SDK.
+        return $request->withHeader('Host', (new Uri($this->config->url()))->getAuthority());
     }
 
     private function route(ServerRequestInterface $request): ResponseInterface
@@ -186,11 +213,13 @@ final class App
         if ($path === '/.well-known/oauth-authorization-server') {
             return $this->json($this->oauth->metadata());
         }
-        if (in_array(
-            $path,
-            ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp'],
-            true
-        )) {
+        if (
+            in_array(
+                $path,
+                ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp'],
+                true
+            )
+        ) {
             return $this->json(
                 [
                     'resource' => $this->config->url() . '/mcp',
@@ -246,11 +275,14 @@ final class App
 
         $user = $_SESSION['user'];
 
-        return $this->locks->run('account:' . $user, function () use ($request, $user) {
-            $this->browser->requireUser($user);
+        return $this->locks->run(
+            'account:' . $user,
+            function () use ($request, $user) {
+                $this->browser->requireUser($user);
 
-            return $this->accountRoute($request, $user);
-        });
+                return $this->accountRoute($request, $user);
+            }
+        );
     }
 
     private function accountRoute(ServerRequestInterface $request, string $user): ResponseInterface
@@ -298,12 +330,15 @@ final class App
         if ($path === '/account/delete') {
             $this->csrf($request);
             $this->google->disconnect($user);
-            $this->locks->run('account:' . $user, function () use ($user) {
-                $this->mediaAssets->purge($user);
-                $this->db->execute('DELETE FROM audit_events WHERE user_id=?', [$user]);
-                $this->db->execute('DELETE FROM api_cache_versions WHERE user_id=?', [$user]);
-                $this->db->execute('DELETE FROM users WHERE id=?', [$user]);
-            });
+            $this->locks->run(
+                'account:' . $user,
+                function () use ($user) {
+                    $this->mediaAssets->purge($user);
+                    $this->db->execute('DELETE FROM audit_events WHERE user_id=?', [$user]);
+                    $this->db->execute('DELETE FROM api_cache_versions WHERE user_id=?', [$user]);
+                    $this->db->execute('DELETE FROM users WHERE id=?', [$user]);
+                }
+            );
             $_SESSION = [];
             session_regenerate_id(true);
 
@@ -342,7 +377,9 @@ final class App
                 [$this->config->url(), 'https://chatgpt.com']
             ),
             new DnsRebindingProtectionMiddleware(
-                [(string)parse_url($this->config->url(), PHP_URL_HOST), 'chatgpt.com'], $factory, $factory
+                [(string) parse_url($this->config->url(), PHP_URL_HOST), 'chatgpt.com'],
+                $factory,
+                $factory
             )
         ];
         $response = $server->run(
@@ -355,17 +392,21 @@ final class App
             )
         );
         if ($response->getStatusCode() === 403) {
-            $message = (string)$response->getBody();
-            error_log(json_encode([
-                'event' => 'mcp_transport_forbidden',
-                'host' => substr($request->getHeaderLine('Host'), 0, 512),
-                'origin' => substr($request->getHeaderLine('Origin'), 0, 512),
-                'reason' => in_array(
-                    $message,
-                    ['Forbidden: Invalid Host header.', 'Forbidden: Invalid Origin header.'],
-                    true
-                ) ? $message : 'Other transport rejection',
-            ]));
+            $message = (string) $response->getBody();
+            error_log(
+                json_encode(
+                    [
+                        'event' => 'mcp_transport_forbidden',
+                        'host' => substr($request->getHeaderLine('Host'), 0, 512),
+                        'origin' => substr($request->getHeaderLine('Origin'), 0, 512),
+                        'reason' => in_array(
+                            $message,
+                            ['Forbidden: Invalid Host header.', 'Forbidden: Invalid Origin header.'],
+                            true
+                        ) ? $message : 'Other transport rejection',
+                    ]
+                )
+            );
         }
 
         return $response;
@@ -404,18 +445,21 @@ final class App
         if ($method === 'POST') {
             $user = $_SESSION['user'];
 
-            return $this->locks->run('account:' . $user, function () use ($request, $authorization, $user) {
-                $this->browser->requireUser($user);
-                unset($_SESSION['authorization_query'], $_SESSION['authorization_at']);
-                $authorization->setUser(new User($user));
-                $authorization->setAuthorizationApproved(($request->getParsedBody()['decision'] ?? '') === 'approve');
+            return $this->locks->run(
+                'account:' . $user,
+                function () use ($request, $authorization, $user) {
+                    $this->browser->requireUser($user);
+                    unset($_SESSION['authorization_query'], $_SESSION['authorization_at']);
+                    $authorization->setUser(new User($user));
+                    $authorization->setAuthorizationApproved(($request->getParsedBody()['decision'] ?? '') === 'approve');
 
-                return $this->oauth->server->completeAuthorizationRequest($authorization, new Response());
-            });
+                    return $this->oauth->server->completeAuthorizationRequest($authorization, new Response());
+                }
+            );
         }
 
         $name = htmlspecialchars($authorization->getClient()->getName());
-        $scopes = htmlspecialchars(implode(', ', array_map(fn($s) => $s->getIdentifier(), $authorization->getScopes())));
+        $scopes = htmlspecialchars(implode(', ', array_map(fn ($s) => $s->getIdentifier(), $authorization->getScopes())));
 
         return $this->html(
             'Authorize ' . $name,
@@ -439,15 +483,24 @@ final class App
                 throw new ServiceError('INVALID_MEDIA', 'Choose one media file. Check PHP upload limits.');
             }
 
-            $asset = $this->locks->run('account:' . $user, fn() => $this->mediaAssets->save($user, $this->google->connection($user), $file));
+            $asset = $this->locks->run(
+                'account:' . $user,
+                fn () => $this->mediaAssets->save($user, $this->google->connection($user), $file)
+            );
 
-            return $this->html('Media staged', '<p>Use this asset ID in the corresponding creator tool:</p><pre>' . htmlspecialchars($asset['asset_id']) . '</pre><p>Expires after 24 hours. No YouTube upload has been performed.</p><a href="/media">Stage another file</a>');
+            return $this->html(
+                'Media staged',
+                '<p>Use this asset ID in the corresponding creator tool:</p><pre>' . htmlspecialchars($asset['asset_id']) . '</pre><p>Expires after 24 hours. No YouTube upload has been performed.</p><a href="/media">Stage another file</a>'
+            );
         }
 
         $this->google->connection($user);
 
-        return $this->html('Stage media', '<p>Choose a video (up to 64 MiB), PNG/JPEG image (up to 2 MiB), or timed SRT/VTT caption (up to 1 MiB). Files are private, expire after 24 hours and are usable only with this account connection. Staging does not publish anything.</p><form method="post" action="/media" enctype="multipart/form-data"><input type="hidden" name="csrf" value="'
-            . htmlspecialchars($_SESSION['csrf'], ENT_QUOTES) . '"><input type="file" name="media" required><button type="submit">Stage file</button></form>');
+        return $this->html(
+            'Stage media',
+            '<p>Choose a video (up to 64 MiB), PNG/JPEG image (up to 2 MiB), or timed SRT/VTT caption (up to 1 MiB). Files are private, expire after 24 hours and are usable only with this account connection. Staging does not publish anything.</p><form method="post" action="/media" enctype="multipart/form-data"><input type="hidden" name="csrf" value="'
+                . htmlspecialchars($_SESSION['csrf'], ENT_QUOTES) . '"><input type="file" name="media" required><button type="submit">Stage file</button></form>'
+        );
     }
 
     private function dashboard(string $user): ResponseInterface
@@ -456,8 +509,8 @@ final class App
         $body = '<p class="intro">Connect your channel and authorize ChatGPT to manage your playlists.</p><div class="dashboard-grid"><section class="card"><div class="channel-summary"><span class="youtube-mark" aria-hidden="true">▶</span><div><p class="status' . ($connection ? ' connected' : '') . '">' . ($connection ? 'Connected' : 'Not connected') . '</p><h2>' . ($connection ? htmlspecialchars(
                 $connection['channel_name']
             ) : 'Your YouTube channel') . '</h2><p class="muted channel-id">' . ($connection ? 'Channel ID: ' . htmlspecialchars(
-                    $connection['channel_id']
-                ) : 'Connect Google to get started.') . '</p></div></div><div class="actions">';
+                $connection['channel_id']
+            ) : 'Connect Google to get started.') . '</p></div></div><div class="actions">';
         $body .= $this->form('/google/connect', $connection ? 'Reconnect Google' : 'Connect YouTube account', '', 'primary');
         if ($connection) {
             $body .= $this->form('/google/disconnect', 'Disconnect');
@@ -470,24 +523,24 @@ final class App
 
         $usage = $this->budget->status($user);
         $body .= '<section class="card"><h2>Observed usage</h2><dl class="usage"><div><dt>General units</dt><dd>' . number_format(
-                $usage['buckets']['general']['user_spent']
-            ) . '</dd></div><div><dt>Search calls</dt><dd>' . number_format(
-                $usage['buckets']['search']['user_spent']
-            ) . '</dd></div></dl><p class="muted usage-note">Estimates only. YouTube enforces quotas.</p></section></div>';
+            $usage['buckets']['general']['user_spent']
+        ) . '</dd></div><div><dt>Search calls</dt><dd>' . number_format(
+            $usage['buckets']['search']['user_spent']
+        ) . '</dd></div></dl><p class="muted usage-note">Estimates only. YouTube enforces quotas.</p></section></div>';
         $body .= '<section class="card chatgpt-card"><h2>Connect to ChatGPT</h2><p class="muted">Add this endpoint as a custom MCP server using OAuth.</p><label class="endpoint-label" for="mcp-endpoint">MCP server URL</label><input class="endpoint" id="mcp-endpoint" type="text" readonly spellcheck="false" value="' . htmlspecialchars(
-                $this->config->url() . '/mcp',
-                ENT_QUOTES
-            ) . '"><p class="muted endpoint-help">Select the URL to copy it into ChatGPT.</p>';
+            $this->config->url() . '/mcp',
+            ENT_QUOTES
+        ) . '"><p class="muted endpoint-help">Select the URL to copy it into ChatGPT.</p>';
         $body .= $connection ? $this->form(
             '/oauth/revoke',
             'Revoke ChatGPT access'
         ) : '<p class="muted">Connect and confirm your YouTube channel before authorizing ChatGPT.</p>';
         $body .= '</section><section class="account-section"><div><h2>Account</h2><p class="muted">Delete your service account and stored connections.</p></div>' . $this->form(
-                '/account/delete',
-                'Delete account',
-                '',
-                'danger'
-            ) . '</section>';
+            '/account/delete',
+            'Delete account',
+            '',
+            'danger'
+        ) . '</section>';
 
         return $this->html('YouTube connection', $body);
     }
@@ -511,12 +564,12 @@ final class App
     private function body(ServerRequestInterface $request): array
     {
         if (str_contains($request->getHeaderLine('Content-Type'), 'application/json')) {
-            $data = json_decode((string)$request->getBody(), true, 32, JSON_THROW_ON_ERROR);
+            $data = json_decode((string) $request->getBody(), true, 32, JSON_THROW_ON_ERROR);
 
             return is_array($data) ? $data : throw new ServiceError('INVALID_REQUEST', 'Expected an object.');
         }
 
-        return (array)$request->getParsedBody();
+        return (array) $request->getParsedBody();
     }
 
     private function session(): void
@@ -579,10 +632,15 @@ final class App
         $query = $request->getQueryParams();
         $flow = $_SESSION['google_flow'] ?? null;
         unset($_SESSION['google_flow']);
-        if (!$flow || $flow['at'] < time() - 600 || !hash_equals(
+        if (
+            !$flow
+            || $flow['at'] < time() - 600
+            || !hash_equals(
                 $flow['state'],
-                (string)($query['state'] ?? '')
-            ) || empty($query['code'])) {
+                (string) ($query['state'] ?? '')
+            )
+            || empty($query['code'])
+        ) {
             throw new ServiceError(
                 'INVALID_GOOGLE_STATE',
                 'Google authorization expired or was denied. Restart sign-in.',
@@ -598,13 +656,17 @@ final class App
 
             return $this->redirect(
                 isset($_SESSION['authorization_query']) ? '/oauth/authorize?' . http_build_query(
-                        $_SESSION['authorization_query']
-                    ) : '/'
+                    $_SESSION['authorization_query']
+                ) : '/'
             );
         }
 
         $owner = $this->db->one('SELECT subject FROM users WHERE id=?', [$flow['user']]);
-        if (!$owner || $owner['subject'] !== $identity['subject'] || ($_SESSION['user'] ?? null) !== $flow['user']) {
+        if (
+            !$owner
+            || $owner['subject'] !== $identity['subject']
+            || ($_SESSION['user'] ?? null) !== $flow['user']
+        ) {
             throw new ServiceError('GOOGLE_ACCOUNT_MISMATCH', 'Connect the same Google identity used to sign in.');
         }
 
@@ -648,11 +710,11 @@ final class App
             '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="dark"><title>' . htmlspecialchars(
                 $title
             ) . ' · toyls</title><link rel="icon" type="image/png" sizes="256x256" href="/assets/favicon.png"><link rel="stylesheet" href="/assets/app.css"></head><body><a class="skip-link" href="#main">Skip to content</a><header class="site-header"><div class="header-inner"><a class="brand" href="/" aria-label="Toyls YouTube home"><span><strong>toyls</strong><span class="brand-divider">/</span><span class="brand-product">youtube</span></span><small>tools, toys &amp; toils</small></a>' . (!empty($_SESSION['user']) ? $this->form(
-                '/logout',
-                'Sign out',
-                '',
-                'text-button'
-            ) : '') . '</div></header><main id="main"><h1>' . htmlspecialchars(
+                    '/logout',
+                    'Sign out',
+                    '',
+                    'text-button'
+                ) : '') . '</div></header><main id="main"><h1>' . htmlspecialchars(
                 $title
             ) . '</h1>' . $body . '</main><footer>toyls · tools, toys &amp; toils</footer></body></html>'
         );
@@ -661,17 +723,17 @@ final class App
     private function form(string $action, string $label, string $extra = '', string $buttonClass = ''): string
     {
         return '<form method="post" action="' . $action . '"><input type="hidden" name="csrf" value="' . $_SESSION['csrf'] . '">' . $extra . '<button class="' . htmlspecialchars(
-                $buttonClass,
-                ENT_QUOTES
-            ) . '" type="submit">' . htmlspecialchars(
-                $label
-            ) . '</button></form>';
+            $buttonClass,
+            ENT_QUOTES
+        ) . '" type="submit">' . htmlspecialchars(
+            $label
+        ) . '</button></form>';
     }
 
     private function csrf(ServerRequestInterface $request): void
     {
         $this->post($request);
-        if (!hash_equals($_SESSION['csrf'], (string)($request->getParsedBody()['csrf'] ?? ''))) {
+        if (!hash_equals($_SESSION['csrf'], (string) ($request->getParsedBody()['csrf'] ?? ''))) {
             throw new ServiceError('CSRF_FAILED', 'Reload the page and retry.', [], 403);
         }
     }

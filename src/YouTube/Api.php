@@ -116,13 +116,7 @@ class Api
             $this->budget->outcome($request, $status < 300 ? 'success' : 'rejected');
             if ($status < 300) {
                 if ($connection !== null) {
-                    $current = $this->db->one('SELECT channel_id,generation FROM google_connections WHERE user_id=?', [$user]);
-                    if (!$current || $current['generation'] !== $connection['generation'] || $current['channel_id'] !== $connection['channel_id']) {
-                        if ($verb !== 'GET') {
-                            throw new ServiceError('UPSTREAM_UNCERTAIN', 'The connection changed after a dispatched mutation. Inspect the account and receipt before retrying.', [], 502);
-                        }
-                        throw new ServiceError('GOOGLE_CONNECTION_CHANGED', 'The account connection changed during this request. Start a new request.', [], 409);
-                    }
+                    $this->requireCurrentConnection($user, $connection, $verb);
                 }
                 if ($resource === 'playlistItems') {
                     foreach ($data['items'] ?? [] as $entry) {
@@ -138,7 +132,7 @@ class Api
                 return $data;
             }
 
-            $reason = (string)($data['error']['errors'][0]['reason'] ?? 'unknown');
+            $reason = (string) ($data['error']['errors'][0]['reason'] ?? 'unknown');
             if (in_array($reason, ['quotaExceeded', 'dailyLimitExceeded'], true)) {
                 throw new ServiceError(
                     'YOUTUBE_QUOTA_EXHAUSTED',
@@ -156,7 +150,7 @@ class Api
                 );
             }
             if ($verb === 'GET' && $status >= 500 && $attempt < 2) {
-                usleep((int)(100000 * (2 ** $attempt) + random_int(0, 50000)));
+                usleep((int) (100000 * (2 ** $attempt) + random_int(0, 50000)));
                 $attempt++;
                 continue;
             }
@@ -192,5 +186,30 @@ class Api
                 $status === 401 ? 401 : 400
             );
         } while (true);
+    }
+
+    private function requireCurrentConnection(string $user, array $connection, string $verb): void
+    {
+        $current = $this->db->one('SELECT channel_id,generation FROM google_connections WHERE user_id=?', [$user]);
+        if (
+            !$current
+            || $current['generation'] !== $connection['generation']
+            || $current['channel_id'] !== $connection['channel_id']
+        ) {
+            if ($verb !== 'GET') {
+                throw new ServiceError(
+                    'UPSTREAM_UNCERTAIN',
+                    'The connection changed after a dispatched mutation. Inspect the account and receipt before retrying.',
+                    [],
+                    502
+                );
+            }
+            throw new ServiceError(
+                'GOOGLE_CONNECTION_CHANGED',
+                'The account connection changed during this request. Start a new request.',
+                [],
+                409
+            );
+        }
     }
 }

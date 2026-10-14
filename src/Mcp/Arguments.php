@@ -18,7 +18,7 @@ final class Arguments
             'additionalProperties' => false
         ];
         $schema = json_decode(json_encode($schemaDefinition, JSON_THROW_ON_ERROR), false, 32, JSON_THROW_ON_ERROR);
-        $data = json_decode(json_encode((object)$arguments, JSON_THROW_ON_ERROR), false, 32, JSON_THROW_ON_ERROR);
+        $data = json_decode(json_encode((object) $arguments, JSON_THROW_ON_ERROR), false, 32, JSON_THROW_ON_ERROR);
 
         if (!(new Validator())->validate($data, $schema)->isValid()) {
             throw new ServiceError('INVALID_ARGUMENT', 'Arguments do not match this tool schema.');

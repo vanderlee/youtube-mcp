@@ -34,32 +34,96 @@ final class Workflows
         [, $properties, $required] = WorkflowTools::specs()[$tool];
         Arguments::validate($a, $properties, $required);
 
-        return $this->locks->run('account:' . $user, function () use ($user, $tool, $a, $write) {
-            $connection = $this->google->connection($user);
-            if (!$write) {
-                return $this->read($user, $tool, $a);
-            }
+        return $this->locks->run(
+            'account:' . $user,
+            function () use ($user, $tool, $a, $write) {
+                $connection = $this->google->connection($user);
+                if (!$write) {
+                    return $this->read($user, $tool, $a);
+                }
 
-            return $this->receipts->run($user, $connection['generation'], $tool, $a,
-                fn($step, $operation, $done) => $this->mutate($user, $connection, $tool, $a, $step, $operation, $done));
-        });
+                return $this->receipts->run(
+                    $user,
+                    $connection['generation'],
+                    $tool,
+                    $a,
+                    fn ($step, $operation, $done) => $this->mutate($user, $connection, $tool, $a, $step, $operation, $done)
+                );
+            }
+        );
     }
 
-    private function mutate(string $user, array $connection, string $tool, array $arguments, callable $step, string $operation, array $done): array
-    {
+    private function mutate(
+        string $user,
+        array $connection,
+        string $tool,
+        array $arguments,
+        callable $step,
+        string $operation,
+        array $done
+    ): array {
         // Persist a frozen plan before dispatching any write; resume never replans from changed inputs.
-        $plan = $step('plan', fn() => $this->plan($user, $connection['channel_id'], $tool, $arguments));
-        $deadline = microtime(true) + 45;
+        $plan = $step('plan', fn () => $this->plan($user, $connection['channel_id'], $tool, $arguments));
         $target = $arguments['playlist_id'] ?? null;
         if ($tool === 'copy_playlist') {
-            $created = $step('create', fn() => $this->api->call($user, 'playlists.insert', ['part' => 'snippet,status'],
-                ['snippet' => ['title' => $arguments['title']], 'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private']], operation: $operation));
+            $created = $step(
+                'create',
+                fn () => $this->api->call(
+                    $user,
+                    'playlists.insert',
+                    ['part' => 'snippet,status'],
+                    [
+                        'snippet' => ['title' => $arguments['title']],
+                        'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private']
+                    ],
+                    operation: $operation
+                )
+            );
             $target = $created['id'] ?? null;
             if (!is_string($target) || $target === '') {
                 throw new ServiceError('UPSTREAM_UNCERTAIN', 'Creation returned no playlist ID. Reconcile before retrying.', [], 502);
             }
         }
 
+        $this->verifyPlan($user, $connection['channel_id'], $tool, $plan, $done, $target);
+
+        $deadline = microtime(true) + 45;
+        $writes = isset($done['create']) || $tool !== 'copy_playlist' ? 0 : 1;
+        foreach ($plan['actions'] as $n => $action) {
+            $label = 'action:' . $n;
+            if (isset($done[$label])) {
+                continue;
+            }
+            if ($writes >= 20 || microtime(true) > $deadline) {
+                throw new ServiceError(
+                    'OPERATION_TIME_LIMIT',
+                    'At most 20 writes and 45 seconds per call. Inspect the receipt and explicitly resume remaining steps.',
+                    [],
+                    409
+                );
+            }
+
+            $playlist = $action['playlist_id'] ?? $target;
+            $step($label, fn () => $this->dispatchAction($user, $playlist, $action, $operation));
+            $writes++;
+        }
+
+        return [
+            'playlist_id' => $target,
+            'planned_changes' => count($plan['actions']),
+            'skipped_entries' => $plan['skipped'],
+            'complete' => true
+        ];
+    }
+
+    private function verifyPlan(
+        string $user,
+        string $channel,
+        string $tool,
+        array $plan,
+        array $done,
+        ?string $target
+    ): void {
         $expected = $plan['before'];
         if ($tool === 'copy_playlist') {
             $expected[$target] = [];
@@ -73,31 +137,18 @@ final class Workflows
 
         $verificationDeadline = microtime(true) + 45;
         foreach ($expected as $playlist => $entries) {
-            $this->scanner->owned($user, $playlist, $connection['channel_id']);
+            $this->scanner->owned($user, $playlist, $channel);
             $current = $this->scanner->entries($user, $playlist, $verificationDeadline);
-            $identity = static fn(array $entry): array => [$entry['id'], $entry['video_id'] ?? null];
+            $identity = static fn (array $entry): array => [$entry['id'], $entry['video_id'] ?? null];
             if (array_map($identity, $current) !== array_map($identity, $entries)) {
-                throw new ServiceError('PLAYLIST_CHANGED', 'Playlist order or membership differs from the saved plan. Reconcile this operation before starting a new one.', [], 409);
+                throw new ServiceError(
+                    'PLAYLIST_CHANGED',
+                    'Playlist order or membership differs from the saved plan. Reconcile this operation before starting a new one.',
+                    [],
+                    409
+                );
             }
         }
-
-        $deadline = microtime(true) + 45;
-        $writes = isset($done['create']) || $tool !== 'copy_playlist' ? 0 : 1;
-        foreach ($plan['actions'] as $n => $action) {
-            $label = 'action:' . $n;
-            if (isset($done[$label])) {
-                continue;
-            }
-            if ($writes >= 20 || microtime(true) > $deadline) {
-                throw new ServiceError('OPERATION_TIME_LIMIT', 'At most 20 writes and 45 seconds per call. Inspect the receipt and explicitly resume remaining steps.', [], 409);
-            }
-
-            $playlist = $action['playlist_id'] ?? $target;
-            $step($label, fn() => $this->dispatchAction($user, $playlist, $action, $operation));
-            $writes++;
-        }
-
-        return ['playlist_id' => $target, 'planned_changes' => count($plan['actions']), 'skipped_entries' => $plan['skipped'], 'complete' => true];
     }
 
     private function dispatchAction(string $user, string $playlist, array $action, string $operation): array
@@ -106,15 +157,29 @@ final class Workflows
             return $this->api->call($user, 'playlistItems.delete', ['id' => $action['id']], operation: $operation);
         }
 
-        $snippet = ['playlistId' => $playlist, 'resourceId' => ['kind' => 'youtube#video', 'videoId' => $action['video_id']]];
+        $snippet = [
+            'playlistId' => $playlist,
+            'resourceId' => ['kind' => 'youtube#video', 'videoId' => $action['video_id']]
+        ];
         if ($action['type'] === 'move') {
             $snippet['position'] = $action['position'];
         }
 
         $body = ['snippet' => $snippet] + ($action['type'] === 'move' ? ['id' => $action['id']] : []);
-        $result = $this->api->call($user, $action['type'] === 'move' ? 'playlistItems.update' : 'playlistItems.insert', ['part' => 'snippet'], $body, operation: $operation);
+        $result = $this->api->call(
+            $user,
+            $action['type'] === 'move' ? 'playlistItems.update' : 'playlistItems.insert',
+            ['part' => 'snippet'],
+            $body,
+            operation: $operation
+        );
         if (!is_string($result['id'] ?? null) || $result['id'] === '') {
-            throw new ServiceError('UPSTREAM_UNCERTAIN', 'Playlist change returned no occurrence ID. Reconcile before retrying.', [], 502);
+            throw new ServiceError(
+                'UPSTREAM_UNCERTAIN',
+                'Playlist change returned no occurrence ID. Reconcile before retrying.',
+                [],
+                502
+            );
         }
 
         return ['id' => $result['id']];
@@ -133,94 +198,11 @@ final class Workflows
         $actions = [];
         $skipped = 0;
         if (in_array($tool, ['copy_playlist', 'merge_playlists', 'transfer_tracks'], true)) {
-            $sources = $arguments['source_playlist_ids'] ?? [$arguments['source_playlist_id']];
-            if (in_array($target, $sources, true)) {
-                throw new ServiceError('INVALID_ARGUMENT', 'Source and destination playlists must differ.');
-            }
-
-            $seen = array_fill_keys(array_filter(array_column($before[$target] ?? [], 'video_id')), true);
-            $sourceCount = 0;
-            foreach ($sources as $source) {
-                if ($tool === 'transfer_tracks' && ($arguments['move'] ?? false)) {
-                    $this->scanner->owned($user, $source, $channel);
-                } else {
-                    $this->scanner->metadata($user, $source);
-                }
-
-                $entries = $this->scanner->entries($user, $source, $deadline);
-                $sourceCount += count($entries);
-                if ($sourceCount > 1000) {
-                    throw new ServiceError('PLAYLIST_SCAN_LIMIT', 'Combined sources exceed 1000 entries.', [], 409);
-                }
-                if ($tool === 'transfer_tracks') {
-                    $byId = array_column($entries, null, 'id');
-                    foreach ($arguments['playlist_item_ids'] as $id) {
-                        if (!isset($byId[$id])) {
-                            throw new ServiceError('ITEM_NOT_IN_PLAYLIST', 'A selected occurrence is not in the source.', [], 409);
-                        }
-                    }
-                    if ($arguments['move'] ?? false) {
-                        $before[$source] = $entries;
-                    }
-
-                    $entries = array_map(fn($id) => $byId[$id], $arguments['playlist_item_ids']);
-                }
-
-                foreach ($entries as $entry) {
-                    $video = $entry['video_id'];
-                    if (!is_string($video) || !preg_match('/^[A-Za-z0-9_-]{11}$/D', $video)) {
-                        if ($tool === 'transfer_tracks') {
-                            throw new ServiceError('INVALID_VIDEO', 'Cannot transfer an occurrence without a valid video ID.');
-                        }
-
-                        $skipped++;
-                        continue;
-                    }
-                    if ($tool !== 'transfer_tracks' && ($arguments['duplicate_policy'] ?? 'skip') === 'skip' && isset($seen[$video])) {
-                        $skipped++;
-                        continue;
-                    }
-
-                    $seen[$video] = true;
-                    $actions[] = ['type' => 'add', 'video_id' => $video];
-                }
-                if ($tool === 'transfer_tracks' && ($arguments['move'] ?? false)) {
-                    foreach ($entries as $entry) {
-                        $actions[] = ['type' => 'remove', 'playlist_id' => $source, 'id' => $entry['id']];
-                    }
-                }
-            }
+            [$before, $actions, $skipped] = $this->sourceActions($user, $channel, $tool, $arguments, $before, $deadline);
         } elseif ($tool === 'remove_playlist_duplicates') {
-            $entries = ($arguments['keep'] ?? 'first') === 'last' ? array_reverse($before[$target]) : $before[$target];
-            $seen = [];
-            foreach ($entries as $entry) {
-                $video = $entry['video_id'];
-                if ($video === null) {
-                    continue;
-                }
-                if (isset($seen[$video])) {
-                    $actions[] = ['type' => 'remove', 'id' => $entry['id']];
-                } else {
-                    $seen[$video] = true;
-                }
-            }
+            $actions = $this->duplicateActions($before[$target], $arguments['keep'] ?? 'first');
         } else {
-            $entries = $before[$target];
-            $desired = $this->orderedEntries($entries, $tool, $arguments);
-
-            foreach ($desired as $position => $entry) {
-                $index = array_search($entry['id'], array_column($entries, 'id'), true);
-                if ($index === $position) {
-                    continue;
-                }
-                if (!is_string($entry['video_id']) || !preg_match('/^[A-Za-z0-9_-]{11}$/D', $entry['video_id'])) {
-                    throw new ServiceError('INVALID_VIDEO', 'Cannot reorder an occurrence without a valid video ID.');
-                }
-
-                $actions[] = ['type' => 'move', 'id' => $entry['id'], 'video_id' => $entry['video_id'], 'position' => $position];
-                array_splice($entries, $index, 1);
-                array_splice($entries, $position, 0, [$entry]);
-            }
+            $actions = $this->reorderActions($before[$target], $tool, $arguments);
         }
 
         $targetCount = count($before[$target] ?? []);
@@ -233,46 +215,178 @@ final class Workflows
             }
         }
         if ($targetCount > 1000) {
-            throw new ServiceError('PLAYLIST_SCAN_LIMIT', 'The target would exceed the 1000-entry workflow limit. No new write was dispatched.', [], 409);
+            throw new ServiceError(
+                'PLAYLIST_SCAN_LIMIT',
+                'The target would exceed the 1000-entry workflow limit. No new write was dispatched.',
+                [],
+                409
+            );
         }
 
         return ['before' => $before, 'actions' => $actions, 'skipped' => $skipped];
+    }
+
+    private function sourceActions(
+        string $user,
+        string $channel,
+        string $tool,
+        array $arguments,
+        array $before,
+        float $deadline
+    ): array {
+        $target = $arguments['playlist_id'] ?? null;
+        $actions = [];
+        $skipped = 0;
+        $sources = $arguments['source_playlist_ids'] ?? [$arguments['source_playlist_id']];
+        if (in_array($target, $sources, true)) {
+            throw new ServiceError('INVALID_ARGUMENT', 'Source and destination playlists must differ.');
+        }
+
+        $seen = array_fill_keys(array_filter(array_column($before[$target] ?? [], 'video_id')), true);
+        $sourceCount = 0;
+        foreach ($sources as $source) {
+            if ($tool === 'transfer_tracks' && ($arguments['move'] ?? false)) {
+                $this->scanner->owned($user, $source, $channel);
+            } else {
+                $this->scanner->metadata($user, $source);
+            }
+
+            $entries = $this->scanner->entries($user, $source, $deadline);
+            $sourceCount += count($entries);
+            if ($sourceCount > 1000) {
+                throw new ServiceError('PLAYLIST_SCAN_LIMIT', 'Combined sources exceed 1000 entries.', [], 409);
+            }
+            if ($tool === 'transfer_tracks') {
+                $byId = array_column($entries, null, 'id');
+                foreach ($arguments['playlist_item_ids'] as $id) {
+                    if (!isset($byId[$id])) {
+                        throw new ServiceError('ITEM_NOT_IN_PLAYLIST', 'A selected occurrence is not in the source.', [], 409);
+                    }
+                }
+                if ($arguments['move'] ?? false) {
+                    $before[$source] = $entries;
+                }
+
+                $entries = array_map(fn ($id) => $byId[$id], $arguments['playlist_item_ids']);
+            }
+
+            foreach ($entries as $entry) {
+                $video = $entry['video_id'];
+                if (!is_string($video) || !preg_match('/^[A-Za-z0-9_-]{11}$/D', $video)) {
+                    if ($tool === 'transfer_tracks') {
+                        throw new ServiceError('INVALID_VIDEO', 'Cannot transfer an occurrence without a valid video ID.');
+                    }
+
+                    $skipped++;
+                    continue;
+                }
+                if (
+                    $tool !== 'transfer_tracks'
+                    && ($arguments['duplicate_policy'] ?? 'skip') === 'skip'
+                    && isset($seen[$video])
+                ) {
+                    $skipped++;
+                    continue;
+                }
+
+                $seen[$video] = true;
+                $actions[] = ['type' => 'add', 'video_id' => $video];
+            }
+            if ($tool === 'transfer_tracks' && ($arguments['move'] ?? false)) {
+                foreach ($entries as $entry) {
+                    $actions[] = ['type' => 'remove', 'playlist_id' => $source, 'id' => $entry['id']];
+                }
+            }
+        }
+
+        return [$before, $actions, $skipped];
+    }
+
+    private function duplicateActions(array $entries, string $keep): array
+    {
+        $entries = $keep === 'last' ? array_reverse($entries) : $entries;
+        $actions = [];
+        $seen = [];
+        foreach ($entries as $entry) {
+            $video = $entry['video_id'];
+            if ($video === null) {
+                continue;
+            }
+            if (isset($seen[$video])) {
+                $actions[] = ['type' => 'remove', 'id' => $entry['id']];
+            } else {
+                $seen[$video] = true;
+            }
+        }
+
+        return $actions;
+    }
+
+    private function reorderActions(array $entries, string $tool, array $arguments): array
+    {
+        $actions = [];
+        $desired = $this->orderedEntries($entries, $tool, $arguments);
+
+        foreach ($desired as $position => $entry) {
+            $index = array_search($entry['id'], array_column($entries, 'id'), true);
+            if ($index === $position) {
+                continue;
+            }
+            if (!is_string($entry['video_id']) || !preg_match('/^[A-Za-z0-9_-]{11}$/D', $entry['video_id'])) {
+                throw new ServiceError('INVALID_VIDEO', 'Cannot reorder an occurrence without a valid video ID.');
+            }
+
+            $actions[] = ['type' => 'move', 'id' => $entry['id'], 'video_id' => $entry['video_id'], 'position' => $position];
+            array_splice($entries, $index, 1);
+            array_splice($entries, $position, 0, [$entry]);
+        }
+
+        return $actions;
     }
 
     private function orderedEntries(array $entries, string $tool, array $arguments): array
     {
         if ($tool === 'reorder_playlist') {
             $ids = array_column($entries, 'id');
-            if (count($ids) !== count($arguments['playlist_item_ids']) || array_diff($ids, $arguments['playlist_item_ids'])) {
+            if (
+                count($ids) !== count($arguments['playlist_item_ids'])
+                || array_diff($ids, $arguments['playlist_item_ids'])
+            ) {
                 throw new ServiceError('INVALID_ARGUMENT', 'Supply each current occurrence ID exactly once.');
             }
 
             $byId = array_column($entries, null, 'id');
-            $desired = array_map(fn($id) => $byId[$id], $arguments['playlist_item_ids']);
+            $desired = array_map(fn ($id) => $byId[$id], $arguments['playlist_item_ids']);
         } else {
             $desired = $entries;
             $order = $arguments['order'];
-            if (str_starts_with($order, 'added_') && array_filter($entries, fn($entry) => $entry['added_at'] === null)) {
+            if (
+                str_starts_with($order, 'added_')
+                && array_filter($entries, fn ($entry) => $entry['added_at'] === null)
+            ) {
                 throw new ServiceError('YOUTUBE_RESPONSE_INVALID', 'Playlist-added timestamps were not returned.', [], 502);
             }
             if (str_starts_with($order, 'added_')) {
                 foreach ($desired as &$entry) {
                     try {
-                        $entry['added_sort_key'] = (float)(new \DateTimeImmutable($entry['added_at']))->format('U.u');
+                        $entry['added_sort_key'] = (float) (new \DateTimeImmutable($entry['added_at']))->format('U.u');
                     } catch (\Exception) {
                         throw new ServiceError('YOUTUBE_RESPONSE_INVALID', 'An invalid playlist-added timestamp was returned.', [], 502);
                     }
                 }
                 unset($entry);
             }
-            usort($desired, static function ($left, $right) use ($order) {
-                $comparison = str_starts_with($order, 'title_') ? strnatcasecmp($left['title'], $right['title']) : $left['added_sort_key'] <=> $right['added_sort_key'];
-                if (in_array($order, ['title_desc', 'added_newest'], true)) {
-                    $comparison = -$comparison;
-                }
+            usort(
+                $desired,
+                static function ($left, $right) use ($order) {
+                    $comparison = str_starts_with($order, 'title_') ? strnatcasecmp($left['title'], $right['title']) : $left['added_sort_key'] <=> $right['added_sort_key'];
+                    if (in_array($order, ['title_desc', 'added_newest'], true)) {
+                        $comparison = -$comparison;
+                    }
 
-                return $comparison ?: $left['position'] <=> $right['position'];
-            });
+                    return $comparison ?: $left['position'] <=> $right['position'];
+                }
+            );
         }
 
         return $desired;
@@ -308,15 +422,38 @@ final class Workflows
             $leftCounts = array_count_values(array_filter(array_column($left, 'video_id'), 'is_string'));
             $rightCounts = array_count_values(array_filter(array_column($right, 'video_id'), 'is_string'));
 
-            return ['only_in_left' => array_keys(array_diff_key($leftCounts, $rightCounts)), 'only_in_right' => array_keys(array_diff_key($rightCounts, $leftCounts)),
-                'left_occurrence_counts' => $leftCounts, 'right_occurrence_counts' => $rightCounts, 'complete' => true];
+            return [
+                'only_in_left' => array_keys(array_diff_key($leftCounts, $rightCounts)),
+                'only_in_right' => array_keys(array_diff_key($rightCounts, $leftCounts)),
+                'left_occurrence_counts' => $leftCounts,
+                'right_occurrence_counts' => $rightCounts,
+                'complete' => true
+            ];
         }
 
-        $response = $this->api->call($user, 'playlistItems.list', ['part' => 'snippet,contentDetails', 'playlistId' => $arguments['playlist_id'], 'maxResults' => $arguments['page_size'] ?? 50]
-            + (isset($arguments['page_token']) ? ['pageToken' => $arguments['page_token']] : []));
-        $entries = array_map(fn($entry) => ['playlist_item_id' => $entry['id'], 'video_id' => $entry['contentDetails']['videoId'] ?? $entry['snippet']['resourceId']['videoId'] ?? null,
-            'title' => $entry['snippet']['title'] ?? '', 'position' => $entry['snippet']['position'] ?? null], $response['items'] ?? []);
-        $result = ['next_page_token' => $response['nextPageToken'] ?? null, 'complete' => !isset($response['nextPageToken'])];
+        $response = $this->api->call(
+            $user,
+            'playlistItems.list',
+            [
+                'part' => 'snippet,contentDetails',
+                'playlistId' => $arguments['playlist_id'],
+                'maxResults' => $arguments['page_size'] ?? 50
+            ]
+                + (isset($arguments['page_token']) ? ['pageToken' => $arguments['page_token']] : [])
+        );
+        $entries = array_map(
+            fn ($entry) => [
+                'playlist_item_id' => $entry['id'],
+                'video_id' => $entry['contentDetails']['videoId'] ?? $entry['snippet']['resourceId']['videoId'] ?? null,
+                'title' => $entry['snippet']['title'] ?? '',
+                'position' => $entry['snippet']['position'] ?? null
+            ],
+            $response['items'] ?? []
+        );
+        $result = [
+            'next_page_token' => $response['nextPageToken'] ?? null,
+            'complete' => !isset($response['nextPageToken'])
+        ];
         if ($tool === 'audit_playlist') {
             $ids = array_values(array_unique(array_filter(array_column($entries, 'video_id'), 'is_string')));
             $videos = $ids ? $this->api->call($user, 'videos.list', ['part' => 'snippet,status,contentDetails', 'id' => implode(',', $ids)]) : ['items' => []];
@@ -336,7 +473,10 @@ final class Workflows
             }
             unset($entry);
 
-            return $result + ['entries' => $entries, 'note' => 'Omitted metadata does not distinguish deletion from lack of access. No entries were removed.'];
+            return $result + [
+                'entries' => $entries,
+                'note' => 'Omitted metadata does not distinguish deletion from lack of access. No entries were removed.'
+            ];
         }
 
         $format = $arguments['format'] ?? 'json';
@@ -344,9 +484,22 @@ final class Workflows
             return $result + ['format' => $format, 'entries' => $entries];
         }
         if ($format === 'urls') {
-            return $result + ['format' => $format, 'urls' => array_map(fn($entry) => $entry['video_id'] ? 'https://www.youtube.com/watch?v=' . $entry['video_id'] : null, $entries)];
+            return $result + [
+                'format' => $format,
+                'urls' => array_map(
+                    fn ($entry) => $entry['video_id'] ? 'https://www.youtube.com/watch?v=' . $entry['video_id'] : null,
+                    $entries
+                )
+            ];
         }
 
+        $csv = $this->exportCsv($entries);
+
+        return $result + ['format' => 'csv', 'csv' => $csv];
+    }
+
+    private function exportCsv(array $entries): string
+    {
         $stream = fopen('php://temp', 'w+');
         fputcsv($stream, ['playlist_item_id', 'video_id', 'title', 'position'], ',', '"', '');
         foreach ($entries as $entry) {
@@ -363,6 +516,6 @@ final class Workflows
         $csv = stream_get_contents($stream);
         fclose($stream);
 
-        return $result + ['format' => 'csv', 'csv' => $csv];
+        return $csv;
     }
 }

@@ -29,7 +29,7 @@ final class Config
     {
         $environment = getenv($name);
 
-        return (string)($this->values[$name] ?? ($environment === false ? $default : $environment));
+        return (string) ($this->values[$name] ?? ($environment === false ? $default : $environment));
     }
 
     public function storage(): string
@@ -76,6 +76,6 @@ final class Config
 
     public function int(string $name, int $default): int
     {
-        return (int)$this->get($name, (string)$default);
+        return (int) $this->get($name, (string) $default);
     }
 }

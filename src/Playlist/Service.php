@@ -5,11 +5,16 @@ declare(strict_types=1);
 namespace YouTubeMcp\Playlist;
 
 use YouTubeMcp\Auth\Google;
+use YouTubeMcp\Mcp\Arguments;
 use YouTubeMcp\Operations\Receipts;
 use YouTubeMcp\Quota\Budget;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Lock;
 use YouTubeMcp\YouTube\Api;
+use YouTubeMcp\YouTube\CreatorService;
+use YouTubeMcp\YouTube\CreatorTools;
+use YouTubeMcp\YouTube\Service as YouTubeService;
+use YouTubeMcp\YouTube\Tools as YouTubeTools;
 
 final class Service
 {
@@ -23,9 +28,9 @@ final class Service
         'remove_tracks',
         'move_track',
         'delete_playlist',
-        ...\YouTubeMcp\YouTube\Tools::WRITES,
+        ...YouTubeTools::WRITES,
         ...WorkflowTools::WRITES,
-        ...\YouTubeMcp\YouTube\CreatorTools::WRITES,
+        ...CreatorTools::WRITES,
     ];
 
     public function __construct(
@@ -34,28 +39,31 @@ final class Service
         private Budget $budget,
         private Receipts $receipts,
         private Lock $locks,
-        private ?\YouTubeMcp\YouTube\CreatorService $creator = null
+        private ?CreatorService $creator = null
     ) {
     }
 
     public function execute(string $user, array $scopes, string $tool, array $a): array
     {
         if ($tool === 'get_operation') {
-            return $this->locks->run('account:' . $user, function () use ($user, $scopes, $a) {
-                $connection = $this->google->connection($user);
+            return $this->locks->run(
+                'account:' . $user,
+                function () use ($user, $scopes, $a) {
+                    $connection = $this->google->connection($user);
 
-                return $this->receipts->get($user, $a['operation_id'], $connection['generation'], $scopes);
-            });
+                    return $this->receipts->get($user, $a['operation_id'], $connection['generation'], $scopes);
+                }
+            );
         }
-        if (isset(\YouTubeMcp\YouTube\CreatorTools::specs()[$tool])) {
+        if (isset(CreatorTools::specs()[$tool])) {
             if (!$this->creator) {
                 throw new ServiceError('SETUP_REQUIRED', 'Creator service is unavailable.', [], 503);
             }
 
             return $this->creator->execute($user, $scopes, $tool, $a);
         }
-        if (isset(\YouTubeMcp\YouTube\Tools::specs()[$tool])) {
-            return (new \YouTubeMcp\YouTube\Service($this->google, $this->api, $this->receipts, $this->locks))->execute($user, $scopes, $tool, $a);
+        if (isset(YouTubeTools::specs()[$tool])) {
+            return (new YouTubeService($this->google, $this->api, $this->receipts, $this->locks))->execute($user, $scopes, $tool, $a);
         }
         if (isset(WorkflowTools::specs()[$tool])) {
             return (new Workflows($this->google, $this->api, $this->receipts, $this->locks))->execute($user, $scopes, $tool, $a);
@@ -77,26 +85,57 @@ final class Service
         if ($tool === 'get_connection_status') {
             $googleScopes = array_values(array_filter(preg_split('/\s+/', trim($connection['scopes']))));
 
-            return ['connected' => true, 'channel_id' => $connection['channel_id'], 'channel_name' => $connection['channel_name'],
-                'service_scopes' => array_values($scopes), 'google_scopes' => $googleScopes];
+            return [
+                'connected' => true,
+                'channel_id' => $connection['channel_id'],
+                'channel_name' => $connection['channel_name'],
+                'service_scopes' => array_values($scopes),
+                'google_scopes' => $googleScopes
+            ];
         }
         if ($write) {
-            return $this->locks->run('account:' . $user, function () use ($user, $tool, $a) {
-                $connection = $this->google->connection($user);
+            return $this->locks->run(
+                'account:' . $user,
+                function () use ($user, $tool, $a) {
+                    $connection = $this->google->connection($user);
 
-                return $this->locks->run(
-                    'playlist:' . $user . ':' . ($a['playlist_id'] ?? 'create'),
-                    fn() => $this->receipts->run(
-                        $user,
-                        $connection['generation'],
-                        $tool,
-                        $a,
-                        fn($step, $id, $done) => $this->mutate($user, $connection, $tool, $a, $step, $id, $done)
-                    )
-                );
-            });
+                    return $this->locks->run(
+                        'playlist:' . $user . ':' . ($a['playlist_id'] ?? 'create'),
+                        fn () => $this->receipts->run(
+                            $user,
+                            $connection['generation'],
+                            $tool,
+                            $a,
+                            fn ($step, $id, $done) => $this->mutate($user, $connection, $tool, $a, $step, $id, $done)
+                        )
+                    );
+                }
+            );
         }
 
+        return $this->read($user, $tool, $a);
+    }
+
+    public static function scope(string $tool): string
+    {
+        if (isset(CreatorTools::specs()[$tool])) {
+            return CreatorTools::scope($tool);
+        }
+        if (isset(YouTubeTools::specs()[$tool])) {
+            return YouTubeTools::scope($tool);
+        }
+
+        $group = match ($tool) {
+            'list_liked_tracks', 'get_track_ratings', 'rate_track' => 'likes',
+            'list_subscriptions', 'subscribe_artist', 'unsubscribe_artist' => 'subscriptions',
+            default => 'playlists'
+        };
+
+        return $group . (in_array($tool, self::WRITES, true) ? '.write' : '.read');
+    }
+
+    private function read(string $user, string $tool, array $a): array
+    {
         $page = ['maxResults' => $a['page_size'] ?? 25];
         if (!empty($a['page_token'])) {
             $page['pageToken'] = $a['page_token'];
@@ -120,7 +159,7 @@ final class Service
             return $response + ['music_availability' => 'YouTube liked videos; may include non-music content. Music playback is not guaranteed.'];
         }
         if ($tool === 'get_track_ratings') {
-            $ids = array_map(fn($v) => $this->video($v), $a['video_ids']);
+            $ids = array_map(fn ($v) => $this->video($v), $a['video_ids']);
 
             return $this->api->call($user, 'videos.getRating', ['id' => implode(',', array_unique($ids))], ttl: 15);
         }
@@ -149,10 +188,10 @@ final class Service
             ];
         }
         if ($tool === 'search_tracks') {
-            $filterArguments = array_intersect_key($a, \YouTubeMcp\YouTube\Tools::searchFilters());
-            \YouTubeMcp\Mcp\Arguments::validate($filterArguments, \YouTubeMcp\YouTube\Tools::searchFilters(), []);
+            $filterArguments = array_intersect_key($a, YouTubeTools::searchFilters());
+            Arguments::validate($filterArguments, YouTubeTools::searchFilters(), []);
             $query = ['part' => 'snippet', 'type' => 'video', 'q' => $a['query'], 'maxResults' => $a['limit'] ?? 10];
-            $query += \YouTubeMcp\YouTube\Service::searchParameters($a);
+            $query += YouTubeService::searchParameters($a);
             foreach (['region' => 'regionCode', 'page_token' => 'pageToken'] as $arg => $param) {
                 if (!empty($a[$arg])) {
                     $query[$param] = $a[$arg];
@@ -162,11 +201,14 @@ final class Service
             $results = $this->api->call($user, 'search.list', $query, ttl: 300);
             if (!($a['include_details'] ?? false)) {
                 return [
-                    'candidates' => array_map(fn($v) => [
-                        'video_id' => $v['id']['videoId'],
-                        'title' => $v['snippet']['title'],
-                        'channel' => $v['snippet']['channelTitle']
-                    ], $results['items'] ?? []),
+                    'candidates' => array_map(
+                        fn ($v) => [
+                            'video_id' => $v['id']['videoId'],
+                            'title' => $v['snippet']['title'],
+                            'channel' => $v['snippet']['channelTitle']
+                        ],
+                        $results['items'] ?? []
+                    ),
                     'next_page_token' => $results['nextPageToken'] ?? null,
                     'music_availability' => 'YouTube candidates; Music playback is not guaranteed.'
                 ];
@@ -182,7 +224,7 @@ final class Service
 
             return [
                 'candidates' => array_map(
-                    fn($v) => [
+                    fn ($v) => [
                         'video_id' => $v['id'],
                         'title' => $v['snippet']['title'],
                         'channel' => $v['snippet']['channelTitle'],
@@ -196,24 +238,6 @@ final class Service
             ];
         }
         throw new ServiceError('UNKNOWN_TOOL', 'Unknown tool.');
-    }
-
-    public static function scope(string $tool): string
-    {
-        if (isset(\YouTubeMcp\YouTube\CreatorTools::specs()[$tool])) {
-            return \YouTubeMcp\YouTube\CreatorTools::scope($tool);
-        }
-        if (isset(\YouTubeMcp\YouTube\Tools::specs()[$tool])) {
-            return \YouTubeMcp\YouTube\Tools::scope($tool);
-        }
-
-        $group = match ($tool) {
-            'list_liked_tracks', 'get_track_ratings', 'rate_track' => 'likes',
-            'list_subscriptions', 'subscribe_artist', 'unsubscribe_artist' => 'subscriptions',
-            default => 'playlists'
-        };
-
-        return $group . (in_array($tool, self::WRITES, true) ? '.write' : '.read');
     }
 
     private function mutate(
@@ -232,9 +256,43 @@ final class Service
             return $this->create($user, $connection, $arguments, $step, $operation, $done);
         }
 
+        [$id, $planned] = $this->planChanges($user, $connection, $tool, $arguments, $done);
+        if (!$planned) {
+            return ['playlist_id' => $id, 'changed' => 0, 'links' => $id ? $this->links($id) : []];
+        }
+
+        $cost = array_sum(array_map(fn ($p) => $this->budget->method($p[1])[1], $planned));
+        $reservation = $this->budget->reserve($user, $cost);
+        $deadline = microtime(true) + 45;
+        try {
+            foreach ($planned as [$label, $method, $params, $body]) {
+                if (microtime(true) > $deadline) {
+                    throw new ServiceError(
+                        'OPERATION_TIME_LIMIT',
+                        'Batch time limit reached. Inspect this receipt and explicitly resume pending work.',
+                        [],
+                        409
+                    );
+                }
+
+                $step($label, fn () => $this->api->call($user, $method, $params, $body, $reservation, $operation));
+            }
+        } finally {
+            $this->budget->release($reservation);
+        }
+
+        return ['playlist_id' => $id, 'changed' => count($planned), 'links' => $id ? $this->links($id) : []];
+    }
+
+    private function planChanges(
+        string $user,
+        array $connection,
+        string $tool,
+        array $arguments,
+        array $done
+    ): array {
         $id = $arguments['playlist_id'] ?? null;
         $metadata = null;
-        $entries = [];
         $planned = [];
         if ($id) {
             $metadata = $this->metadata($user, $id);
@@ -266,7 +324,7 @@ final class Service
         } elseif ($tool === 'delete_playlist') {
             $planned[] = ['delete', 'playlists.delete', ['id' => $id], null];
         } elseif ($tool === 'add_tracks') {
-            $videos = array_map(fn($v) => $this->video($v), $arguments['video_ids']);
+            $videos = array_map(fn ($v) => $this->video($v), $arguments['video_ids']);
             $policy = $arguments['duplicate_policy'] ?? 'skip';
             $present = $policy === 'skip' ? array_column(
                 array_column($this->entries($user, $id), 'snippet'),
@@ -297,14 +355,18 @@ final class Service
         } elseif ($tool === 'remove_tracks' || $tool === 'move_track') {
             $targets = $tool === 'remove_tracks' ? $arguments['playlist_item_ids'] : [$arguments['playlist_item_id']];
             $pending = array_values(
-                array_filter($targets, fn($t) => !isset($done[($tool === 'remove_tracks' ? 'remove:' : 'move:') . $t]))
+                array_filter($targets, fn ($t) => !isset($done[($tool === 'remove_tracks' ? 'remove:' : 'move:') . $t]))
             );
-            $entries = $pending ? $this->api->call($user, 'playlistItems.list', [
-                'part' => 'snippet',
-                'id' => implode(',', $pending),
-                'maxResults' => 50,
-                'fields' => 'items(id,snippet(playlistId,position,resourceId))'
-            ])['items'] ?? [] : [];
+            $entries = $pending ? $this->api->call(
+                $user,
+                'playlistItems.list',
+                [
+                    'part' => 'snippet',
+                    'id' => implode(',', $pending),
+                    'maxResults' => 50,
+                    'fields' => 'items(id,snippet(playlistId,position,resourceId))'
+                ]
+            )['items'] ?? [] : [];
             $byId = array_column($entries, null, 'id');
             foreach ($targets as $target) {
                 $label = ($tool === 'remove_tracks' ? 'remove:' : 'move:') . $target;
@@ -355,32 +417,8 @@ final class Service
             }
         }
 
-        $planned = array_values(array_filter($planned, fn($p) => !array_key_exists($p[0], $done)));
-        if (!$planned) {
-            return ['playlist_id' => $id, 'changed' => 0, 'links' => $id ? $this->links($id) : []];
-        }
-
-        $cost = array_sum(array_map(fn($p) => $this->budget->method($p[1])[1], $planned));
-        $reservation = $this->budget->reserve($user, $cost);
-        $deadline = microtime(true) + 45;
-        try {
-            foreach ($planned as [$label, $method, $params, $body]) {
-                if (microtime(true) > $deadline) {
-                    throw new ServiceError(
-                        'OPERATION_TIME_LIMIT',
-                        'Batch time limit reached. Inspect this receipt and explicitly resume pending work.',
-                        [],
-                        409
-                    );
-                }
-
-                $response = $step($label, fn() => $this->api->call($user, $method, $params, $body, $reservation, $operation));
-            }
-        } finally {
-            $this->budget->release($reservation);
-        }
-
-        return ['playlist_id' => $id, 'changed' => count($planned), 'links' => $id ? $this->links($id) : []];
+        $planned = array_values(array_filter($planned, fn ($p) => !array_key_exists($p[0], $done)));
+        return [$id, $planned];
     }
 
     private function mutatePreference(
@@ -410,14 +448,23 @@ final class Service
                 throw new ServiceError('INVALID_CHANNEL', 'Supply a YouTube channel ID beginning with UC.');
             }
             // Resolve only subscriptions owned by the authenticated channel. Never accept an arbitrary subscription ID.
-            $response = $this->api->call($user, 'subscriptions.list', [
-                'part' => 'snippet',
-                'mine' => 'true',
-                'forChannelId' => $target,
-                'maxResults' => 50
-            ]);
+            $response = $this->api->call(
+                $user,
+                'subscriptions.list',
+                [
+                    'part' => 'snippet',
+                    'mine' => 'true',
+                    'forChannelId' => $target,
+                    'maxResults' => 50
+                ]
+            );
             $subscription = $response['items'][0]['id'] ?? null;
-            if (($tool === 'subscribe_artist' && $subscription !== null) || ($tool === 'unsubscribe_artist' && $subscription === null)) {
+            if (
+                ($tool === 'subscribe_artist'
+                    && $subscription !== null)
+                || ($tool === 'unsubscribe_artist'
+                    && $subscription === null)
+            ) {
                 return ['channel_id' => $target, 'changed' => 0];
             }
 
@@ -428,7 +475,7 @@ final class Service
             }
         }
 
-        $step('change', fn() => $this->api->call($user, $method, $params, $body, operation: $operation));
+        $step('change', fn () => $this->api->call($user, $method, $params, $body, operation: $operation));
 
         return ['target_id' => $target, 'changed' => 1];
     }
@@ -447,11 +494,14 @@ final class Service
         $host = strtolower($p['host'] ?? '');
         if ($host === 'youtu.be') {
             $id = trim($p['path'] ?? '', '/');
-        } elseif (in_array(
+        } elseif (
+            in_array(
                 $host,
                 ['youtube.com', 'www.youtube.com', 'music.youtube.com'],
                 true
-            ) && ($p['path'] ?? '') === '/watch') {
+            )
+            && ($p['path'] ?? '') === '/watch'
+        ) {
             parse_str($p['query'] ?? '', $q);
             $id = $q['v'] ?? '';
         } else {
@@ -464,24 +514,39 @@ final class Service
         return $id;
     }
 
-    private function create(string $user, array $connection, array $arguments, callable $step, string $operation, array $done): array
-    {
+    private function create(
+        string $user,
+        array $connection,
+        array $arguments,
+        callable $step,
+        string $operation,
+        array $done
+    ): array {
         $inputs = $arguments['video_ids'] ?? [];
         if (!is_array($inputs) || count($inputs) > 20) {
             throw new ServiceError('INVALID_ARGUMENT', 'Create accepts at most 20 initial tracks.');
         }
         // Validate every ID before creating anything. Preserve occurrence indexes for receipt replay.
-        $videos = array_map(fn($v) => $this->video($v), $inputs);
+        $videos = array_map(fn ($v) => $this->video($v), $inputs);
         $policy = $arguments['duplicate_policy'] ?? 'skip';
         if (!in_array($policy, ['skip', 'allow'], true)) {
             throw new ServiceError('INVALID_ARGUMENT', 'Unsupported duplicate policy.');
         }
 
         $deadline = microtime(true) + 45;
-        $created = $step('create', fn() => $this->api->call($user, 'playlists.insert', ['part' => 'snippet,status'], [
-            'snippet' => ['title' => $arguments['title'], 'description' => $arguments['description'] ?? ''],
-            'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private']
-        ], operation: $operation));
+        $created = $step(
+            'create',
+            fn () => $this->api->call(
+                $user,
+                'playlists.insert',
+                ['part' => 'snippet,status'],
+                [
+                    'snippet' => ['title' => $arguments['title'], 'description' => $arguments['description'] ?? ''],
+                    'status' => ['privacyStatus' => $arguments['privacy'] ?? 'private']
+                ],
+                operation: $operation
+            )
+        );
         $id = $created['id'] ?? null;
         if (!is_string($id) || $id === '') {
             throw new ServiceError(
@@ -520,9 +585,18 @@ final class Service
                 );
             }
 
-            $step('add:' . $n, fn() => $this->api->call($user, 'playlistItems.insert', ['part' => 'snippet'], [
-                'snippet' => ['playlistId' => $id, 'resourceId' => ['kind' => 'youtube#video', 'videoId' => $video]]
-            ], operation: $operation));
+            $step(
+                'add:' . $n,
+                fn () => $this->api->call(
+                    $user,
+                    'playlistItems.insert',
+                    ['part' => 'snippet'],
+                    [
+                        'snippet' => ['playlistId' => $id, 'resourceId' => ['kind' => 'youtube#video', 'videoId' => $video]]
+                    ],
+                    operation: $operation
+                )
+            );
             $added++;
         }
 
@@ -538,8 +612,8 @@ final class Service
     {
         $params = ['part' => 'snippet,status,contentDetails', 'id' => $id];
         $response = $fresh
-            ? $this->api->call($user, 'playlists.list', $params)
-            : $this->api->read($user, 'playlists.list', $params);
+        ? $this->api->call($user, 'playlists.list', $params)
+        : $this->api->read($user, 'playlists.list', $params);
 
         return $response['items'][0] ?? throw new ServiceError(
             'PLAYLIST_NOT_FOUND',

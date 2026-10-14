@@ -133,3 +133,38 @@ test('completed comment writes replay locally and uncertain writes never automat
 
     $this->assertCount(2, $api->calls);
 });
+
+test('moderation verifies every selected comments video before dispatch', function (bool $foreignVideo): void {
+    $channel = 'UC' . str_repeat('a', 22);
+    [$service, $api] = $this->extended([
+        ['items' => [
+            ['id' => 'first', 'snippet' => ['videoId' => 'aaaaaaaaaaa']],
+            ['id' => 'second', 'snippet' => ['videoId' => 'bbbbbbbbbbb']],
+        ]],
+        ['items' => [
+            ['id' => 'aaaaaaaaaaa', 'snippet' => ['channelId' => $channel]],
+            ['id' => 'bbbbbbbbbbb', 'snippet' => ['channelId' => $foreignVideo ? 'foreign' : $channel]],
+        ]],
+        [],
+    ]);
+
+    $receipt = $service->execute('u1', ['comments.moderate'], 'moderate_comments', [
+        'comment_ids' => ['first', 'second'],
+        'status' => 'heldForReview',
+        'operation_key' => 'moderate-multiple-videos',
+    ]);
+
+    $this->assertSame('aaaaaaaaaaa,bbbbbbbbbbb', $api->calls[1][2]['id']);
+    if ($foreignVideo) {
+        $this->assertSame('partial', $receipt['status']);
+        $this->assertSame('NOT_VIDEO_OWNER', $receipt['error']['code']);
+        $this->assertSame(['comments.list', 'videos.list'], array_column($api->calls, 1));
+        $this->assertSame([], $receipt['completed']);
+
+        return;
+    }
+
+    $this->assertSame('completed', $receipt['status']);
+    $this->assertSame(['comments.list', 'videos.list', 'comments.setModerationStatus'], array_column($api->calls, 1));
+    $this->assertSame(['id' => 'first,second', 'moderationStatus' => 'heldForReview'], $api->calls[2][2]);
+})->with(['all owned' => false, 'second video foreign' => true]);

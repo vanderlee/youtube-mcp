@@ -13,16 +13,8 @@ class Client
 
     public function request(string $method, string $url, array $headers = [], ?string $body = null): array
     {
-        $origin = parse_url($url, PHP_URL_SCHEME) . '://' . parse_url($url, PHP_URL_HOST) . ':' . (parse_url($url, PHP_URL_PORT) ?? 443);
-        // Partition connections by origin and headers, including the authorization identity.
-        $key = hash('sha256', $origin . '|' . json_encode($headers, JSON_THROW_ON_ERROR));
-        if (!isset($this->handles[$key])) {
-            if (count($this->handles) >= 8) {
-                unset($this->handles[array_key_first($this->handles)]);
-            }
-            $this->handles[$key] = curl_init();
-        }
-        $curl = $this->handles[$key];
+        $curl = $this->connection($url, $headers);
+
         // Reset body/method/header options while retaining libcurl's connection and DNS caches.
         curl_reset($curl);
         curl_setopt_array(
@@ -43,7 +35,7 @@ class Client
         }
 
         $raw = curl_exec($curl);
-        $status = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+        $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
         $curlError = curl_errno($curl);
         if ($raw === false || $curlError) {
             throw new ServiceError(
@@ -60,5 +52,20 @@ class Client
         }
 
         return ['status' => $status, 'data' => $data];
+    }
+
+    private function connection(string $url, array $headers): \CurlHandle
+    {
+        $origin = parse_url($url, PHP_URL_SCHEME) . '://' . parse_url($url, PHP_URL_HOST) . ':' . (parse_url($url, PHP_URL_PORT) ?? 443);
+        // Partition connections by origin and headers, including the authorization identity.
+        $key = hash('sha256', $origin . '|' . json_encode($headers, JSON_THROW_ON_ERROR));
+        if (!isset($this->handles[$key])) {
+            if (count($this->handles) >= 8) {
+                unset($this->handles[array_key_first($this->handles)]);
+            }
+            $this->handles[$key] = curl_init();
+        }
+
+        return $this->handles[$key];
     }
 }

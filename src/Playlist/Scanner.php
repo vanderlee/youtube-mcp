@@ -45,17 +45,26 @@ final class Scanner
                 throw new ServiceError('PLAYLIST_SCAN_LIMIT', 'Full scan exceeded its 45-second time bound.', [], 409);
             }
 
-            $response = $this->api->call($user, 'playlistItems.list', ['part' => 'snippet,contentDetails,status', 'playlistId' => $playlist, 'maxResults' => 50]
-                + ($page === null ? [] : ['pageToken' => $page]));
+            $response = $this->api->call(
+                $user,
+                'playlistItems.list',
+                ['part' => 'snippet,contentDetails,status', 'playlistId' => $playlist, 'maxResults' => 50]
+                    + ($page === null ? [] : ['pageToken' => $page])
+            );
             foreach ($response['items'] ?? [] as $entry) {
                 if (!is_string($entry['id'] ?? null) || isset($seen[$entry['id']])) {
                     throw new ServiceError('PLAYLIST_CHANGED', 'Playlist changed during scanning. Start a new operation.', [], 409);
                 }
 
                 $seen[$entry['id']] = true;
-                $entries[] = ['id' => $entry['id'], 'video_id' => $entry['contentDetails']['videoId'] ?? $entry['snippet']['resourceId']['videoId'] ?? null,
-                    'title' => $entry['snippet']['title'] ?? '', 'added_at' => $entry['snippet']['publishedAt'] ?? null,
-                    'position' => $entry['snippet']['position'] ?? count($entries), 'privacy' => $entry['status']['privacyStatus'] ?? null];
+                $entries[] = [
+                    'id' => $entry['id'],
+                    'video_id' => $entry['contentDetails']['videoId'] ?? $entry['snippet']['resourceId']['videoId'] ?? null,
+                    'title' => $entry['snippet']['title'] ?? '',
+                    'added_at' => $entry['snippet']['publishedAt'] ?? null,
+                    'position' => $entry['snippet']['position'] ?? count($entries),
+                    'privacy' => $entry['status']['privacyStatus'] ?? null
+                ];
             }
             if (count($entries) > 1000) {
                 break;
@@ -66,6 +75,11 @@ final class Scanner
                 return $entries;
             }
         }
-        throw new ServiceError('PLAYLIST_SCAN_LIMIT', 'A complete scan is limited to 1000 entries per playlist; no new write was dispatched.', [], 409);
+        throw new ServiceError(
+            'PLAYLIST_SCAN_LIMIT',
+            'A complete scan is limited to 1000 entries per playlist; no new write was dispatched.',
+            [],
+            409
+        );
     }
 }

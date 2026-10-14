@@ -262,3 +262,51 @@ test('owned media purge removes only that users files and malformed captions are
 
     $this->assertSame(1, (int)$db->one('SELECT COUNT(*) AS n FROM media_assets')['n']);
 });
+
+test('section types enforce their reference and title constraints before writing', function (array $section, bool $valid): void {
+    [$service, , $api, , $db] = $this->creators([['id' => 'created-section']]);
+    $db->execute('UPDATE google_connections SET channel_id=? WHERE user_id=?', ['UC' . str_repeat('a', 22), 'u1']);
+
+    $receipt = $service->execute('u1', ['channels.write'], 'create_channel_section', $section + [
+        'operation_key' => 'section-constraint-test',
+    ]);
+
+    if (!$valid) {
+        $this->assertSame('partial', $receipt['status']);
+        $this->assertSame('INVALID_ARGUMENT', $receipt['error']['code']);
+        $this->assertSame([], $api->calls);
+
+        return;
+    }
+
+    $this->assertSame('completed', $receipt['status']);
+    $this->assertSame('created-section', $receipt['result']['section_id']);
+    $this->assertCount(1, $api->calls);
+    $this->assertSame('channelSections.insert', $api->calls[0][0]);
+    $this->assertSame($section['type'], $api->calls[0][2]['snippet']['type']);
+})->with([
+    'single playlist' => [
+        ['type' => 'singlePlaylist', 'playlist_ids' => ['PLsource00000']],
+        true,
+    ],
+    'single playlist with two references' => [
+        ['type' => 'singlePlaylist', 'playlist_ids' => ['PLsource00000', 'PLsource00001']],
+        false,
+    ],
+    'multiple playlists' => [
+        ['type' => 'multiplePlaylists', 'playlist_ids' => ['PLsource00000'], 'title' => 'Playlists'],
+        true,
+    ],
+    'multiple playlists without title' => [
+        ['type' => 'multiplePlaylists', 'playlist_ids' => ['PLsource00000']],
+        false,
+    ],
+    'multiple channels' => [
+        ['type' => 'multipleChannels', 'channel_ids' => ['UC' . str_repeat('b', 22)], 'title' => 'Channels'],
+        true,
+    ],
+    'multiple channels including self' => [
+        ['type' => 'multipleChannels', 'channel_ids' => ['UC' . str_repeat('a', 22)], 'title' => 'Channels'],
+        false,
+    ],
+]);
