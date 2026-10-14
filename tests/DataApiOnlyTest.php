@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Tests;
+namespace YouTubeMcp\Tests;
 
-use YouTubeMusicMcp\Auth\{OAuthRepository, Scope};
-use YouTubeMusicMcp\Mcp\Tools;
-use YouTubeMusicMcp\Storage\Database;
+use YouTubeMcp\Auth\{OAuthRepository, Scope};
+use YouTubeMcp\Mcp\Tools;
+use YouTubeMcp\Storage\Database;
 
 test('expanded catalog retains official tools and never restores retired music permissions', function (): void {
     $expected = ['list_liked_tracks', 'get_track_ratings', 'rate_track', 'list_subscriptions',
@@ -20,7 +20,7 @@ test('expanded catalog retains official tools and never restores retired music p
     $this->assertCount(57, $actual);
     $this->assertCount(count($actual), array_unique($actual));
     foreach (Tools::definitions() as $tool) {
-        $this->assertContains(\YouTubeMusicMcp\Playlist\Service::scope($tool->name), Scope::SUPPORTED);
+        $this->assertContains(\YouTubeMcp\Playlist\Service::scope($tool->name), Scope::SUPPORTED);
     }
     $repo = new OAuthRepository($this->database(), 'https://music.example.test');
     foreach (['catalog.read', 'discovery.read', 'library.read', 'library.write', 'history.read', 'history.write'] as $scope) {

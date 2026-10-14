@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Tests;
+namespace YouTubeMcp\Tests;
 
-use YouTubeMusicMcp\Auth\{Google, Vault};
-use YouTubeMusicMcp\Http\Client;
-use YouTubeMusicMcp\Operations\Receipts;
-use YouTubeMusicMcp\Playlist\Service;
-use YouTubeMusicMcp\Quota\Budget;
-use YouTubeMusicMcp\ServiceError;
-use YouTubeMusicMcp\Storage\Lock;
-use YouTubeMusicMcp\YouTube\Api;
+use YouTubeMcp\Auth\{Google, Vault};
+use YouTubeMcp\Http\Client;
+use YouTubeMcp\Operations\Receipts;
+use YouTubeMcp\Playlist\Service;
+use YouTubeMcp\Quota\Budget;
+use YouTubeMcp\ServiceError;
+use YouTubeMcp\Storage\Lock;
+use YouTubeMcp\YouTube\Api;
 
 trait PlaylistTestHelpers
 {

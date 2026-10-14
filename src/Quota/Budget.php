@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Quota;
+namespace YouTubeMcp\Quota;
 
 use Closure;
 use DateTimeImmutable;
 use DateTimeZone;
 use LogicException;
-use YouTubeMusicMcp\Config;
-use YouTubeMusicMcp\Storage\Database;
+use YouTubeMcp\Config;
+use YouTubeMcp\Storage\Database;
 
 /** Local usage estimates only. YouTube enforces all quotas and rate limits. */
 final class Budget

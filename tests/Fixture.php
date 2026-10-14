@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Tests;
+namespace YouTubeMcp\Tests;
 
-use YouTubeMusicMcp\Config;
-use YouTubeMusicMcp\Storage\Database;
+use YouTubeMcp\Config;
+use YouTubeMcp\Storage\Database;
 
 trait Fixture
 {

@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Tests;
+namespace YouTubeMcp\Tests;
 
 use Nyholm\Psr7\{Stream, UploadedFile};
-use YouTubeMusicMcp\Auth\{Google, Vault};
-use YouTubeMusicMcp\Http\{Client, MediaClient};
-use YouTubeMusicMcp\Operations\Receipts;
-use YouTubeMusicMcp\Quota\Budget;
-use YouTubeMusicMcp\ServiceError;
-use YouTubeMusicMcp\Storage\Lock;
-use YouTubeMusicMcp\YouTube\{Api, CreatorService, MediaApi, MediaStore};
+use YouTubeMcp\Auth\{Google, Vault};
+use YouTubeMcp\Http\{Client, MediaClient};
+use YouTubeMcp\Operations\Receipts;
+use YouTubeMcp\Quota\Budget;
+use YouTubeMcp\ServiceError;
+use YouTubeMcp\Storage\Lock;
+use YouTubeMcp\YouTube\{Api, CreatorService, MediaApi, MediaStore};
 
 trait CreatorFixtures
 {

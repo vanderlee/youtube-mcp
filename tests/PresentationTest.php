@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Tests;
+namespace YouTubeMcp\Tests;
 
-use YouTubeMusicMcp\Mcp\Presentation;
+use YouTubeMcp\Mcp\Presentation;
 
 test('compact listing retains ids and pagination with much smaller payload', function (): void {
     $raw = [

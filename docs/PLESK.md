@@ -80,7 +80,7 @@ Run as the same subscription account with storage access. This cleans expired ca
 
 ### Bootstrap failure after a namespace or release change
 
-If `/mcp` and all OAuth metadata endpoints return 503 with a bootstrap `Error` at the entry point's application-construction line, first check application autoloading. The project namespace is `YouTubeMusicMcp`; an older generated Composer map may still reference the previous namespace. Missing or mixed-release source files can cause the same symptom. This failure precedes OAuth, so changing callback allowlists or renewing Google consent will not repair it.
+If `/mcp` and all OAuth metadata endpoints return 503 with a bootstrap `Error` at the entry point's application-construction line, first check application autoloading. The project namespace is `YouTubeMcp`; an older generated Composer map may still reference the previous namespace. Missing or mixed-release source files can cause the same symptom. This failure precedes OAuth, so changing callback allowlists or renewing Google consent will not repair it.
 
 From the deployed project root, as the subscription user, select the installed domain PHP version and run:
 

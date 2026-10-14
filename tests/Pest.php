@@ -2,6 +2,6 @@
 
 declare(strict_types=1);
 
-use YouTubeMusicMcp\Tests\Fixture;
+use YouTubeMcp\Tests\Fixture;
 
 uses(Fixture::class)->in('.');

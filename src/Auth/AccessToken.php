@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Auth;
+namespace YouTubeMcp\Auth;
 
 use Firebase\JWT\JWT;
 use League\OAuth2\Server\CryptKeyInterface;

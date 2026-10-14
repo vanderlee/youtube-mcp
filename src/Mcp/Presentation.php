@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Mcp;
+namespace YouTubeMcp\Mcp;
 
 /** Shape model-facing results without changing persisted receipts or upstream data. */
 final class Presentation

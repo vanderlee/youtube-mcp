@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Http;
+namespace YouTubeMcp\Http;
 
-use YouTubeMusicMcp\ServiceError;
+use YouTubeMcp\ServiceError;
 
 class Client
 {

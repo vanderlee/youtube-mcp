@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Auth;
+namespace YouTubeMcp\Auth;
 
 use League\OAuth2\Server\Entities\ClientEntityInterface;
 use League\OAuth2\Server\Entities\Traits\EntityTrait;

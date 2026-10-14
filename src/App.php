@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp;
+namespace YouTubeMcp;
 
 use JsonException;
 use League\OAuth2\Server\Exception\OAuthServerException;
@@ -16,14 +16,14 @@ use Psr\Http\Message\{ResponseInterface, ServerRequestInterface};
 use Symfony\Component\Cache\Adapter\FilesystemAdapter;
 use Symfony\Component\Cache\Psr16Cache;
 use Throwable;
-use YouTubeMusicMcp\Auth\{Google, OAuth, User, Vault};
-use YouTubeMusicMcp\Http\Client;
-use YouTubeMusicMcp\Mcp\Tools;
-use YouTubeMusicMcp\Operations\Receipts;
-use YouTubeMusicMcp\Playlist\Service;
-use YouTubeMusicMcp\Quota\Budget;
-use YouTubeMusicMcp\Storage\{Database, Lock};
-use YouTubeMusicMcp\YouTube\Api;
+use YouTubeMcp\Auth\{Google, OAuth, User, Vault};
+use YouTubeMcp\Http\Client;
+use YouTubeMcp\Mcp\Tools;
+use YouTubeMcp\Operations\Receipts;
+use YouTubeMcp\Playlist\Service;
+use YouTubeMcp\Quota\Budget;
+use YouTubeMcp\Storage\{Database, Lock};
+use YouTubeMcp\YouTube\Api;
 
 final class App
 {
@@ -33,7 +33,7 @@ final class App
     private Budget $budget;
     private Api $api;
     private Service $playlists;
-    private \YouTubeMusicMcp\YouTube\MediaStore $mediaAssets;
+    private \YouTubeMcp\YouTube\MediaStore $mediaAssets;
     private Lock $locks;
 
     public function __construct(private Config $config)
@@ -47,9 +47,9 @@ final class App
         $this->google = new Google($config, $this->db, new Vault($config->get('APP_KEY')), $http, $locks);
         $this->api = new Api($http, $this->budget, $this->db, $this->google);
         $this->oauth = new OAuth($this->db, $config);
-        $this->mediaAssets = new \YouTubeMusicMcp\YouTube\MediaStore($this->db, $config);
-        $mediaApi = new \YouTubeMusicMcp\YouTube\MediaApi($this->google, $this->budget, new Vault($config->get('APP_KEY')), new \YouTubeMusicMcp\Http\MediaClient());
-        $creator = new \YouTubeMusicMcp\YouTube\CreatorService($this->google, $this->api, new Receipts($this->db, $locks), $locks, $this->mediaAssets, $mediaApi);
+        $this->mediaAssets = new \YouTubeMcp\YouTube\MediaStore($this->db, $config);
+        $mediaApi = new \YouTubeMcp\YouTube\MediaApi($this->google, $this->budget, new Vault($config->get('APP_KEY')), new \YouTubeMcp\Http\MediaClient());
+        $creator = new \YouTubeMcp\YouTube\CreatorService($this->google, $this->api, new Receipts($this->db, $locks), $locks, $this->mediaAssets, $mediaApi);
         $this->playlists = new Service($this->google, $this->api, $this->budget, new Receipts($this->db, $locks), $locks, $creator);
     }
 
@@ -76,7 +76,7 @@ final class App
                 throw new ServiceError('INVALID_ORIGIN', 'Unexpected origin.', [], 403);
             }
             $mediaUpload = $request->getUri()->getPath() === '/media' && $request->getMethod() === 'POST';
-            $maxBytes = $mediaUpload ? \YouTubeMusicMcp\YouTube\MediaStore::MAX_BYTES + 65536 : 65536;
+            $maxBytes = $mediaUpload ? \YouTubeMcp\YouTube\MediaStore::MAX_BYTES + 65536 : 65536;
             if ((int)$request->getHeaderLine('Content-Length') > $maxBytes || $request->getBody()->getSize() > $maxBytes) {
                 throw new ServiceError('REQUEST_TOO_LARGE', $mediaUpload ? 'Media request exceeds 64 MiB plus form overhead.' : 'Request exceeds 64 KiB.', [], 413);
             }
@@ -166,7 +166,7 @@ final class App
                 [
                     'resource' => $this->config->url() . '/mcp',
                     'authorization_servers' => [$this->config->url()],
-                    'scopes_supported' => \YouTubeMusicMcp\Auth\Scope::SUPPORTED,
+                    'scopes_supported' => \YouTubeMcp\Auth\Scope::SUPPORTED,
                     'bearer_methods_supported' => ['header']
                 ]
             );

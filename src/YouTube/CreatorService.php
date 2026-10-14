@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\YouTube;
+namespace YouTubeMcp\YouTube;
 
-use YouTubeMusicMcp\Auth\Google;
-use YouTubeMusicMcp\Mcp\Arguments;
-use YouTubeMusicMcp\Operations\Receipts;
-use YouTubeMusicMcp\ServiceError;
-use YouTubeMusicMcp\Storage\Lock;
+use YouTubeMcp\Auth\Google;
+use YouTubeMcp\Mcp\Arguments;
+use YouTubeMcp\Operations\Receipts;
+use YouTubeMcp\ServiceError;
+use YouTubeMcp\Storage\Lock;
 
 final class CreatorService
 {

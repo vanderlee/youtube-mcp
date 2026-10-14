@@ -105,7 +105,7 @@ try {
                 'Existing .env has no APP_KEY. Restore the original key, or generate one manually only if no state exists.'
             );
         }
-        $config = new \YouTubeMusicMcp\Config($values, $root);
+        $config = new \YouTubeMcp\Config($values, $root);
         $config->validate();
         $outsidePublic($config->storage());
         foreach (['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'] as $name) {
@@ -177,7 +177,7 @@ try {
         echo "Private configuration prepared; encryption key preserved/generated without printing it.\n";
         exit;
     }
-    $config = new \YouTubeMusicMcp\Config($values, $root);
+    $config = new \YouTubeMcp\Config($values, $root);
     $config->validate();
     $outsidePublic($config->storage());
     if ($command === 'storage') {
@@ -185,7 +185,7 @@ try {
         exit;
     }
     if ($command === 'verify') {
-        $db = new \YouTubeMusicMcp\Storage\Database($config->storage() . '/service.sqlite');
+        $db = new \YouTubeMcp\Storage\Database($config->storage() . '/service.sqlite');
         $db->one('SELECT name FROM migrations LIMIT 1');
         $private = $config->storage() . '/oauth-private.pem';
         $public = $config->storage() . '/oauth-public.pem';
@@ -211,8 +211,8 @@ try {
                 'Static creation requires exactly one callback; otherwise use client:create manually.'
             );
         }
-        $db = new \YouTubeMusicMcp\Storage\Database($config->storage() . '/service.sqlite');
-        $credentials = (new \YouTubeMusicMcp\Auth\OAuth($db, $config))->register(
+        $db = new \YouTubeMcp\Storage\Database($config->storage() . '/service.sqlite');
+        $credentials = (new \YouTubeMcp\Auth\OAuth($db, $config))->register(
             ['redirect_uris' => $uris, 'client_name' => 'ChatGPT', 'token_endpoint_auth_method' => 'client_secret_post']
         );
         file_put_contents($file, json_encode($credentials, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));

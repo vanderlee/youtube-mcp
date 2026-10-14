@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Tests;
+namespace YouTubeMcp\Tests;
 
 use Nyholm\Psr7\ServerRequest;
-use YouTubeMusicMcp\{App};
-use YouTubeMusicMcp\Auth\{Client, OAuthRepository, Scope};
-use YouTubeMusicMcp\Storage\Database;
+use YouTubeMcp\{App};
+use YouTubeMcp\Auth\{Client, OAuthRepository, Scope};
+use YouTubeMcp\Storage\Database;
 
 trait McpTestHelpers
 {
@@ -119,7 +119,7 @@ test('browser media staging requires csrf and stores user bound assets without e
 });
 
 test('preference tools advertise separate scopes', function (): void {
-    $tools = array_column(\YouTubeMusicMcp\Mcp\Tools::definitions(), null, 'name');
+    $tools = array_column(\YouTubeMcp\Mcp\Tools::definitions(), null, 'name');
     foreach (
         [
             'list_liked_tracks' => 'likes.read',
@@ -130,7 +130,7 @@ test('preference tools advertise separate scopes', function (): void {
             'unsubscribe_artist' => 'subscriptions.write'
         ] as $name => $scope
     ) {
-        $this->assertSame($scope, \YouTubeMusicMcp\Playlist\Service::scope($name));
+        $this->assertSame($scope, \YouTubeMcp\Playlist\Service::scope($name));
         $this->assertArrayHasKey($name, $tools);
         $this->assertStringContainsString($scope, json_encode($tools[$name]));
     }
@@ -142,7 +142,7 @@ test('preference tools advertise separate scopes', function (): void {
 });
 
 test('efficiency options are advertised without changing write permissions', function (): void {
-    $tools = array_column(\YouTubeMusicMcp\Mcp\Tools::definitions(), null, 'name');
+    $tools = array_column(\YouTubeMcp\Mcp\Tools::definitions(), null, 'name');
     $this->assertArrayHasKey('video_ids', $tools['create_playlist']->inputSchema['properties']);
     $this->assertArrayHasKey('include_details', $tools['search_tracks']->inputSchema['properties']);
     $this->assertArrayHasKey('response_detail', $tools['get_operation']->inputSchema['properties']);

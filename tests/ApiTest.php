@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Tests;
+namespace YouTubeMcp\Tests;
 
-use YouTubeMusicMcp\Http\Client;
-use YouTubeMusicMcp\Quota\Budget;
-use YouTubeMusicMcp\ServiceError;
-use YouTubeMusicMcp\YouTube\Api;
+use YouTubeMcp\Http\Client;
+use YouTubeMcp\Quota\Budget;
+use YouTubeMcp\ServiceError;
+use YouTubeMcp\YouTube\Api;
 
 test('rating routes and empty write response', function (): void {
     $db = $this->database();

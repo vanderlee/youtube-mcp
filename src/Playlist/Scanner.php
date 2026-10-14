@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Playlist;
+namespace YouTubeMcp\Playlist;
 
-use YouTubeMusicMcp\YouTube\Api;
-use YouTubeMusicMcp\ServiceError;
+use YouTubeMcp\YouTube\Api;
+use YouTubeMcp\ServiceError;
 
 final class Scanner
 {

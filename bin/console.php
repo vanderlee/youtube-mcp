@@ -3,30 +3,30 @@
 declare(strict_types=1);
 require dirname(__DIR__) . '/vendor/autoload.php';
 
-use YouTubeMusicMcp\Config;
-use YouTubeMusicMcp\Storage\Database;
+use YouTubeMcp\Config;
+use YouTubeMcp\Storage\Database;
 
 $root = dirname(__DIR__);
 $command = $argv[1] ?? 'help';
 try {
     if ($command === 'bootstrap:check') {
-        foreach ([\YouTubeMusicMcp\Config::class, \YouTubeMusicMcp\App::class, \YouTubeMusicMcp\Mcp\Tools::class, \YouTubeMusicMcp\Mcp\Presentation::class] as $class) {
+        foreach ([\YouTubeMcp\Config::class, \YouTubeMcp\App::class, \YouTubeMcp\Mcp\Tools::class, \YouTubeMcp\Mcp\Presentation::class] as $class) {
             if (!class_exists($class)) {
                 throw new RuntimeException('Cannot autoload ' . $class . '. Check source files and regenerate Composer autoloading from the current composer.json.');
             }
             echo 'Autoload OK: ' . $class . PHP_EOL;
         }
-        if (!method_exists(\YouTubeMusicMcp\Config::class, 'load')) {
+        if (!method_exists(\YouTubeMcp\Config::class, 'load')) {
             throw new RuntimeException('Config::load is missing. Application files are from different releases.');
         }
         echo "Application class checks passed; configuration, storage and PHP-FPM are not verified.\n";
         exit(0);
     }
     if ($command === 'mcp:check') {
-        if (!class_exists(\YouTubeMusicMcp\Mcp\Presentation::class)) {
+        if (!class_exists(\YouTubeMcp\Mcp\Presentation::class)) {
             throw new RuntimeException('MCP presentation class missing. Deploy the complete release and verify Composer autoloading.');
         }
-        $tools = \YouTubeMusicMcp\Mcp\Tools::definitions();
+        $tools = \YouTubeMcp\Mcp\Tools::definitions();
         $names = [];
         $validator = new \Opis\JsonSchema\Validator();
         foreach ($tools as $tool) {
@@ -78,8 +78,8 @@ try {
     }
     if ($command === 'cleanup') {
         $db = new Database($config->storage() . '/service.sqlite');
-        (new \YouTubeMusicMcp\Quota\Budget($db, $config))->cleanup();
-        (new \YouTubeMusicMcp\YouTube\MediaStore($db, $config))->cleanup(new \YouTubeMusicMcp\Storage\Lock($config->storage() . '/locks'));
+        (new \YouTubeMcp\Quota\Budget($db, $config))->cleanup();
+        (new \YouTubeMcp\YouTube\MediaStore($db, $config))->cleanup(new \YouTubeMcp\Storage\Lock($config->storage() . '/locks'));
         $now = time();
         $cutoff = $now - 86400 * $config->int('OPERATION_RETENTION_DAYS', 7);
         $db->execute('DELETE FROM api_cache WHERE expires_at<=?', [$now]);
@@ -106,7 +106,7 @@ try {
             throw new RuntimeException('Add the exact callback URI to OAUTH_REDIRECT_URIS first.');
         }
         $db = new Database($config->storage() . '/service.sqlite');
-        $oauth = new \YouTubeMusicMcp\Auth\OAuth($db, $config);
+        $oauth = new \YouTubeMcp\Auth\OAuth($db, $config);
         echo json_encode(
                 $oauth->register(
                     [

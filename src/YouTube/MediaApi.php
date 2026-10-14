@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\YouTube;
+namespace YouTubeMcp\YouTube;
 
-use YouTubeMusicMcp\Auth\{Google, Vault};
-use YouTubeMusicMcp\Http\MediaClient;
-use YouTubeMusicMcp\Quota\Budget;
-use YouTubeMusicMcp\ServiceError;
+use YouTubeMcp\Auth\{Google, Vault};
+use YouTubeMcp\Http\MediaClient;
+use YouTubeMcp\Quota\Budget;
+use YouTubeMcp\ServiceError;
 
 final class MediaApi
 {

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Tests;
+namespace YouTubeMcp\Tests;
 
-use YouTubeMusicMcp\Auth\Vault;
+use YouTubeMcp\Auth\Vault;
 
 test('encryption and wrong key', function (): void {
     $v = new Vault(base64_encode(random_bytes(32)));

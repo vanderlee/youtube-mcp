@@ -16,7 +16,7 @@ Keep AI-facing repository instructions in `AGENTS.md`.
 ## Project architecture
 
 - This is a PHP 8.2+ multi-user MCP service hosted with PHP-FPM. Keep it compatible with the Composer constraints and the existing Plesk deployment; do not introduce a background worker or another runtime without an explicit requirement.
-- Use `YouTubeMusicMcp\` namespaces and PSR-4 autoloading under `src/`. Follow the surrounding PHP style and use `declare(strict_types=1);` in new PHP files.
+- Use `YouTubeMcp\` namespaces and PSR-4 autoloading under `src/`. Follow the surrounding PHP style and use `declare(strict_types=1);` in new PHP files.
 - `public/` is the web root. Keep application code, configuration, credentials, and storage outside it.
 - Keep HTTP routing and application wiring in `src/App.php`, OAuth and credential handling in `src/Auth/`, playlist behavior in `src/Playlist/`, and official YouTube API calls in `src/YouTube/`.
 - Keep unofficial YouTube Music transport, parsing, service behavior, and tool definitions in `src/Music/`. Do not assume official YouTube API results correspond exactly to the Music catalog or library.

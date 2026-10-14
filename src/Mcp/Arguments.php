@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Mcp;
+namespace YouTubeMcp\Mcp;
 
 use Opis\JsonSchema\Validator;
-use YouTubeMusicMcp\ServiceError;
+use YouTubeMcp\ServiceError;
 
 final class Arguments
 {

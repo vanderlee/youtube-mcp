@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Tests;
+namespace YouTubeMcp\Tests;
 
-use YouTubeMusicMcp\Storage\Database;
+use YouTubeMcp\Storage\Database;
 
 test('separate php workers are not locally quota limited', function (): void {
     $dir = $this->tempDir();

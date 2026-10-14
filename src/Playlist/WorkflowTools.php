@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Playlist;
+namespace YouTubeMcp\Playlist;
 
 final class WorkflowTools
 {

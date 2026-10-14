@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Playlist;
+namespace YouTubeMcp\Playlist;
 
-use YouTubeMusicMcp\Auth\Google;
-use YouTubeMusicMcp\Mcp\Arguments;
-use YouTubeMusicMcp\Operations\Receipts;
-use YouTubeMusicMcp\ServiceError;
-use YouTubeMusicMcp\Storage\Lock;
-use YouTubeMusicMcp\YouTube\Api;
+use YouTubeMcp\Auth\Google;
+use YouTubeMcp\Mcp\Arguments;
+use YouTubeMcp\Operations\Receipts;
+use YouTubeMcp\ServiceError;
+use YouTubeMcp\Storage\Lock;
+use YouTubeMcp\YouTube\Api;
 
 final class Workflows
 {

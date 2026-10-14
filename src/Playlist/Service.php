@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Playlist;
+namespace YouTubeMcp\Playlist;
 
-use YouTubeMusicMcp\Auth\Google;
-use YouTubeMusicMcp\Operations\Receipts;
-use YouTubeMusicMcp\Quota\Budget;
-use YouTubeMusicMcp\ServiceError;
-use YouTubeMusicMcp\Storage\Lock;
-use YouTubeMusicMcp\YouTube\Api;
+use YouTubeMcp\Auth\Google;
+use YouTubeMcp\Operations\Receipts;
+use YouTubeMcp\Quota\Budget;
+use YouTubeMcp\ServiceError;
+use YouTubeMcp\Storage\Lock;
+use YouTubeMcp\YouTube\Api;
 
 final class Service
 {
@@ -23,9 +23,9 @@ final class Service
         'remove_tracks',
         'move_track',
         'delete_playlist',
-        ...\YouTubeMusicMcp\YouTube\Tools::WRITES,
+        ...\YouTubeMcp\YouTube\Tools::WRITES,
         ...WorkflowTools::WRITES,
-        ...\YouTubeMusicMcp\YouTube\CreatorTools::WRITES,
+        ...\YouTubeMcp\YouTube\CreatorTools::WRITES,
     ];
 
     public function __construct(
@@ -34,18 +34,18 @@ final class Service
         private Budget $budget,
         private Receipts $receipts,
         private Lock $locks,
-        private ?\YouTubeMusicMcp\YouTube\CreatorService $creator = null
+        private ?\YouTubeMcp\YouTube\CreatorService $creator = null
     ) {
     }
 
     public function execute(string $user, array $scopes, string $tool, array $a): array
     {
-        if (isset(\YouTubeMusicMcp\YouTube\CreatorTools::specs()[$tool])) {
+        if (isset(\YouTubeMcp\YouTube\CreatorTools::specs()[$tool])) {
             if (!$this->creator) { throw new ServiceError('SETUP_REQUIRED', 'Creator service is unavailable.', [], 503); }
             return $this->creator->execute($user, $scopes, $tool, $a);
         }
-        if (isset(\YouTubeMusicMcp\YouTube\Tools::specs()[$tool])) {
-            return (new \YouTubeMusicMcp\YouTube\Service($this->google, $this->api, $this->receipts, $this->locks))->execute($user, $scopes, $tool, $a);
+        if (isset(\YouTubeMcp\YouTube\Tools::specs()[$tool])) {
+            return (new \YouTubeMcp\YouTube\Service($this->google, $this->api, $this->receipts, $this->locks))->execute($user, $scopes, $tool, $a);
         }
         if (isset(WorkflowTools::specs()[$tool])) {
             return (new Workflows($this->google, $this->api, $this->receipts, $this->locks))->execute($user, $scopes, $tool, $a);
@@ -135,10 +135,10 @@ final class Service
             ];
         }
         if ($tool === 'search_tracks') {
-            $filterArguments = array_intersect_key($a, \YouTubeMusicMcp\YouTube\Tools::searchFilters());
-            \YouTubeMusicMcp\Mcp\Arguments::validate($filterArguments, \YouTubeMusicMcp\YouTube\Tools::searchFilters(), []);
+            $filterArguments = array_intersect_key($a, \YouTubeMcp\YouTube\Tools::searchFilters());
+            \YouTubeMcp\Mcp\Arguments::validate($filterArguments, \YouTubeMcp\YouTube\Tools::searchFilters(), []);
             $query = ['part' => 'snippet', 'type' => 'video', 'q' => $a['query'], 'maxResults' => $a['limit'] ?? 10];
-            $query += \YouTubeMusicMcp\YouTube\Service::searchParameters($a);
+            $query += \YouTubeMcp\YouTube\Service::searchParameters($a);
             foreach (['region' => 'regionCode', 'page_token' => 'pageToken'] as $arg => $param) {
                 if (!empty($a[$arg])) {
                     $query[$param] = $a[$arg];
@@ -183,8 +183,8 @@ final class Service
 
     public static function scope(string $tool): string
     {
-        if (isset(\YouTubeMusicMcp\YouTube\CreatorTools::specs()[$tool])) { return \YouTubeMusicMcp\YouTube\CreatorTools::scope($tool); }
-        if (isset(\YouTubeMusicMcp\YouTube\Tools::specs()[$tool])) { return \YouTubeMusicMcp\YouTube\Tools::scope($tool); }
+        if (isset(\YouTubeMcp\YouTube\CreatorTools::specs()[$tool])) { return \YouTubeMcp\YouTube\CreatorTools::scope($tool); }
+        if (isset(\YouTubeMcp\YouTube\Tools::specs()[$tool])) { return \YouTubeMcp\YouTube\Tools::scope($tool); }
         $group = match ($tool) {
             'list_liked_tracks', 'get_track_ratings', 'rate_track' => 'likes',
             'list_subscriptions', 'subscribe_artist', 'unsubscribe_artist' => 'subscriptions',

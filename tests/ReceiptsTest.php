@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Tests;
+namespace YouTubeMcp\Tests;
 
-use YouTubeMusicMcp\Operations\Receipts;
-use YouTubeMusicMcp\ServiceError;
-use YouTubeMusicMcp\Storage\Lock;
+use YouTubeMcp\Operations\Receipts;
+use YouTubeMcp\ServiceError;
+use YouTubeMcp\Storage\Lock;
 
 trait ReceiptsTestHelpers
 {

@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\YouTube;
+namespace YouTubeMcp\YouTube;
 
-use YouTubeMusicMcp\Auth\Google;
-use YouTubeMusicMcp\Http\Client;
-use YouTubeMusicMcp\Quota\Budget;
-use YouTubeMusicMcp\ServiceError;
-use YouTubeMusicMcp\Storage\Database;
+use YouTubeMcp\Auth\Google;
+use YouTubeMcp\Http\Client;
+use YouTubeMcp\Quota\Budget;
+use YouTubeMcp\ServiceError;
+use YouTubeMcp\Storage\Database;
 
 class Api
 {

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Tests;
+namespace YouTubeMcp\Tests;
 
-use YouTubeMusicMcp\Quota\Budget;
+use YouTubeMcp\Quota\Budget;
 
 test('legacy limits and breakers do not block requests', function (): void {
     $db = $this->database();

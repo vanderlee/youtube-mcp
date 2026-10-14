@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\YouTube;
+namespace YouTubeMcp\YouTube;
 
 use Psr\Http\Message\UploadedFileInterface;
-use YouTubeMusicMcp\{Config, ServiceError};
-use YouTubeMusicMcp\Storage\Database;
+use YouTubeMcp\{Config, ServiceError};
+use YouTubeMcp\Storage\Database;
 
 final class MediaStore
 {
@@ -85,7 +85,7 @@ final class MediaStore
         $this->db->execute('DELETE FROM media_assets WHERE user_id=?', [$user]);
     }
 
-    public function cleanup(\YouTubeMusicMcp\Storage\Lock $locks): void
+    public function cleanup(\YouTubeMcp\Storage\Lock $locks): void
     {
         foreach ($this->db->all('SELECT id,user_id FROM media_assets WHERE created_at<=?', [time() - 86400]) as $row) {
             $locks->run('account:' . $row['user_id'], function () use ($row) {

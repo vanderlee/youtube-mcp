@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Tests;
+namespace YouTubeMcp\Tests;
 
 use Nyholm\Psr7\{Response, ServerRequest};
-use YouTubeMusicMcp\Auth\{OAuth, User};
-use YouTubeMusicMcp\ServiceError;
+use YouTubeMcp\Auth\{OAuth, User};
+use YouTubeMcp\ServiceError;
 
 trait OAuthTestHelpers
 {

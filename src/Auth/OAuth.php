@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Auth;
+namespace YouTubeMcp\Auth;
 
 use DateInterval;
 use Firebase\JWT\JWT;
@@ -13,8 +13,8 @@ use League\OAuth2\Server\RequestTypes\AuthorizationRequestInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use RuntimeException;
 use Throwable;
-use YouTubeMusicMcp\{Config, ServiceError};
-use YouTubeMusicMcp\Storage\Database;
+use YouTubeMcp\{Config, ServiceError};
+use YouTubeMcp\Storage\Database;
 
 final class OAuth
 {
@@ -48,7 +48,7 @@ final class OAuth
             'authorization_endpoint' => $u . '/oauth/authorize',
             'token_endpoint' => $u . '/oauth/token',
             'registration_endpoint' => $u . '/oauth/register',
-            'scopes_supported' => \YouTubeMusicMcp\Auth\Scope::SUPPORTED,
+            'scopes_supported' => \YouTubeMcp\Auth\Scope::SUPPORTED,
             'response_types_supported' => ['code'],
             'grant_types_supported' => ['authorization_code', 'refresh_token'],
             'code_challenge_methods_supported' => ['S256'],

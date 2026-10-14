@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Mcp;
+namespace YouTubeMcp\Mcp;
 
 use Mcp\Schema\{Tool, ToolAnnotations};
 use Mcp\Schema\Content\TextContent;
@@ -10,8 +10,8 @@ use Mcp\Schema\Result\CallToolResult;
 use Mcp\Server\{ClientGateway};
 use Mcp\Server\Handler\ToolHandlerInterface;
 use stdClass;
-use YouTubeMusicMcp\Playlist\Service;
-use YouTubeMusicMcp\ServiceError;
+use YouTubeMcp\Playlist\Service;
+use YouTubeMcp\ServiceError;
 
 final class Tools
 {
@@ -155,8 +155,8 @@ final class Tools
                 ['playlist_id', 'operation_key']
             ],
         ];
-        $specs['search_tracks'][1] += \YouTubeMusicMcp\YouTube\Tools::searchFilters();
-        $specs += \YouTubeMusicMcp\YouTube\Tools::specs() + \YouTubeMusicMcp\Playlist\WorkflowTools::specs() + \YouTubeMusicMcp\YouTube\CreatorTools::specs();
+        $specs['search_tracks'][1] += \YouTubeMcp\YouTube\Tools::searchFilters();
+        $specs += \YouTubeMcp\YouTube\Tools::specs() + \YouTubeMcp\Playlist\WorkflowTools::specs() + \YouTubeMcp\YouTube\CreatorTools::specs();
         $result = [];
         foreach ($specs as $name => [$desc, $props, $required]) {
             $write = in_array($name, Service::WRITES, true);

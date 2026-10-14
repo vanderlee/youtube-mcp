@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\Storage;
+namespace YouTubeMcp\Storage;
 
-use YouTubeMusicMcp\ServiceError;
+use YouTubeMcp\ServiceError;
 
 final class Lock
 {

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7Server\ServerRequestCreator;
-use YouTubeMusicMcp\App;
-use YouTubeMusicMcp\Config;
+use YouTubeMcp\App;
+use YouTubeMcp\Config;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 

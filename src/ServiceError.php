@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp;
+namespace YouTubeMcp;
 
 use RuntimeException;
 

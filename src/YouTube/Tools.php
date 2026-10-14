@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMusicMcp\YouTube;
+namespace YouTubeMcp\YouTube;
 
 final class Tools
 {
