@@ -18,25 +18,9 @@ The domain's PHP handler and shell's default `php` can differ. Select the instal
 
 These version/path values are examples; verify them on your host. A failed Composer run is a failed deployment. A Git deployment hook installing dependencies does not replace initialization, permissions checks, or browser acceptance.
 
-## YouTube Music tools
+## Data API only upgrade
 
-For persistent Music HTTP 400 errors with otherwise working official YouTube access, configure a separate **TVs and Limited Input devices** OAuth client in Google Cloud. Put its credentials in private `.env` as `MUSIC_OAUTH_CLIENT_ID` and `MUSIC_OAUTH_CLIENT_SECRET`; keep `GOOGLE_CLIENT_ID/SECRET` as the Web client. No new runtime or daemon is required. `deploy.sh` applies migration `003_music_connections.sql` through the existing initialization. Optional deployment overrides are `DEPLOY_MUSIC_OAUTH_CLIENT_ID` and `DEPLOY_MUSIC_OAUTH_CLIENT_SECRET`.
-
-After deployment, use **Connect YouTube Music** in the dashboard, authorize the displayed Google code for the same channel, then click **Check authorization**. A different channel is rejected. Reconnect ChatGPT after successful Music consent, then test `get_music_account` and history. No new callback URI is needed for the device client. Full setup and token lifecycle details are in [Music authorization](MUSIC.md#separate-music-device-oauth-for-rejected-web-client-tokens). A completed authorization still requires live endpoint verification.
-
-Music catalog, Music search, discovery, personal library and listening history run directly in PHP through Music's unofficial web endpoints. The existing PHP/cURL runtime is sufficient; no subprocess, additional runtime, daemon or cron task is required. Allow outbound HTTPS to music.youtube.com and YouTube playback tracking endpoints.
-
-Optional private configuration: `MUSIC_LOCATION=NL` (two-letter country code) and `MUSIC_CLIENT_VERSION` (an explicit web client version if upstream compatibility requires it). Leave the version empty to discover the actual version and visitor context from the public Music homepage. Do not use a guessed date-based version. Outbound HTTPS access must allow both the homepage GET and Music API POST requests. Post-deployment setup accepts `DEPLOY_MUSIC_LOCATION` and `DEPLOY_MUSIC_CLIENT_VERSION` and runs `php bin/console.php music:check`, which checks local configuration only.
-
-After the client-context fix, deploy and retry `get_music_account` and `get_music_history`; a new OAuth grant is not needed if `music_google_scope_granted` and `history.read` were already confirmed. Errors include safe `music_client_version` and `music_visitor_context_present` diagnostics without exposing the visitor identifier or credentials. `MUSIC_BOOTSTRAP_UNAVAILABLE` means no private account request was dispatched. Further `INVALID_ARGUMENT` failures can still indicate OAuth client incompatibility and need separate investigation.
-
-For persistent rejections, inspect `music_upstream_error` events in the domain's PHP error log. Safe HTTP status, upstream status/reasons and public client metadata are also included in the MCP text error and `structuredContent`; a wrapper showing only `RuntimeException` can otherwise conceal them. Never publish raw response bodies, authorization headers or cookies. A successful official account-status call is not a successful `get_music_account` call.
-
-The Music adapter reuses the user's server-managed Google OAuth token with the additional `https://www.googleapis.com/auth/youtube` grant. For connections made before this grant was requested: deploy the update, reconnect Google in the dashboard, grant Manage your YouTube account, confirm the intended channel, then reconnect ChatGPT. `deploy.sh` cannot upgrade stored OAuth grants; this requires browser consent.
-
-Authorize ChatGPT with `catalog.read`, `discovery.read`, `library.read`, `library.write`, `history.read`, and/or `history.write` as desired. Existing tokens do not gain these permissions automatically. No additional Google API is enabled by this implementation. `get_connection_status` reports both Google and service scope names; it does not verify live Music access. If fresh consent still returns a rejection, use the safe upstream diagnostic codes instead of repeatedly reconnecting.
-
-Verify `get_music_account` against the intended Music account/channel, then test catalog/search, home/radio/charts, each library kind and recent history. Confirm two accounts remain isolated. On disposable content, test save/unsave and history add/remove, replay completed operation keys and restore the original state. Brand-account history removal may be unsupported. Health/configuration checks do not establish live Music authorization. See [Music tools and limitations](MUSIC.md).
+TV/Devices authentication, browser-cookie login and the unofficial Music tools are removed. Deploy the complete release and run the existing initialization as the subscription user. Migration 005 removes only retired Music credential tables; it preserves standard Google credentials, signing keys and operation receipts. Refresh the ChatGPT tool catalog; reconnect if its existing authorization still requests removed scopes. Old MUSIC_* environment settings are ignored and can be removed privately. Remote Google grants and browser sessions are not revoked by this migration.
 
 ## Routing
 
@@ -256,28 +240,6 @@ php bin/console.php client:create https://EXACT_CALLBACK_URI ChatGPT
 The initial implementation supports a single Plesk host with local SQLite and filesystem locks. Docker and multi-host deployment remain deferred.
 
 ## Troubleshooting browser authorization
-
-### Database failure during Music device authorization
-
-An optional browser-session route is available on the authenticated dashboard at `/music/browser`. Apply migration `004_music_browser_connections.sql` through `php bin/console.php init` as the subscription user before using it. Enter the successful Music request's Cookie value and numeric X-Goog-AuthUser only into the HTTPS dashboard; never logs, chat, or shell arguments. Session credentials are encrypted and locally expire after seven days. Connection requires exact channel resolution from the active handle, not merely an account-name match. Reconnect ChatGPT after saving/removing credentials, then verify account/history access. See [browser-session setup and limits](MUSIC.md#music-browser-session-when-oauth-is-rejected).
-
-To compare authenticated headers, run the probe with `CHANNEL_ID --headers` as the subscription user. Deploy `bin/music-probe.php` and `src/Music/Api.php` together. It performs at most five Music-home reads with individual header removals and reports `header_comparison`; see [bounds and interpretation](MUSIC.md#operator-comparison-for-persistent-http-400).
-
-The Music probe now prints a `token_check` section with client/audience matches, Music-scope presence and token expiry, without printing credentials or identities. Run it as the subscription user, not root. From an administrator shell, identify the subscription owner in Plesk (or inspect ownership with `stat -c '%U' /var/www/vhosts/toyls.com`), then use `sudo -u SUBSCRIPTION_USER /opt/plesk/php/8.5/bin/php bin/music-probe.php CHANNEL_ID` from the deployed project root. Replace the username, PHP version and channel ID. Unknown tokeninfo fields are `null`; a failed introspection is inconclusive. See [probe details](MUSIC.md#operator-comparison-for-persistent-http-400).
-
-For persistent Music HTTP 400 after authorization, run `/opt/plesk/php/8.5/bin/php bin/music-probe.php CHANNEL_ID` from the deployed project root as the subscription user, using the domain's actual PHP version. This compares anonymous and authenticated Music-home reads using the stored Music connection and prints sanitized JSON. It does not change playlists or history; an expired Music token may be refreshed normally. See [probe details](MUSIC.md#operator-comparison-for-persistent-http-400).
-
-After successful Music consent, the dashboard displays **Authorization saved** and **Reconnect YouTube Music** for a current channel-bound connection. **Connect YouTube Music** indicates that no matching current connection is stored. This dashboard status does not confirm successful Music endpoint access.
-
-If Music reads still return HTTP 400 after successful authorization, deploy the minimal OAuth request profile and retry `get_music_account` with the existing connection. Its errors include `music_request_profile=oauth_minimal_v1`; absence of that marker means the new profile was not used. This profile removes redundant client headers and body visitor context. It requires no new permissions, migration or consent and does not guarantee upstream acceptance. See [Music request details](MUSIC.md#runtime-and-authorization).
-
-After upgrading from the generic Google device flow to the YouTube-specific device flow, start **Connect YouTube Music** again and reconnect ChatGPT after consent. Previously saved tokens are not automatically replaced. A successful `/music/poll` response or `music_device_connected: true` confirms stored authorization, not Music endpoint compatibility; verify `get_music_account` and `get_music_history` separately. See [Music authorization](MUSIC.md#separate-music-device-oauth-for-rejected-web-client-tokens).
-
-A `PDOException` during POST `/music/poll` is a local database failure; it does not establish a Google authorization rejection. Correlate the request ID with the operator log. Database errors now include safe `database_reason`, `database_sqlstate` and `database_driver_code` fields; recognized missing tables also include `database_table`. Raw driver messages, stored values and filesystem paths are not logged.
-
-Music authorization checks that `music_connections` exists before requesting or consuming a device grant. `DEPLOYMENT_MIGRATION_REQUIRED` means migration `003_music_connections.sql` has not initialized that storage. From the deployed project root, run `/opt/plesk/php/8.5/bin/php bin/console.php init` as the subscription user (select the domain's actual PHP CLI version), then restart Music authorization from the dashboard. The deployment hook already runs initialization; inspect `deploy.log` if a deployment did not complete. Initialization preserves existing credentials and keys and applies only unapplied migrations. Do not delete the database or regenerate `APP_KEY`.
-
-For `readonly_database`, check ownership and write permissions of both SQLite files and their private directory under the PHP-FPM user; for `database_locked`, investigate concurrent local writers. A generic `PDOException` without these fields is insufficient to distinguish these causes. Verify Music authorization and endpoint access separately after repair.
 
 ### Identify the failing layer
 

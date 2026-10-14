@@ -1,4 +1,4 @@
-﻿# Google and ChatGPT setup
+# Google and ChatGPT setup
 
 ## Before connecting
 
@@ -22,11 +22,7 @@ Do not enter Google client credentials into ChatGPT's service OAuth fields or re
 5. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in private `.env` configuration.
 6. Review actual project quotas in Cloud Console. YouTube enforces limits; local counters are informational.
 
-The app requests `openid email profile` for sign-in. Connecting YouTube additionally requests `https://www.googleapis.com/auth/youtube.force-ssl` for official API operations and `https://www.googleapis.com/auth/youtube` (Manage your YouTube account) for the unofficial Music OAuth integration, with offline access. These are broader than playlist-only permissions. Google can return only the broader scope when collapsing overlapping grants; the service accepts that. Explain both permissions honestly in consent/setup materials.
-
-Connections created before the Music scope was requested need a fresh Google consent: deploy the updated server, reconnect Google in the dashboard, grant Manage your YouTube account, confirm the intended channel, then reconnect ChatGPT because Google reconnect revokes its old service tokens. Approve `history.read` for history reads and `history.write` only for history changes. Deployment and token refresh do not add permissions to an existing grant.
-
-Use `get_connection_status` to inspect `service_scopes`, `google_scopes`, and `music_google_scope_granted`. These are scope names, not credentials; `music_access_checked: false` means this status call does not probe live Music access. Then use `get_music_account` and `get_music_history` to verify the actual upstream behavior. More scopes do not make watch history available through the official Data API.
+The app requests openid, email and profile for sign-in. Connecting YouTube additionally requests https://www.googleapis.com/auth/youtube.force-ssl with offline access for official Data API operations. Existing broader youtube grants remain accepted; new connections no longer request that extra scope. TV/Devices OAuth, browser cookies and unofficial Music endpoints are no longer supported. get_connection_status reports only the standard account and Google/service scope names.
 
 Review current Google publishing and verification requirements for this scope and audience. Testing-mode authorizations can have restrictions, including token lifetime; do not assume a test consent configuration is suitable for ongoing public operation. Quota extensions are a separate process from OAuth app verification.
 
@@ -51,7 +47,6 @@ Reconnect replaces the active connection and revokes existing ChatGPT service to
 
 ## ChatGPT connection
 
-Music can use a separate native PHP device OAuth connection when Web-client tokens are rejected. Configure a Google client of type TVs and Limited Input devices in `MUSIC_OAUTH_CLIENT_ID/SECRET`, use **Connect YouTube Music** in the dashboard and authorize the exact existing channel. Keep the sign-in/official YouTube Web client unchanged. The server rejects mismatched channels, encrypts device credentials and revokes old ChatGPT tokens when this connection is replaced. Reconnect ChatGPT afterward. See [separate Music authorization](MUSIC.md#separate-music-device-oauth-for-rejected-web-client-tokens).
 
 Use the current custom MCP connection interface on a ChatGPT account/workspace with permission to add custom integrations. The service URL is `https://YOUR_DOMAIN/mcp`.
 
@@ -107,10 +102,6 @@ Use browser developer tools and private Plesk access/error logs together. Record
 | Authenticated MCP returns 403 | Inspect Origin/transport rejection logs and Host forwarding |
 | Reads work but writes fail for scope | Complete fresh consent with `playlists.write` |
 | MCP returns 401 after Google reconnect | Reconnect ChatGPT; old service tokens were revoked |
-| `INSUFFICIENT_SERVICE_SCOPE` on history | ChatGPT must request and receive `history.read` or `history.write` as appropriate |
-| `GOOGLE_MUSIC_SCOPE_REQUIRED` | Reconnect Google after deployment and grant Manage your YouTube account, then reconnect ChatGPT |
-| `MUSIC_ACCESS_DENIED` | Music returned 403; inspect safe `upstream_status`/`upstream_reasons` and verify account/client compatibility |
-| `MUSIC_UPSTREAM_REJECTED` | Inspect safe `upstream_http_status`, `upstream_status` and `upstream_reasons`; extra MCP scopes do not fix malformed or unsupported upstream requests |
 
 The application sends `Referrer-Policy: same-origin` and permits form redirects to Google Accounts and ChatGPT in its CSP. An additional restrictive CSP configured by the host is enforced alongside the app's policy and can still block redirects. Reload the dashboard after header changes and restart authorization. Do not remove Origin validation or disable the WAF globally to conceal a policy/routing problem.
 

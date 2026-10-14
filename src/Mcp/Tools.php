@@ -155,10 +155,9 @@ final class Tools
                 ['playlist_id', 'operation_key']
             ],
         ];
-        $specs += \YouTubeMusicMcp\Music\Tools::specs();
         $result = [];
         foreach ($specs as $name => [$desc, $props, $required]) {
-            $write = in_array($name, array_merge(Service::WRITES, \YouTubeMusicMcp\Music\Tools::WRITES), true);
+            $write = in_array($name, Service::WRITES, true);
             if (!$write) {
                 $props['response_detail'] = [
                     'type' => 'string',
@@ -188,9 +187,6 @@ final class Tools
                                 'move_track',
                                 'rate_track',
                                 'unsubscribe_artist',
-                                'set_music_song_library_status',
-                                'set_music_playlist_library_status',
-                                'remove_music_history_items'
                             ],
                             true
                         ),
@@ -240,7 +236,7 @@ final class Tools
                         $r
                     );
                 } catch (ServiceError $e) {
-                    return new CallToolResult([new TextContent(\YouTubeMusicMcp\Music\Diagnostics::text($e))],
+                    return new CallToolResult([new TextContent($e->reason . ': ' . $e->getMessage())],
                         true,
                         $e->payload());
                 }

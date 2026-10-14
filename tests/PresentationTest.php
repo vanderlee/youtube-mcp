@@ -52,23 +52,3 @@ test('receipt summary preserves recovery and occurrence ids without raw snippets
     $this->assertSame($raw['error'], $r['error']);
     $this->assertArrayNotHasKey('completed', $r);
 });
-
-test('music compaction keeps action tokens and bounds', function (): void {
-    $raw = [
-        'source' => 'youtube_music_unofficial',
-        'data' => [
-            'items' => [
-                [
-                    'videoId' => 'aaaaaaaaaaa',
-                    'feedbackToken' => 'signed-token',
-                    'thumbnails' => [['url' => 'image']]
-                ]
-            ],
-            'possibly_more' => true
-        ]
-    ];
-    $r = Presentation::compact('get_music_history', $raw);
-    $this->assertSame('signed-token', $r['data']['items'][0]['feedbackToken']);
-    $this->assertTrue($r['data']['possibly_more']);
-    $this->assertArrayNotHasKey('thumbnails', $r['data']['items'][0]);
-});

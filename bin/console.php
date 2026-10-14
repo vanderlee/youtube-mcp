@@ -49,14 +49,6 @@ try {
         exit(0);
     }
     $config = Config::load($root);
-    if ($command === 'music:check') {
-        $config->validate();
-        if (!extension_loaded('curl')) {
-            throw new RuntimeException('Music requires the PHP curl extension.');
-        }
-        echo "Native PHP Music transport configuration ready. Live authorization is not checked.\n";
-        exit(0);
-    }
     if ($command === 'init') {
         $config->validate();
         $dir = $config->storage();
@@ -126,7 +118,7 @@ try {
             ) . PHP_EOL;
         exit(0);
     }
-    echo "Commands: key:generate, init, migrate, cleanup, bootstrap:check, mcp:check, music:check, client:create CALLBACK_URI [NAME]\n";
+    echo "Commands: key:generate, init, migrate, cleanup, bootstrap:check, mcp:check, client:create CALLBACK_URI [NAME]\n";
 } catch (Throwable $e) {
     fwrite(STDERR, $e->getMessage() . PHP_EOL);
     exit(1);

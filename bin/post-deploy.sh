@@ -30,8 +30,7 @@ Usage: bash bin/post-deploy.sh [options]
 Optional environment inputs (credentials are never command-line arguments):
   DEPLOY_APP_URL, DEPLOY_STORAGE_PATH, DEPLOY_ALLOWED_EMAILS,
   DEPLOY_GOOGLE_CLIENT_ID, DEPLOY_GOOGLE_CLIENT_SECRET,
-  DEPLOY_OAUTH_REDIRECT_URIS, DEPLOY_MUSIC_CLIENT_VERSION, DEPLOY_MUSIC_LOCATION,
-  DEPLOY_MUSIC_OAUTH_CLIENT_ID, DEPLOY_MUSIC_OAUTH_CLIENT_SECRET
+  DEPLOY_OAUTH_REDIRECT_URIS
 
 Existing keys and credentials are preserved unless an explicit input replaces
 credentials. APP_KEY is generated only for a genuinely new installation.
@@ -106,11 +105,10 @@ prompt_secret DEPLOY_GOOGLE_CLIENT_ID 'Google OAuth client ID'
 prompt_secret DEPLOY_GOOGLE_CLIENT_SECRET 'Google OAuth client secret'
 prompt_value DEPLOY_OAUTH_REDIRECT_URIS 'Exact permitted ChatGPT callback URL(s)'
 "$PHP_BIN" "$ROOT/bin/deploy-config.php" prepare
-unset DEPLOY_GOOGLE_CLIENT_ID DEPLOY_GOOGLE_CLIENT_SECRET DEPLOY_MUSIC_OAUTH_CLIENT_SECRET
+unset DEPLOY_GOOGLE_CLIENT_ID DEPLOY_GOOGLE_CLIENT_SECRET
 "$PHP_BIN" "$ROOT/bin/console.php" init
 "$PHP_BIN" "$ROOT/bin/console.php" cleanup
 "$PHP_BIN" "$ROOT/bin/deploy-config.php" verify
-"$PHP_BIN" "$ROOT/bin/console.php" music:check
 
 STORAGE="$("$PHP_BIN" "$ROOT/bin/deploy-config.php" storage)"
 if ((CREATE_CLIENT)); then "$PHP_BIN" "$ROOT/bin/deploy-config.php" client; fi
@@ -135,12 +133,6 @@ Server-side setup completed. Manual actions remaining:
   2. Complete Google Cloud API/consent/client registration if not already done.
   3. Sign in at the dashboard, grant YouTube access, and confirm your channel.
   4. Add the MCP endpoint to ChatGPT with OAuth and complete browser consent.
-     Music scope upgrade: reconnect Google with Manage your YouTube account,
-     then reconnect ChatGPT with history.read for listening history.
-     Deployment preserves existing grants; browser consent is still required.
-     For separate Music device OAuth, configure MUSIC_OAUTH_CLIENT_* for a
-     TVs and Limited Input devices client, then use Connect YouTube Music
-     in the dashboard. Keep GOOGLE_CLIENT_* as the Web application client.
   5. Run docs/ACCEPTANCE.md using disposable playlists and two accounts.
   6. Configure consistent backups and review actual Cloud quota usage.
 See docs/PLESK.md, docs/CONNECTIONS.md, and docs/OPERATIONS.md.

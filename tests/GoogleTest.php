@@ -19,27 +19,27 @@ trait GoogleTestHelpers
 
 uses(GoogleTestHelpers::class);
 
-test('youtube connection requests both official and music scopes without broadening sign in', function (): void {
+test('youtube connection requests only official data api scope without broadening sign in', function (): void {
     $cfg = $this->config(['GOOGLE_CLIENT_ID' => 'dummy-client']);
     $google = new Google($cfg, $this->database(), new Vault($cfg->get('APP_KEY')), new Client(), new Lock($this->dir));
     parse_str(parse_url($google->authorize('state', 'challenge', true), PHP_URL_QUERY), $connect);
     $scopes = explode(' ', $connect['scope']);
     $this->assertContains(Google::YOUTUBE_SCOPE, $scopes);
-    $this->assertContains(Google::MUSIC_SCOPE, $scopes);
+    $this->assertSame(['openid', 'email', 'profile', Google::YOUTUBE_SCOPE], $scopes);
     $this->assertSame('offline', $connect['access_type']);
     $this->assertSame('consent', $connect['prompt']);
     parse_str(parse_url($google->authorize('state', 'challenge', false), PHP_URL_QUERY), $signin);
     $this->assertSame('openid email profile', $signin['scope']);
 });
 
-test('google accepts the broader music grant when google collapses overlapping scopes', function (): void {
+test('google preserves compatibility with existing broader youtube grants', function (): void {
     $db = $this->database();
     $this->user($db);
     $cfg = $this->config();
     $google = new Google($cfg, $db, new Vault($cfg->get('APP_KEY')), new Client(), new Lock($this->dir));
-    $google->connect('u1', ['scope' => Google::MUSIC_SCOPE, 'refresh_token' => 'dummy-refresh', 'access_token' => 'dummy-access'],
+    $google->connect('u1', ['scope' => 'https://www.googleapis.com/auth/youtube', 'refresh_token' => 'dummy-refresh', 'access_token' => 'dummy-access'],
         ['id' => 'dummy-channel', 'snippet' => ['title' => 'Dummy']]);
-    $this->assertSame(Google::MUSIC_SCOPE, $google->connection('u1')['scopes']);
+    $this->assertSame('https://www.googleapis.com/auth/youtube', $google->connection('u1')['scopes']);
 });
 
 test('deleting and recreating user preserves usage history', function (): void {

@@ -11,7 +11,6 @@ use YouTubeMusicMcp\Storage\{Database, Lock};
 final class Google
 {
     public const YOUTUBE_SCOPE = 'https://www.googleapis.com/auth/youtube.force-ssl';
-    public const MUSIC_SCOPE = 'https://www.googleapis.com/auth/youtube';
 
     public function __construct(
         private Config $config,
@@ -31,7 +30,7 @@ final class Google
             'client_id' => $this->config->get('GOOGLE_CLIENT_ID'),
             'redirect_uri' => $this->config->url() . '/google/callback',
             'response_type' => 'code',
-            'scope' => 'openid email profile' . ($youtube ? ' ' . self::YOUTUBE_SCOPE . ' ' . self::MUSIC_SCOPE : ''),
+            'scope' => 'openid email profile' . ($youtube ? ' ' . self::YOUTUBE_SCOPE : ''),
             'state' => $state,
             'code_challenge' => $challenge,
             'code_challenge_method' => 'S256'
@@ -130,7 +129,7 @@ final class Google
     public function connect(string $user, array $tokens, array $channel): void
     {
         $scopes = preg_split('/\s+/', (string)($tokens['scope'] ?? ''));
-        if ((!in_array(self::YOUTUBE_SCOPE, $scopes, true) && !in_array(self::MUSIC_SCOPE, $scopes, true)) || empty($tokens['refresh_token'])) {
+        if ((!in_array(self::YOUTUBE_SCOPE, $scopes, true) && !in_array('https://www.googleapis.com/auth/youtube', $scopes, true)) || empty($tokens['refresh_token'])) {
             throw new ServiceError(
                 'GOOGLE_RECONNECT_REQUIRED',
                 'Offline YouTube permission is required. Reconnect and grant access.'
@@ -139,8 +138,6 @@ final class Google
         $this->lock->run(
             'account:' . $user,
             fn() => $this->db->transaction(function () use ($user, $tokens, $channel, $scopes) {
-                $this->db->execute('DELETE FROM music_connections WHERE user_id=?', [$user]);
-                $this->db->execute('DELETE FROM music_browser_connections WHERE user_id=?', [$user]);
                 $this->db->execute('UPDATE oauth_tokens SET revoked=1 WHERE user_id=?', [$user]);
                 $this->db->execute(
                     'INSERT INTO google_connections VALUES (?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET channel_id=excluded.channel_id,channel_name=excluded.channel_name,tokens=excluded.tokens,scopes=excluded.scopes,generation=excluded.generation',
@@ -210,8 +207,6 @@ final class Google
                     }
                 }
                 $this->db->transaction(function () use ($user) {
-                    $this->db->execute('DELETE FROM music_connections WHERE user_id=?', [$user]);
-                    $this->db->execute('DELETE FROM music_browser_connections WHERE user_id=?', [$user]);
                     $this->db->execute('DELETE FROM google_connections WHERE user_id=?', [$user]);
                     $this->db->execute('UPDATE oauth_tokens SET revoked=1 WHERE user_id=?', [$user]);
                     $this->db->execute('DELETE FROM api_cache WHERE user_id=?', [$user]);

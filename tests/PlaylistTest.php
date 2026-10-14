@@ -91,10 +91,10 @@ uses(PlaylistTestHelpers::class);
 
 test('connection diagnostics expose granted scope names without credentials or live access claims', function (): void {
     [$service, $api] = $this->service([]);
-    $result = $service->execute('u1', ['playlists.read', 'history.read'], 'get_connection_status', []);
-    $this->assertSame(['playlists.read', 'history.read'], $result['service_scopes']);
-    $this->assertFalse($result['music_google_scope_granted']);
-    $this->assertFalse($result['music_access_checked']);
+    $result = $service->execute('u1', ['playlists.read'], 'get_connection_status', []);
+    $this->assertSame(['playlists.read'], $result['service_scopes']);
+    $this->assertArrayNotHasKey('music_google_scope_granted', $result);
+    $this->assertArrayNotHasKey('music_access_checked', $result);
     $this->assertArrayNotHasKey('tokens', $result);
     $this->assertSame([], $api->calls);
 });

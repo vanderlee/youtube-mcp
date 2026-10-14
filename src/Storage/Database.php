@@ -30,7 +30,7 @@ final class Database
             $details['database_driver_code'] = (int)$error->errorInfo[1];
         }
         if ($reason === 'missing_table' && preg_match('/no such table: ([a-z_]+)/', $message, $match)
-            && in_array($match[1], ['music_connections', 'google_connections', 'oauth_tokens', 'quota_windows', 'quota_requests'], true)) {
+            && in_array($match[1], ['google_connections', 'oauth_tokens', 'quota_windows', 'quota_requests'], true)) {
             $details['database_table'] = $match[1];
         }
         return $details;

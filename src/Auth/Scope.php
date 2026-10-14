@@ -17,12 +17,6 @@ final class Scope implements ScopeEntityInterface
         'likes.write',
         'subscriptions.read',
         'subscriptions.write',
-        'catalog.read',
-        'discovery.read',
-        'library.read',
-        'library.write',
-        'history.read',
-        'history.write'
     ];
     use EntityTrait;
     use ScopeTrait;

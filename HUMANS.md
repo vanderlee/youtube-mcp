@@ -4,8 +4,6 @@
 
 - Add support for other LLM's besides ChatGTP.
 - Create full suite of unittests.
-- Add full support for all YouTube Music API's.
-  - What still remains?
 - Simply rollout on Plesk (Docker?).
 - Enable easy rollout on other platforms.
 - Use included PHP files as templates for the HTML in APP.php

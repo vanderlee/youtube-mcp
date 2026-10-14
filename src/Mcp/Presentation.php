@@ -59,7 +59,7 @@ final class Presentation
             return ['items' => $items, 'next_page_token' => $data['nextPageToken'] ?? null] +
                 array_intersect_key($data, array_flip(['music_availability']));
         }
-        // Music's already-normalized data keeps actionable tokens, text, and explicit bounds.
+        // Compact remaining results by omitting thumbnails.
         return self::omitThumbnails($data);
     }
 

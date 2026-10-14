@@ -1,20 +1,10 @@
 # YouTube Music MCP service
 
-For persistent Music OAuth rejection, the dashboard supports an optional encrypted, channel-verified browser session with a seven-day local expiry. Apply storage migration `004` and see [setup and credential handling](docs/MUSIC.md#music-browser-session-when-oauth-is-rejected). Live compatibility must be verified.
-
-Use `php bin/music-probe.php CHANNEL_ID --headers` as the subscription user for a bounded authenticated header comparison. It reports sanitized results and does not change the normal request profile.
-
-The operator Music probe includes sanitized token-client, scope and expiry checks. Run it as the Plesk subscription user; credentials are never printed.
-
-Operators can compare anonymous and authenticated Music-home reads with `php bin/music-probe.php CHANNEL_ID`; see [safe diagnostic probe](docs/MUSIC.md#operator-comparison-for-persistent-http-400).
-
-The dashboard distinguishes saved Music authorization (**Reconnect YouTube Music**) from a missing current connection (**Connect YouTube Music**). Stored authorization and successful Music endpoint access remain separate checks.
-
-Music HTTP 400 troubleshooting: the OAuth transport uses a minimal request profile, reported as `music_request_profile=oauth_minimal_v1` in errors. Deploying this transport change needs no new consent; see [Music request details](docs/MUSIC.md#runtime-and-authorization).
-
-A multi-user PHP service for managing YouTube playlists and accessing YouTube Music from ChatGPT. Each user signs in with Google, authorizes their own YouTube channel, and grants ChatGPT separate service permissions. Google credentials stay on the server.
+A multi-user PHP service for managing YouTube playlists, video ratings and channel subscriptions from ChatGPT through the official YouTube Data API. Each user signs in with Google, authorizes their own YouTube channel, and grants ChatGPT separate service permissions. Google credentials stay on the server.
 
 This is an initial implementation with automated local verification. It has **not yet been validated against a live Google account, YouTube Music, ChatGPT, or a Plesk installation**. Complete the [live acceptance checklist](docs/ACCEPTANCE.md) before treating the deployment as ready for personal playlists.
+
+TV/Devices OAuth, browser-cookie login, unofficial Music tools and Music diagnostics have been removed. The service retains 18 official Data API and local-service tools. Migration 005 removes stored Music credentials while preserving standard Google connections and operation receipts. Refresh the ChatGPT tool catalog after deployment.
 
 ## Features
 
@@ -22,11 +12,6 @@ This is an initial implementation with automated local verification. It has **no
 - Google sign-in, invite-only onboarding, explicit channel confirmation, offline token refresh, and encrypted credentials.
 - OAuth authorization code with PKCE S256, expiring service tokens, refresh rotation, revocation, and audience validation.
 - Playlist listing, inspection, search, creation, metadata updates, track addition/removal/movement, and deletion.
-- Native PHP YouTube Music catalog/search, discovery, saved library and listening-history tools using unofficial web endpoints.
-- Optional separate Music device OAuth with encrypted per-user credentials and exact channel matching, for installations where Web-client tokens are rejected. Configure `MUSIC_OAUTH_CLIENT_ID/SECRET` and connect Music in the dashboard; see [setup](docs/MUSIC.md#separate-music-device-oauth-for-rejected-web-client-tokens). Upgrades from the earlier generic Google device flow require fresh Music consent and ChatGPT reconnection. Apply storage migrations with `php bin/console.php init` before connecting; see [Music database troubleshooting](docs/PLESK.md#database-failure-during-music-device-authorization).
-- Music requests discover the actual public web client version and visitor context, with matching request headers. An unavailable bootstrap fails before any account request is sent.
-- Safe upstream Music diagnostics appear in MCP error text/structured content and PHP error logs; credentials and raw response bodies are excluded.
-- Google connections request the additional `youtube` Music grant. After upgrading older connections, reconnect Google with fresh consent and then reconnect ChatGPT; deployment cannot expand existing grants. `get_connection_status` exposes granted scope names for troubleshooting.
 - Informational, cache-aware daily usage estimates; YouTube enforces quotas and rate limits.
 - Mutation receipts, explicit partial resume, and protection against replay of completed operations.
 - PHP-FPM hosting in Plesk, SQLite storage, no Docker or background worker.
@@ -80,7 +65,6 @@ Grant `likes.read` for liked videos/ratings, `likes.write` for rating changes, `
 
 Writes require `playlists.write`; reads require `playlists.read`. New playlists default to private. Entries are removed or moved by **playlist-item ID**, identifying an occurrence; video IDs identify the video and can occur more than once.
 
-Music tools cover artists/albums/songs/lyrics/credits, typed Music search and suggestions, home/radio/related/charts/moods, saved library contents and song/album/playlist save/unsave, and history read/add/remove. They run directly in PHP/cURL and reuse per-user Google OAuth tokens. Grant `catalog.read`, `discovery.read`, `library.read/write`, and `history.read/write` as needed; existing playlist scopes do not grant them. See [Music tools, arguments and limits](docs/MUSIC.md) and [Plesk setup](docs/PLESK.md#youtube-music-tools). Music endpoints are unofficial, return bounded first-response prefixes, and require live authorization/compatibility checks.
 
 Example mutation arguments:
 

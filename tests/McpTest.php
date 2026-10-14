@@ -55,19 +55,8 @@ test('sdk handshake discovery and local usage tool', function (): void {
     $list = $this->rpc(['jsonrpc' => '2.0', 'id' => 2, 'method' => 'tools/list'], $session);
     $this->assertSame(200, $list->getStatusCode(), (string)$list->getBody());
     $this->assertStringContainsString('add_tracks', (string)$list->getBody());
-    $this->assertStringContainsString('search_music', (string)$list->getBody());
-    $this->assertStringContainsString('history.write', (string)$list->getBody());
-    $music = $this->rpc(
-        [
-            'jsonrpc' => '2.0',
-            'id' => 4,
-            'method' => 'tools/call',
-            'params' => ['name' => 'get_music_home', 'arguments' => new \stdClass()]
-        ],
-        $session
-    );
-    $this->assertSame(200, $music->getStatusCode());
-    $this->assertStringContainsString('INSUFFICIENT_SERVICE_SCOPE', (string)$music->getBody());
+    $this->assertStringNotContainsString('search_music', (string)$list->getBody());
+    $this->assertStringNotContainsString('history.write', (string)$list->getBody());
     $usage = $this->rpc(
         [
             'jsonrpc' => '2.0',
@@ -91,6 +80,14 @@ test('unauthorized endpoint returns discovery challenge', function (): void {
     );
     $this->assertSame(401, $r->getStatusCode());
     $this->assertStringContainsString('oauth-protected-resource/mcp', $r->getHeaderLine('WWW-Authenticate'));
+});
+
+test('retired music authentication routes return not found', function (): void {
+    foreach (['/music/connect', '/music/poll', '/music/disconnect', '/music/browser', '/music/browser/disconnect'] as $path) {
+        $response = $this->app->handle(new ServerRequest('GET', 'https://music.example.test' . $path));
+        $this->assertSame(404, $response->getStatusCode());
+        $this->assertStringContainsString('NOT_FOUND', (string)$response->getBody());
+    }
 });
 
 test('preference tools advertise separate scopes', function (): void {

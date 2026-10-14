@@ -30,21 +30,12 @@ final class Service
         private Api $api,
         private Budget $budget,
         private Receipts $receipts,
-        private Lock $locks,
-        private ?\YouTubeMusicMcp\Music\Service $music = null,
-        private ?\YouTubeMusicMcp\Auth\MusicOAuth $musicOAuth = null,
-        private ?\YouTubeMusicMcp\Auth\MusicBrowser $musicBrowser = null
+        private Lock $locks
     ) {
     }
 
     public function execute(string $user, array $scopes, string $tool, array $a): array
     {
-        if (isset(\YouTubeMusicMcp\Music\Tools::specs()[$tool])) {
-            if (!$this->music) {
-                throw new ServiceError('MUSIC_SETUP_REQUIRED', 'Music integration is not configured.', [], 503);
-            }
-            return $this->music->execute($user, $scopes, $tool, $a);
-        }
         $write = in_array($tool, self::WRITES, true);
         if (!in_array(self::scope($tool), $scopes, true)) {
             throw new ServiceError(
@@ -63,18 +54,8 @@ final class Service
         $c = $this->google->connection($user);
         if ($tool === 'get_connection_status') {
             $googleScopes = array_values(array_filter(preg_split('/\s+/', trim($c['scopes']))));
-            $musicStatus = $this->musicOAuth?->status($user, $c) ?? ['music_authentication' => 'google_web_oauth', 'music_device_connected' => false];
-            try { $browser = $this->musicBrowser?->connection($user, $c); }
-            catch (ServiceError $error) {
-                if ($error->reason !== 'MUSIC_BROWSER_RECONNECT_REQUIRED') { throw $error; }
-                $browser = null;
-            }
-            $musicStatus['music_browser_connected'] = $browser !== null;
-            if ($browser !== null) { $musicStatus['music_authentication'] = 'browser_session'; }
             return ['connected' => true, 'channel_id' => $c['channel_id'], 'channel_name' => $c['channel_name'],
-                'service_scopes' => array_values($scopes), 'google_scopes' => $googleScopes,
-                'music_google_scope_granted' => $musicStatus['music_device_connected'] || in_array(Google::MUSIC_SCOPE, $googleScopes, true),
-                'music_access_checked' => false] + $musicStatus;
+                'service_scopes' => array_values($scopes), 'google_scopes' => $googleScopes];
         }
         if ($write) {
             return $this->locks->run('account:' . $user, function () use ($user, $tool, $a) {
@@ -185,9 +166,6 @@ final class Service
 
     public static function scope(string $tool): string
     {
-        if (isset(\YouTubeMusicMcp\Music\Tools::specs()[$tool])) {
-            return \YouTubeMusicMcp\Music\Tools::scope($tool);
-        }
         $group = match ($tool) {
             'list_liked_tracks', 'get_track_ratings', 'rate_track' => 'likes',
             'list_subscriptions', 'subscribe_artist', 'unsubscribe_artist' => 'subscriptions',
