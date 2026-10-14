@@ -11,7 +11,13 @@ use YouTubeMcp\ServiceError;
 
 final class MediaApi
 {
-    public function __construct(private Google $google, private Budget $budget, private Vault $vault, private MediaClient $http) {}
+    public function __construct(
+        private Google $google,
+        private Budget $budget,
+        private Vault $vault,
+        private MediaClient $http
+    ) {
+    }
 
     public function upload(string $user, string $method, array $params, array $metadata, array $asset, callable $step): array
     {
@@ -19,6 +25,7 @@ final class MediaApi
         if (!in_array($method, ['videos.insert', 'captions.insert', 'captions.update', 'thumbnails.set', 'channelBanners.insert'], true)) {
             throw new ServiceError('INVALID_ARGUMENT', 'Unsupported upload method.');
         }
+
         $session = $step('upload-session', function () use ($user, $method, $resource, $params, $metadata, $asset) {
             $url = 'https://www.googleapis.com/upload/youtube/v3/' . $resource
                 . ($method === 'thumbnails.set' ? '/set' : ($method === 'channelBanners.insert' ? '/insert' : ''))
@@ -28,22 +35,33 @@ final class MediaApi
                 $response = $this->http->exchange($method === 'captions.update' ? 'PUT' : 'POST', $url,
                     ['Authorization: Bearer ' . $this->google->accessToken($user), 'Content-Type: application/json',
                         'X-Upload-Content-Type: ' . $asset['mime'], 'X-Upload-Content-Length: ' . $asset['bytes']], json_encode((object)$metadata, JSON_THROW_ON_ERROR));
-            } catch (ServiceError $error) { $this->budget->outcome($id, 'uncertain'); throw $error; }
+            } catch (ServiceError $error) {
+                $this->budget->outcome($id, 'uncertain');
+                throw $error;
+            }
+
             $this->budget->outcome($id, $response['status'] < 300 ? 'success' : 'rejected');
-            $this->check($response['status']);
+            $this->assertSuccessfulResponse($response['status']);
             $location = $response['headers']['location'] ?? '';
             self::validateLocation($location);
+
             return ['session' => $this->vault->encrypt(['location' => $location])];
         });
         $location = $this->vault->decrypt($session['session'])['location'];
         self::validateLocation($location);
+
         return $step('upload-content', function () use ($user, $location, $asset) {
             $response = $this->http->exchange('PUT', $location, ['Authorization: Bearer ' . $this->google->accessToken($user),
                 'Content-Type: ' . $asset['mime'], 'Content-Length: ' . $asset['bytes']], path: $asset['path']);
-            if ($response['status'] === 308) { throw new ServiceError('UPSTREAM_UNCERTAIN', 'Upload is incomplete. Reconcile its saved receipt; automatic retransmission is disabled.', [], 502); }
-            $this->check($response['status']);
+            if ($response['status'] === 308) {
+                throw new ServiceError('UPSTREAM_UNCERTAIN', 'Upload is incomplete. Reconcile its saved receipt; automatic retransmission is disabled.', [], 502);
+            }
+
+            $this->assertSuccessfulResponse($response['status']);
             $data = json_decode($response['raw'], true);
-            if (!is_array($data) || isset($data['error'])) { throw new ServiceError('UPSTREAM_UNCERTAIN', 'Upload response was not valid success JSON.', [], 502); }
+            if (!is_array($data) || isset($data['error'])) {
+                throw new ServiceError('UPSTREAM_UNCERTAIN', 'Upload response was not valid success JSON.', [], 502);
+            }
             // Only identifiers and the banner image URL are required by subsequent steps.
             return array_intersect_key($data, array_flip(['id', 'url']));
         });
@@ -55,9 +73,14 @@ final class MediaApi
         try {
             $response = $this->http->exchange('GET', 'https://www.googleapis.com/youtube/v3/captions/' . rawurlencode($id) . '?tfmt=' . rawurlencode($format),
                 ['Authorization: Bearer ' . $this->google->accessToken($user)]);
-        } catch (ServiceError $error) { $this->budget->outcome($request, 'uncertain'); throw $error; }
+        } catch (ServiceError $error) {
+            $this->budget->outcome($request, 'uncertain');
+            throw $error;
+        }
+
         $this->budget->outcome($request, $response['status'] < 300 ? 'success' : 'rejected');
-        $this->check($response['status']);
+        $this->assertSuccessfulResponse($response['status']);
+
         return ['caption_id' => $id, 'format' => $format, 'content' => $response['raw']];
     }
 
@@ -70,9 +93,13 @@ final class MediaApi
         }
     }
 
-    private function check(int $status): void
+    private function assertSuccessfulResponse(int $status): void
     {
-        if ($status >= 500) { throw new ServiceError('UPSTREAM_UNCERTAIN', 'Google failed during media processing; reconcile before retrying.', [], 502); }
-        if ($status >= 300) { throw new ServiceError('YOUTUBE_MEDIA_REJECTED', 'Google rejected the media request.', ['upstream_http_status' => $status], 400); }
+        if ($status >= 500) {
+            throw new ServiceError('UPSTREAM_UNCERTAIN', 'Google failed during media processing; reconcile before retrying.', [], 502);
+        }
+        if ($status >= 300) {
+            throw new ServiceError('YOUTUBE_MEDIA_REJECTED', 'Google rejected the media request.', ['upstream_http_status' => $status], 400);
+        }
     }
 }

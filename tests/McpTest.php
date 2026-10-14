@@ -141,6 +141,100 @@ test('preference tools advertise separate scopes', function (): void {
     $this->assertNull($repo->getScopeEntityByIdentifier('unknown.write'));
 });
 
+test('browser dashboard reflects only the signed in users connection', function (): void {
+    $this->app->handle(new ServerRequest('GET', 'https://music.example.test/'));
+    $_SESSION['user'] = 'u1';
+    $database = new Database($this->dir . '/service.sqlite');
+    $this->user($database, 'u2');
+    $database->execute(
+        'INSERT INTO google_connections VALUES (?,?,?,?,?,?)',
+        ['u2', 'channel-u2', 'Other channel', 'unused', 'scope', 'generation-u2']
+    );
+
+    try {
+        $request = new ServerRequest('GET', 'https://music.example.test/');
+        $disconnected = $this->app->handle($request);
+        $this->assertSame(200, $disconnected->getStatusCode());
+        $this->assertStringContainsString('Not connected', (string)$disconnected->getBody());
+        $this->assertStringNotContainsString('Other channel', (string)$disconnected->getBody());
+
+        $database->execute(
+            'INSERT INTO google_connections VALUES (?,?,?,?,?,?)',
+            ['u1', 'channel-u1', 'My channel', 'unused', 'scope', 'generation-u1']
+        );
+        $connected = $this->app->handle($request);
+        $this->assertSame(200, $connected->getStatusCode());
+        $this->assertStringContainsString('My channel', (string)$connected->getBody());
+        $this->assertStringContainsString('Creator media', (string)$connected->getBody());
+        $this->assertStringNotContainsString('Other channel', (string)$connected->getBody());
+    } finally {
+        $_SESSION = [];
+        session_write_close();
+        unset($database);
+    }
+});
+
+test('browser authorization preserves consent csrf and expiration checks', function (): void {
+    $this->app->handle(new ServerRequest('GET', 'https://music.example.test/'));
+    $_SESSION['user'] = 'u1';
+    $database = new Database($this->dir . '/service.sqlite');
+    $database->execute(
+        'INSERT INTO oauth_clients VALUES (?,?,?,?,?)',
+        ['browser-client', 'Browser fixture', json_encode(['https://chatgpt.com/callback']), null, 0]
+    );
+    $query = [
+        'client_id' => 'browser-client',
+        'redirect_uri' => 'https://chatgpt.com/callback',
+        'response_type' => 'code',
+        'scope' => 'playlists.read',
+        'state' => 'browser-state',
+        'resource' => 'https://music.example.test/mcp',
+        'code_challenge_method' => 'S256',
+        'code_challenge' => rtrim(strtr(base64_encode(hash('sha256', str_repeat('a', 64), true)), '+/', '-_'), '=')
+    ];
+
+    try {
+        $request = (new ServerRequest('GET', 'https://music.example.test/oauth/authorize'))->withQueryParams($query);
+        $needsConnection = $this->app->handle($request);
+        $this->assertSame(200, $needsConnection->getStatusCode());
+        $this->assertStringContainsString('Connect YouTube first', (string)$needsConnection->getBody());
+
+        $database->execute(
+            'INSERT INTO google_connections VALUES (?,?,?,?,?,?)',
+            ['u1', 'channel-u1', 'Fixture', 'unused', 'scope', 'generation']
+        );
+        $consent = $this->app->handle($request);
+        $this->assertSame(200, $consent->getStatusCode());
+        $this->assertStringContainsString('Authorize Browser fixture', (string)$consent->getBody());
+        $this->assertStringContainsString('playlists.read', (string)$consent->getBody());
+
+        $approval = (new ServerRequest('POST', 'https://music.example.test/oauth/authorize'))
+            ->withParsedBody(['decision' => 'approve', 'csrf' => 'wrong']);
+        $rejected = $this->app->handle($approval);
+        $this->assertSame(403, $rejected->getStatusCode());
+        $this->assertStringContainsString('CSRF_FAILED', (string)$rejected->getBody());
+        $this->assertSame($query, $_SESSION['authorization_query']);
+
+        $_SESSION['authorization_at'] = time() - 601;
+        $expired = $this->app->handle($approval->withParsedBody(['decision' => 'approve', 'csrf' => $_SESSION['csrf']]));
+        $this->assertSame(400, $expired->getStatusCode());
+        $this->assertStringContainsString('Authorization request expired', (string)$expired->getBody());
+
+        $this->app->handle($request);
+        $accepted = $this->app->handle($approval->withParsedBody(['decision' => 'approve', 'csrf' => $_SESSION['csrf']]));
+        $this->assertSame(302, $accepted->getStatusCode());
+        parse_str(parse_url($accepted->getHeaderLine('Location'), PHP_URL_QUERY), $redirectQuery);
+        $this->assertSame('browser-state', $redirectQuery['state']);
+        $this->assertNotEmpty($redirectQuery['code']);
+        $this->assertArrayNotHasKey('authorization_query', $_SESSION);
+        $this->assertArrayNotHasKey('authorization_at', $_SESSION);
+    } finally {
+        $_SESSION = [];
+        session_write_close();
+        unset($database);
+    }
+});
+
 test('efficiency options are advertised without changing write permissions', function (): void {
     $tools = array_column(\YouTubeMcp\Mcp\Tools::definitions(), null, 'name');
     $this->assertArrayHasKey('video_ids', $tools['create_playlist']->inputSchema['properties']);

@@ -24,31 +24,48 @@ trait ExtendedYouTubeFixtures
         $google = new Google($cfg, $db, new Vault($cfg->get('APP_KEY')), new Client(), $lock);
         $api = new class($responses) extends Api {
             public array $calls = [];
-            public function __construct(private array $responses) {}
+            public function __construct(private array $responses) {
+            }
             public function call(string $user, string $method, array $params = [], ?array $body = null, ?string $reservation = null, ?string $operation = null, ?string $token = null, int $ttl = 0): array {
                 $this->calls[] = [$user, $method, $params, $body];
                 $response = array_shift($this->responses);
-                if ($response instanceof \Throwable) { throw $response; }
-                if ($response === null) { throw new \LogicException('Unexpected ' . $method); }
+                if ($response instanceof \Throwable) {
+                    throw $response;
+                }
+                if ($response === null) {
+                    throw new \LogicException('Unexpected ' . $method);
+                }
+
                 return $response;
             }
         };
+
         return [new Service($google, $api, new Receipts($db, $lock), $lock), $api];
     }
 }
 
 uses(ExtendedYouTubeFixtures::class);
-beforeEach(function (): void { $this->dir = $this->tempDir(); });
-afterEach(function (): void { gc_collect_cycles(); $this->removeDir($this->dir); });
+beforeEach(function (): void {
+    $this->dir = $this->tempDir();
+});
+afterEach(function (): void {
+    gc_collect_cycles();
+    $this->removeDir($this->dir);
+});
 
 test('new reads enforce scopes and validate inputs before using the account', function (): void {
     [$service, $api] = $this->extended([]);
     foreach ([[[], 'get_video_details', ['video_ids' => ['aaaaaaaaaaa']], 'INSUFFICIENT_SERVICE_SCOPE'],
         [['videos.read'], 'get_video_details', ['video_ids' => ['invalid']], 'INVALID_ARGUMENT'],
         [['channels.read'], 'get_channel', ['handle' => '@fixture', 'channel_id' => 'UC' . str_repeat('a', 22)], 'INVALID_ARGUMENT']] as [$scopes, $tool, $args, $code]) {
-        try { $service->execute('u1', $scopes, $tool, $args); $this->fail('Invalid request accepted'); }
-        catch (ServiceError $error) { $this->assertSame($code, $error->reason); }
+        try {
+            $service->execute('u1', $scopes, $tool, $args);
+            $this->fail('Invalid request accepted');
+        } catch (ServiceError $error) {
+            $this->assertSame($code, $error->reason);
+        }
     }
+
     $this->assertSame([], $api->calls);
 });
 
@@ -75,8 +92,13 @@ test('search types and date boundaries stay distinct', function (): void {
     $service->execute('u1', ['videos.read'], 'search_playlists', ['query' => 'music', 'order' => 'date']);
     $this->assertSame('channel', $api->calls[0][2]['type']);
     $this->assertSame('playlist', $api->calls[1][2]['type']);
-    try { $service->execute('u1', ['videos.read'], 'search_playlists', ['query' => 'x', 'published_after' => '2022-01-01T00:00:00Z', 'published_before' => '2020-01-01T00:00:00Z']); $this->fail(); }
-    catch (ServiceError $error) { $this->assertSame('INVALID_ARGUMENT', $error->reason); }
+    try {
+        $service->execute('u1', ['videos.read'], 'search_playlists', ['query' => 'x', 'published_after' => '2022-01-01T00:00:00Z', 'published_before' => '2020-01-01T00:00:00Z']);
+        $this->fail();
+    } catch (ServiceError $error) {
+        $this->assertSame('INVALID_ARGUMENT', $error->reason);
+    }
+
     $this->assertCount(2, $api->calls);
 });
 
@@ -102,7 +124,12 @@ test('completed comment writes replay locally and uncertain writes never automat
     $args['operation_key'] = 'uncertain-comment-test';
     $result = $service->execute('u1', ['comments.write'], 'post_comment', $args);
     $this->assertSame('uncertain', $result['status']);
-    try { $service->execute('u1', ['comments.write'], 'post_comment', $args + ['resume' => true]); $this->fail(); }
-    catch (ServiceError $error) { $this->assertSame('RECONCILIATION_REQUIRED', $error->reason); }
+    try {
+        $service->execute('u1', ['comments.write'], 'post_comment', $args + ['resume' => true]);
+        $this->fail();
+    } catch (ServiceError $error) {
+        $this->assertSame('RECONCILIATION_REQUIRED', $error->reason);
+    }
+
     $this->assertCount(2, $api->calls);
 });

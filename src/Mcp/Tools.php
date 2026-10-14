@@ -21,7 +21,7 @@ final class Tools
         $playlist = ['type' => 'string', 'pattern' => '^[A-Za-z0-9_-]{10,100}$'];
         $item = ['type' => 'string', 'minLength' => 1, 'maxLength' => 256, 'pattern' => '^[A-Za-z0-9_-]+$'];
         $page = ['page_token' => $string, 'page_size' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 50]];
-        $op = [
+        $operationProperties = [
             'operation_key' => ['type' => 'string', 'pattern' => '^[A-Za-z0-9._-]{8,128}$'],
             'resume' => [
                 'type' => 'boolean',
@@ -48,7 +48,7 @@ final class Tools
                 [
                     'video_id' => ['type' => 'string', 'minLength' => 11, 'maxLength' => 500],
                     'rating' => ['type' => 'string', 'enum' => ['like', 'dislike', 'none']]
-                ] + $op,
+                ] + $operationProperties,
                 ['video_id', 'rating', 'operation_key']
             ],
             'list_subscriptions' => [
@@ -58,12 +58,12 @@ final class Tools
             ],
             'subscribe_artist' => [
                 'Subscribe to an artist YouTube channel using its UC channel ID; also supports other channels.',
-                ['channel_id' => ['type' => 'string', 'pattern' => '^UC[A-Za-z0-9_-]{22}$']] + $op,
+                ['channel_id' => ['type' => 'string', 'pattern' => '^UC[A-Za-z0-9_-]{22}$']] + $operationProperties,
                 ['channel_id', 'operation_key']
             ],
             'unsubscribe_artist' => [
                 'Unsubscribe from a YouTube channel using its UC channel ID.',
-                ['channel_id' => ['type' => 'string', 'pattern' => '^UC[A-Za-z0-9_-]{22}$']] + $op,
+                ['channel_id' => ['type' => 'string', 'pattern' => '^UC[A-Za-z0-9_-]{22}$']] + $operationProperties,
                 ['channel_id', 'operation_key']
             ],
             'get_connection_status' => ['Show the connected YouTube channel.', [], []],
@@ -113,7 +113,7 @@ final class Tools
                         'items' => ['type' => 'string', 'minLength' => 11, 'maxLength' => 500]
                     ],
                     'duplicate_policy' => ['type' => 'string', 'enum' => ['skip', 'allow']]
-                ] + $op,
+                ] + $operationProperties,
                 ['title', 'operation_key']
             ],
             'update_playlist' => [
@@ -123,7 +123,7 @@ final class Tools
                     'title' => $title,
                     'description' => $description,
                     'privacy' => $privacy
-                ] + $op,
+                ] + $operationProperties,
                 ['playlist_id', 'operation_key']
             ],
             'add_tracks' => [
@@ -132,12 +132,12 @@ final class Tools
                     'playlist_id' => $playlist,
                     'video_ids' => $array(['type' => 'string', 'minLength' => 11, 'maxLength' => 500]),
                     'duplicate_policy' => ['type' => 'string', 'enum' => ['skip', 'allow']]
-                ] + $op,
+                ] + $operationProperties,
                 ['playlist_id', 'video_ids', 'operation_key']
             ],
             'remove_tracks' => [
                 'Remove specific occurrences by playlist-item ID, not video ID.',
-                ['playlist_id' => $playlist, 'playlist_item_ids' => $array($item) + ['uniqueItems' => true]] + $op,
+                ['playlist_id' => $playlist, 'playlist_item_ids' => $array($item) + ['uniqueItems' => true]] + $operationProperties,
                 ['playlist_id', 'playlist_item_ids', 'operation_key']
             ],
             'move_track' => [
@@ -146,37 +146,38 @@ final class Tools
                     'playlist_id' => $playlist,
                     'playlist_item_id' => $item,
                     'position' => ['type' => 'integer', 'minimum' => 0, 'maximum' => 999]
-                ] + $op,
+                ] + $operationProperties,
                 ['playlist_id', 'playlist_item_id', 'position', 'operation_key']
             ],
             'delete_playlist' => [
                 'Permanently delete an owned playlist when requested.',
-                ['playlist_id' => $playlist] + $op,
+                ['playlist_id' => $playlist] + $operationProperties,
                 ['playlist_id', 'operation_key']
             ],
         ];
         $specs['search_tracks'][1] += \YouTubeMcp\YouTube\Tools::searchFilters();
         $specs += \YouTubeMcp\YouTube\Tools::specs() + \YouTubeMcp\Playlist\WorkflowTools::specs() + \YouTubeMcp\YouTube\CreatorTools::specs();
         $result = [];
-        foreach ($specs as $name => [$desc, $props, $required]) {
+        foreach ($specs as $name => [$toolDescription, $properties, $required]) {
             $write = in_array($name, Service::WRITES, true);
             if (!$write) {
-                $props['response_detail'] = [
+                $properties['response_detail'] = [
                     'type' => 'string',
                     'enum' => ['compact', 'full'],
                     'description' => 'Compact by default; full includes available upstream details or the complete local receipt.'
                 ];
             }
+
             $result[] = new Tool(
                 $name,
                 null,
                 [
                     'type' => 'object',
-                    'properties' => $props ?: new stdClass(),
+                    'properties' => $properties ?: new stdClass(),
                     'required' => $required,
                     'additionalProperties' => false
                 ],
-                $desc,
+                $toolDescription,
                 ToolAnnotations::fromArray(
                     [
                         'readOnlyHint' => !$write,
@@ -210,6 +211,7 @@ final class Tools
                 ]
             );
         }
+
         return $result;
     }
 
@@ -225,21 +227,22 @@ final class Tools
                 try {
                     $detail = $arguments['response_detail'] ?? 'compact';
                     unset($arguments['response_detail']);
-                    $r = $this->service->execute(
+                    $result = $this->service->execute(
                         $this->identity['id'],
                         $this->identity['scopes'],
                         $this->name,
                         $arguments
                     );
-                    $r = $detail === 'full' ? $r : Presentation::compact($this->name, $r);
+                    $result = $detail === 'full' ? $result : Presentation::compact($this->name, $result);
+
                     return new CallToolResult(
                         [
                             new TextContent(
-                                'Result in structuredContent' . (isset($r['status']) ? ': ' . $r['status'] : '.')
+                                'Result in structuredContent' . (isset($result['status']) ? ': ' . $result['status'] : '.')
                             )
                         ],
-                        isset($r['status']) && $r['status'] !== 'completed',
-                        $r
+                        isset($result['status']) && $result['status'] !== 'completed',
+                        $result
                     );
                 } catch (ServiceError $e) {
                     return new CallToolResult([new TextContent($e->reason . ': ' . $e->getMessage())],

@@ -26,6 +26,7 @@ final class Google
         if (!$this->config->get('GOOGLE_CLIENT_ID')) {
             throw new ServiceError('SETUP_REQUIRED', 'Configure Google OAuth credentials first.', [], 503);
         }
+
         $args = [
             'client_id' => $this->config->get('GOOGLE_CLIENT_ID'),
             'redirect_uri' => $this->config->url() . '/google/callback',
@@ -38,6 +39,7 @@ final class Google
         if ($youtube) {
             $args += ['access_type' => 'offline', 'prompt' => 'consent'];
         }
+
         return 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query($args);
     }
 
@@ -82,21 +84,23 @@ final class Google
                 401
             );
         }
+
         return $response['data'] + ['expires_at' => time() + (int)($response['data']['expires_in'] ?? 3600)];
     }
 
     public function identity(string $accessToken): array
     {
-        $r = $this->http->request(
+        $response = $this->http->request(
             'GET',
             'https://openidconnect.googleapis.com/v1/userinfo',
             ['Authorization: Bearer ' . $accessToken]
         );
-        $p = $r['data'];
-        if ($r['status'] !== 200 || empty($p['sub']) || ($p['email_verified'] ?? false) !== true) {
+        $profile = $response['data'];
+        if ($response['status'] !== 200 || empty($profile['sub']) || ($profile['email_verified'] ?? false) !== true) {
             throw new ServiceError('INVALID_IDENTITY', 'Google did not provide a verified identity.', [], 401);
         }
-        return ['subject' => 'https://accounts.google.com|' . $p['sub'], 'email' => strtolower($p['email'])];
+
+        return ['subject' => 'https://accounts.google.com|' . $profile['sub'], 'email' => strtolower($profile['email'])];
     }
 
     public function signIn(array $identity): string
@@ -113,7 +117,7 @@ final class Google
             throw new ServiceError('REGISTRATION_DISABLED', 'Your account is not invited to this installation.', [], 403
             );
         }
-        // Stable installation-local identity keeps daily user limits after account recreation.
+        // Keep usage history tied to the same installation-local identity after account recreation.
         $id = substr(
             hash_hmac('sha256', $identity['subject'], base64_decode($this->config->get('APP_KEY'), true)),
             0,
@@ -123,6 +127,7 @@ final class Google
             'INSERT INTO users VALUES (?,?,?,?) ON CONFLICT(subject) DO NOTHING',
             [$id, $identity['subject'], $identity['email'], time()]
         );
+
         return $this->db->one('SELECT id FROM users WHERE subject=?', [$identity['subject']])['id'];
     }
 
@@ -135,6 +140,7 @@ final class Google
                 'Offline YouTube permission is required. Reconnect and grant access.'
             );
         }
+
         $this->lock->run(
             'account:' . $user,
             fn() => $this->db->transaction(function () use ($user, $tokens, $channel, $scopes) {
@@ -162,19 +168,21 @@ final class Google
             $tokens = $this->vault->decrypt($connection['tokens']);
             if (($tokens['expires_at'] ?? 0) <= time() + 60) {
                 try {
-                    $new = $this->token(['grant_type' => 'refresh_token', 'refresh_token' => $tokens['refresh_token']]);
+                    $refreshedTokens = $this->token(['grant_type' => 'refresh_token', 'refresh_token' => $tokens['refresh_token']]);
                 } catch (ServiceError $e) {
                     if ($e->reason === 'GOOGLE_RECONNECT_REQUIRED') {
                         $this->db->execute('UPDATE oauth_tokens SET revoked=1 WHERE user_id=?', [$user]);
                     }
                     throw $e;
                 }
-                $tokens = array_replace($tokens, $new);
+
+                $tokens = array_replace($tokens, $refreshedTokens);
                 $this->db->execute(
                     'UPDATE google_connections SET tokens=? WHERE user_id=?',
                     [$this->vault->encrypt($tokens), $user]
                 );
             }
+
             return $tokens['access_token'];
         });
     }
@@ -196,21 +204,24 @@ final class Google
                 if ($connection) {
                     $tokens = $this->vault->decrypt($connection['tokens']);
                     try {
-                        $r = $this->http->request(
+                        $response = $this->http->request(
                             'POST',
                             'https://oauth2.googleapis.com/revoke',
                             ['Content-Type: application/x-www-form-urlencoded'],
                             http_build_query(['token' => $tokens['refresh_token']])
                         );
-                        $revoked = $r['status'] === 200;
+                        $revoked = $response['status'] === 200;
                     } catch (ServiceError) {
+                        // Local disconnection still proceeds; the result reports unconfirmed Google revocation.
                     }
                 }
+
                 $this->db->transaction(function () use ($user) {
                     $this->db->execute('DELETE FROM google_connections WHERE user_id=?', [$user]);
                     $this->db->execute('UPDATE oauth_tokens SET revoked=1 WHERE user_id=?', [$user]);
                     $this->db->execute('DELETE FROM api_cache WHERE user_id=?', [$user]);
                 });
+
                 return ['local_disconnected' => true, 'google_revoked' => $revoked];
             })
         );

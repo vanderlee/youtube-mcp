@@ -53,10 +53,12 @@ trait PlaylistTestHelpers
                 if ($r === null) {
                     throw new \LogicException('Unexpected API call ' . $method);
                 }
+
                 return $r;
             }
         };
         $service = new Service($google, $api, new Budget($db, $cfg), new Receipts($db, $locks), $locks);
+
         return [$service, $api];
     }
 
@@ -99,8 +101,13 @@ test('enhanced video search forwards validated filters without extra detail read
     $this->assertSame('10', $api->calls[0][1]['videoCategoryId']);
     $this->assertSame('date', $api->calls[0][1]['order']);
     $this->assertSame('next', $result['next_page_token']);
-    try { $service->execute('u1', ['playlists.read'], 'search_tracks', ['query' => 'fixture', 'duration' => 'invalid']); $this->fail(); }
-    catch (ServiceError $error) { $this->assertSame('INVALID_ARGUMENT', $error->reason); }
+    try {
+        $service->execute('u1', ['playlists.read'], 'search_tracks', ['query' => 'fixture', 'duration' => 'invalid']);
+        $this->fail();
+    } catch (ServiceError $error) {
+        $this->assertSame('INVALID_ARGUMENT', $error->reason);
+    }
+
     $this->assertCount(1, $api->calls);
 });
 
@@ -132,6 +139,7 @@ test('preference permissions do not follow playlist permissions', function (): v
             $this->assertSame('INSUFFICIENT_SERVICE_SCOPE', $e->reason);
         }
     }
+
     $this->assertSame([], $api->calls);
 });
 
@@ -220,6 +228,7 @@ test('write scope enforced before any api call', function (): void {
     } catch (ServiceError $e) {
         $this->assertSame('INSUFFICIENT_SERVICE_SCOPE', $e->reason);
     }
+
     $this->assertSame([], $api->calls);
 });
 
@@ -438,6 +447,7 @@ test('uncertain create with tracks cannot resume', function (): void {
     } catch (ServiceError $e) {
         $this->assertSame('RECONCILIATION_REQUIRED', $e->reason);
     }
+
     $this->assertCount(2, $api->calls);
 });
 

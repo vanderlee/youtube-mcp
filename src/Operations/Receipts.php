@@ -16,8 +16,9 @@ final class Receipts
 
     public function get(string $user, string $id): array
     {
-        $r = $this->db->one('SELECT receipt FROM operations WHERE id=? AND user_id=?', [$id, $user]);
-        return $r ? json_decode($r['receipt'], true) : throw new ServiceError(
+        $row = $this->db->one('SELECT receipt FROM operations WHERE id=? AND user_id=?', [$id, $user]);
+
+        return $row ? json_decode($row['receipt'], true) : throw new ServiceError(
             'OPERATION_NOT_FOUND',
             'Operation was not found.',
             [],
@@ -37,6 +38,7 @@ final class Receipts
         }
         unset($args['resume']);
         $hash = hash('sha256', json_encode($this->normalized($args), JSON_THROW_ON_ERROR));
+
         return $this->locks->run(
             'operation:' . $user . ':' . $key,
             function () use ($user, $generation, $tool, $key, $hash, $resume, $work) {
@@ -53,6 +55,7 @@ final class Receipts
                             409
                         );
                     }
+
                     $receipt = json_decode($row['receipt'], true);
                     if ($row['status'] === 'completed' || !$resume) {
                         return $receipt;
@@ -88,6 +91,7 @@ final class Receipts
                         ]
                     );
                 }
+
                 $save = function () use (&$receipt) {
                     $this->db->execute(
                         'UPDATE operations SET status=?,receipt=?,updated_at=? WHERE id=?',
@@ -103,6 +107,7 @@ final class Receipts
                     if (array_key_exists($id, $receipt['completed'])) {
                         return $receipt['completed'][$id];
                     }
+
                     $receipt['status'] = 'running';
                     $receipt['pending_step'] = $id;
                     unset($receipt['error']);
@@ -111,6 +116,7 @@ final class Receipts
                     $receipt['completed'][$id] = $result;
                     unset($receipt['pending_step']);
                     $save();
+
                     return $result;
                 };
                 try {
@@ -132,11 +138,13 @@ final class Receipts
                     $save();
                     throw $e;
                 }
+
                 $save();
                 $this->db->execute(
                     'INSERT INTO audit_events(user_id,action,target,outcome,created_at) VALUES (?,?,?,?,?)',
                     [$user, $tool, $receipt['operation_id'], $receipt['status'], time()]
                 );
+
                 return $receipt;
             }
         );
@@ -150,6 +158,7 @@ final class Receipts
         if (!array_is_list($value)) {
             ksort($value);
         }
-        return array_map(fn($v) => $this->normalized($v), $value);
+
+        return array_map(fn($item) => $this->normalized($item), $value);
     }
 }

@@ -52,10 +52,12 @@ class Api
                 return json_decode($cached['value'], true);
             }
         }
+
         $access = $token ?? $this->google?->accessToken($user);
         if (!$access) {
             throw new ServiceError('GOOGLE_RECONNECT_REQUIRED', 'No connected account.', [], 401);
         }
+
         $attempt = 0;
         do {
             $request = $this->budget->dispatch($user, $method, $reservation, $operation);
@@ -70,6 +72,7 @@ class Api
                 $this->budget->outcome($request, 'uncertain');
                 throw $e;
             }
+
             $status = $response['status'];
             $data = $response['data'];
             $this->budget->outcome($request, $status < 300 ? 'success' : 'rejected');
@@ -82,8 +85,10 @@ class Api
                         [$key, $user, json_encode($data), time() + $ttl]
                     );
                 }
+
                 return $data;
             }
+
             $reason = (string)($data['error']['errors'][0]['reason'] ?? 'unknown');
             if (in_array($reason, ['quotaExceeded', 'dailyLimitExceeded'], true)) {
                 throw new ServiceError(
@@ -114,6 +119,7 @@ class Api
                     502
                 );
             }
+
             $code = match (true) {
                 $status === 401 => 'GOOGLE_RECONNECT_REQUIRED',
                 $reason === 'insufficientPermissions' => 'INSUFFICIENT_GOOGLE_SCOPE',

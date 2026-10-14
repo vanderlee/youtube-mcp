@@ -25,10 +25,11 @@ final class Tools
         $channel = ['type' => 'string', 'pattern' => '^UC[A-Za-z0-9_-]{22}$'];
         $page = ['page_token' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 512],
             'page_size' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 50]];
-        $op = ['operation_key' => ['type' => 'string', 'pattern' => '^[A-Za-z0-9._-]{8,128}$'], 'resume' => ['type' => 'boolean']];
+        $operationProperties = ['operation_key' => ['type' => 'string', 'pattern' => '^[A-Za-z0-9._-]{8,128}$'], 'resume' => ['type' => 'boolean']];
         $text = ['type' => 'string', 'minLength' => 1, 'maxLength' => 5000];
         $search = ['query' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 200]] + $page
             + array_diff_key(self::searchFilters(), ['duration' => true, 'category_id' => true]);
+
         return [
             'get_video_details' => ['Read up to 50 videos, statistics, duration and returned availability restrictions; omitted IDs are reported separately.',
                 ['video_ids' => ['type' => 'array', 'minItems' => 1, 'maxItems' => 50, 'uniqueItems' => true, 'items' => $video]], ['video_ids']],
@@ -40,20 +41,25 @@ final class Tools
             'list_comments' => ['Read one page of top-level video comment threads. Embedded replies may be incomplete.',
                 ['video_id' => $video, 'order' => ['type' => 'string', 'enum' => ['time', 'relevance']]] + $page, ['video_id']],
             'list_comment_replies' => ['Read one page of replies to a top-level comment.', ['comment_id' => $id] + $page, ['comment_id']],
-            'post_comment' => ['Post a top-level comment as your connected channel.', ['video_id' => $video, 'text' => $text] + $op, ['video_id', 'text', 'operation_key']],
-            'reply_to_comment' => ['Reply to a top-level comment as your connected channel.', ['comment_id' => $id, 'text' => $text] + $op, ['comment_id', 'text', 'operation_key']],
-            'update_comment' => ['Edit a comment authored by your confirmed channel.', ['comment_id' => $id, 'text' => $text] + $op, ['comment_id', 'text', 'operation_key']],
-            'delete_comment' => ['Delete a comment authored by your confirmed channel.', ['comment_id' => $id] + $op, ['comment_id', 'operation_key']],
+            'post_comment' => ['Post a top-level comment as your connected channel.', ['video_id' => $video, 'text' => $text] + $operationProperties, ['video_id', 'text', 'operation_key']],
+            'reply_to_comment' => ['Reply to a top-level comment as your connected channel.', ['comment_id' => $id, 'text' => $text] + $operationProperties, ['comment_id', 'text', 'operation_key']],
+            'update_comment' => ['Edit a comment authored by your confirmed channel.', ['comment_id' => $id, 'text' => $text] + $operationProperties, ['comment_id', 'text', 'operation_key']],
+            'delete_comment' => ['Delete a comment authored by your confirmed channel.', ['comment_id' => $id] + $operationProperties, ['comment_id', 'operation_key']],
             'moderate_comments' => ['Publish, hold or reject up to 20 comments on videos owned by your confirmed channel.',
                 ['comment_ids' => ['type' => 'array', 'minItems' => 1, 'maxItems' => 20, 'uniqueItems' => true, 'items' => $id],
-                    'status' => ['type' => 'string', 'enum' => ['published', 'heldForReview', 'rejected']]] + $op, ['comment_ids', 'status', 'operation_key']],
+                    'status' => ['type' => 'string', 'enum' => ['published', 'heldForReview', 'rejected']]] + $operationProperties, ['comment_ids', 'status', 'operation_key']],
         ];
     }
 
     public static function scope(string $tool): string
     {
-        if ($tool === 'moderate_comments') { return 'comments.moderate'; }
-        if (str_contains($tool, 'comment')) { return in_array($tool, self::WRITES, true) ? 'comments.write' : 'comments.read'; }
+        if ($tool === 'moderate_comments') {
+            return 'comments.moderate';
+        }
+        if (str_contains($tool, 'comment')) {
+            return in_array($tool, self::WRITES, true) ? 'comments.write' : 'comments.read';
+        }
+
         return in_array($tool, ['get_channel', 'list_channel_uploads', 'search_channels'], true) ? 'channels.read' : 'videos.read';
     }
 }

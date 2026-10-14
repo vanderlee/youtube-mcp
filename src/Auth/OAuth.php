@@ -42,12 +42,13 @@ final class OAuth
 
     public function metadata(): array
     {
-        $u = $this->config->url();
+        $issuer = $this->config->url();
+
         return [
-            'issuer' => $u,
-            'authorization_endpoint' => $u . '/oauth/authorize',
-            'token_endpoint' => $u . '/oauth/token',
-            'registration_endpoint' => $u . '/oauth/register',
+            'issuer' => $issuer,
+            'authorization_endpoint' => $issuer . '/oauth/authorize',
+            'token_endpoint' => $issuer . '/oauth/token',
+            'registration_endpoint' => $issuer . '/oauth/register',
             'scopes_supported' => \YouTubeMcp\Auth\Scope::SUPPORTED,
             'response_types_supported' => ['code'],
             'grant_types_supported' => ['authorization_code', 'refresh_token'],
@@ -66,10 +67,12 @@ final class OAuth
                 429
             );
         }
+
         $redirects = $data['redirect_uris'] ?? [];
         if (!is_array($redirects) || !$redirects || count($redirects) > 5) {
             throw new ServiceError('invalid_client_metadata', 'Supply permitted redirect_uris.');
         }
+
         foreach ($redirects as $uri) {
             if (!is_string($uri) || !in_array($uri, $this->config->list('OAUTH_REDIRECT_URIS'), true)) {
                 error_log(json_encode([
@@ -79,10 +82,12 @@ final class OAuth
                 throw new ServiceError('invalid_redirect_uri', 'Callback URL is not in the operator allowlist.');
             }
         }
+
         $method = $data['token_endpoint_auth_method'] ?? 'none';
         if (!in_array($method, ['none', 'client_secret_post', 'client_secret_basic'], true)) {
             throw new ServiceError('invalid_client_metadata', 'Unsupported client authentication.');
         }
+
         $id = bin2hex(random_bytes(24));
         $secret = $method === 'none' ? null : bin2hex(random_bytes(32));
         $name = mb_substr((string)($data['client_name'] ?? 'ChatGPT'), 0, 100);
@@ -96,6 +101,7 @@ final class OAuth
                 (int)($secret !== null)
             ]
         );
+
         return [
                 'client_id' => $id,
                 'client_name' => $name,
@@ -109,16 +115,17 @@ final class OAuth
 
     public function validateAuthorization(ServerRequestInterface $request
     ): AuthorizationRequestInterface {
-        $q = $request->getQueryParams();
-        if (($q['resource'] ?? null) !== $this->config->url() . '/mcp') {
+        $query = $request->getQueryParams();
+        if (($query['resource'] ?? null) !== $this->config->url() . '/mcp') {
             throw new ServiceError('invalid_target', 'The resource must be this service MCP endpoint.');
         }
-        if (($q['code_challenge_method'] ?? null) !== 'S256' || !preg_match(
+        if (($query['code_challenge_method'] ?? null) !== 'S256' || !preg_match(
                 '/^[A-Za-z0-9_-]{43}$/',
-                (string)($q['code_challenge'] ?? '')
+                (string)($query['code_challenge'] ?? '')
             )) {
             throw new ServiceError('invalid_request', 'PKCE S256 is required.');
         }
+
         return $this->server->validateAuthorizationRequest($request);
     }
 
@@ -141,6 +148,7 @@ final class OAuth
             if (!$this->db->one('SELECT id FROM users WHERE id=?', [$claims['sub']])) {
                 throw new RuntimeException('Unknown user.');
             }
+
             return ['id' => $claims['sub'], 'scopes' => (array)($claims['scopes'] ?? [])];
         } catch (Throwable) {
             throw new ServiceError(

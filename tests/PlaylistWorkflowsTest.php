@@ -20,7 +20,10 @@ trait WorkflowFixtures
         $db = $this->database();
         $this->user($db);
         $this->user($db, 'u2');
-        foreach (['u1', 'u2'] as $user) { $db->execute('INSERT INTO google_connections VALUES (?,?,?,?,?,?)', [$user, 'channel-' . $user, 'Fixture', 'unused', 'scope', 'generation-' . $user]); }
+        foreach (['u1', 'u2'] as $user) {
+            $db->execute('INSERT INTO google_connections VALUES (?,?,?,?,?,?)', [$user, 'channel-' . $user, 'Fixture', 'unused', 'scope', 'generation-' . $user]);
+        }
+
         $cfg = $this->config();
         $locks = new Lock($this->dir);
         $google = new Google($cfg, $db, new Vault($cfg->get('APP_KEY')), new Client(), $locks);
@@ -30,46 +33,65 @@ trait WorkflowFixtures
             public ?int $failAt = null;
             public bool $uncertain = false;
             private int $nextId = 0;
-            public function __construct(public array $playlists) {}
+            public function __construct(public array $playlists) {
+            }
             public function call(string $user, string $method, array $params = [], ?array $body = null, ?string $reservation = null, ?string $operation = null, ?string $token = null, int $ttl = 0): array {
                 $this->calls[] = [$user, $method, $params, $body];
                 if ($method === 'playlists.list') {
                     $playlist = $this->playlists[$params['id']] ?? null;
+
                     return ['items' => $playlist ? [['id' => $params['id'], 'snippet' => ['channelId' => $playlist['owner']], 'contentDetails' => ['itemCount' => count($playlist['items'])]]] : []];
                 }
                 if ($method === 'playlistItems.list') {
                     $items = $this->playlists[$params['playlistId']]['items'] ?? [];
-                    foreach ($items as $position => &$item) { $item['snippet']['position'] = $position; }
+                    foreach ($items as $position => &$item) {
+                        $item['snippet']['position'] = $position;
+                    }
                     unset($item);
                     $offset = (int)($params['pageToken'] ?? 0);
                     $size = $params['maxResults'];
+
                     return ['items' => array_slice($items, $offset, $size)] + ($offset + $size < count($items) ? ['nextPageToken' => (string)($offset + $size)] : []);
                 }
                 if ($method === 'videos.list') {
                     return ['items' => array_map(fn($id) => ['id' => $id, 'status' => ['privacyStatus' => 'private'], 'contentDetails' => ['regionRestriction' => ['blocked' => ['NL']]]], array_filter(explode(',', $params['id']), fn($id) => $id !== 'bbbbbbbbbbb'))];
                 }
+
                 $this->writes++;
-                if ($this->failAt === $this->writes) { throw new ServiceError($this->uncertain ? 'UPSTREAM_UNCERTAIN' : 'YOUTUBE_REQUEST_REJECTED', 'fixture failure'); }
+                if ($this->failAt === $this->writes) {
+                    throw new ServiceError($this->uncertain ? 'UPSTREAM_UNCERTAIN' : 'YOUTUBE_REQUEST_REJECTED', 'fixture failure');
+                }
                 if ($method === 'playlists.insert') {
                     $this->playlists['PLcopy0000000'] = ['owner' => 'channel-' . $user, 'items' => [], 'privacy' => $body['status']['privacyStatus']];
+
                     return ['id' => 'PLcopy0000000'];
                 }
                 if ($method === 'playlistItems.insert') {
                     $id = 'new-' . ++$this->nextId;
                     $this->playlists[$body['snippet']['playlistId']]['items'][] = ['id' => $id, 'snippet' => ['resourceId' => $body['snippet']['resourceId'], 'title' => 'added']];
+
                     return ['id' => $id];
                 }
+
                 foreach ($this->playlists as &$playlist) {
                     foreach ($playlist['items'] as $index => $item) {
-                        if ($item['id'] !== ($params['id'] ?? $body['id'] ?? '')) { continue; }
+                        if ($item['id'] !== ($params['id'] ?? $body['id'] ?? '')) {
+                            continue;
+                        }
                         array_splice($playlist['items'], $index, 1);
-                        if ($method === 'playlistItems.update') { array_splice($playlist['items'], $body['snippet']['position'], 0, [$item]); return ['id' => $item['id']]; }
+                        if ($method === 'playlistItems.update') {
+                            array_splice($playlist['items'], $body['snippet']['position'], 0, [$item]);
+
+                            return ['id' => $item['id']];
+                        }
+
                         return [];
                     }
                 }
                 throw new \LogicException('Unexpected ' . $method);
             }
         };
+
         return [new Workflows($google, $api, new Receipts($db, $locks), $locks), $api, $db];
     }
     private function occurrence(string $id, string $video, string $title = 'Title'): array
@@ -79,12 +101,20 @@ trait WorkflowFixtures
 }
 
 uses(WorkflowFixtures::class);
-beforeEach(function (): void { $this->dir = $this->tempDir(); });
-afterEach(function (): void { gc_collect_cycles(); $this->removeDir($this->dir); });
+beforeEach(function (): void {
+    $this->dir = $this->tempDir();
+});
+afterEach(function (): void {
+    gc_collect_cycles();
+    $this->removeDir($this->dir);
+});
 
 test('copy defaults private and bounded writes require explicit resume without duplicating creation or entries', function (): void {
     $items = [];
-    for ($n = 0; $n < 24; $n++) { $items[] = $this->occurrence('source-' . $n, str_pad((string)$n, 11, 'a')); }
+    for ($n = 0; $n < 24; $n++) {
+        $items[] = $this->occurrence('source-' . $n, str_pad((string)$n, 11, 'a'));
+    }
+
     $items[] = $items[0]; $items[24]['id'] = 'extra-duplicate';
     [$service, $api] = $this->workflows(['PLsource00000' => ['owner' => 'public-channel', 'items' => $items]]);
     $args = ['source_playlist_id' => 'PLsource00000', 'title' => 'Copy', 'operation_key' => 'copy-workflow-test'];
@@ -119,8 +149,13 @@ test('sort and duplicate removal preserve the correct occurrences', function ():
 test('workflow scopes and destination ownership fail before writes and scans never silently truncate', function (): void {
     $items = array_map(fn($n) => $this->occurrence('entry-' . $n, 'aaaaaaaaaaa'), range(0, 1000));
     [$service, $api] = $this->workflows(['PLtarget00000' => ['owner' => 'channel-u1', 'items' => $items]]);
-    try { $service->execute('u1', [], 'sort_playlist', ['playlist_id' => 'PLtarget00000', 'order' => 'title_asc', 'operation_key' => 'scope-workflow-test']); $this->fail(); }
-    catch (ServiceError $error) { $this->assertSame('INSUFFICIENT_SERVICE_SCOPE', $error->reason); }
+    try {
+        $service->execute('u1', [], 'sort_playlist', ['playlist_id' => 'PLtarget00000', 'order' => 'title_asc', 'operation_key' => 'scope-workflow-test']);
+        $this->fail();
+    } catch (ServiceError $error) {
+        $this->assertSame('INSUFFICIENT_SERVICE_SCOPE', $error->reason);
+    }
+
     $this->assertSame([], $api->calls);
     $result = $service->execute('u2', ['playlists.write'], 'sort_playlist', ['playlist_id' => 'PLtarget00000', 'order' => 'title_asc', 'operation_key' => 'owner-workflow-test']);
     $this->assertSame('NOT_PLAYLIST_OWNER', $result['error']['code']);
@@ -144,8 +179,13 @@ test('a saved workflow detects external edits and uncertain changes cannot resum
     $args['operation_key'] = 'uncertain-workflow-test';
     $first = $service->execute('u1', ['playlists.write'], 'copy_playlist', $args);
     $this->assertSame('uncertain', $first['status']);
-    try { $service->execute('u1', ['playlists.write'], 'copy_playlist', $args + ['resume' => true]); $this->fail(); }
-    catch (ServiceError $error) { $this->assertSame('RECONCILIATION_REQUIRED', $error->reason); }
+    try {
+        $service->execute('u1', ['playlists.write'], 'copy_playlist', $args + ['resume' => true]);
+        $this->fail();
+    } catch (ServiceError $error) {
+        $this->assertSame('RECONCILIATION_REQUIRED', $error->reason);
+    }
+
     $this->assertSame(2, $api->writes);
 });
 

@@ -19,11 +19,12 @@ final class WorkflowTools
     {
         $playlist = ['type' => 'string', 'pattern' => '^[A-Za-z0-9_-]{10,100}$'];
         $item = ['type' => 'string', 'minLength' => 1, 'maxLength' => 256, 'pattern' => '^[A-Za-z0-9_-]+$'];
-        $op = [
+        $operationProperties = [
             'operation_key' => ['type' => 'string', 'pattern' => '^[A-Za-z0-9._-]{8,128}$'],
             'resume' => ['type' => 'boolean']
         ];
         $duplicates = ['type' => 'string', 'enum' => ['skip', 'allow']];
+
         return [
             'copy_playlist' => [
                 'Copy an accessible playlist into a new private-by-default playlist. Full scans max 1000 entries; max 20 writes per call, explicit resume for remaining steps.',
@@ -32,7 +33,7 @@ final class WorkflowTools
                     'title' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 150],
                     'privacy' => ['type' => 'string', 'enum' => ['private', 'unlisted', 'public']],
                     'duplicate_policy' => $duplicates
-                ] + $op,
+                ] + $operationProperties,
                 ['source_playlist_id', 'title', 'operation_key']
             ],
             'merge_playlists' => [
@@ -47,7 +48,7 @@ final class WorkflowTools
                     ],
                     'playlist_id' => $playlist,
                     'duplicate_policy' => $duplicates
-                ] + $op,
+                ] + $operationProperties,
                 ['source_playlist_ids', 'playlist_id', 'operation_key']
             ],
             'sort_playlist' => [
@@ -58,12 +59,12 @@ final class WorkflowTools
                         'type' => 'string',
                         'enum' => ['title_asc', 'title_desc', 'added_oldest', 'added_newest']
                     ]
-                ] + $op,
+                ] + $operationProperties,
                 ['playlist_id', 'order', 'operation_key']
             ],
             'remove_playlist_duplicates' => [
                 'Remove repeated video occurrences from an owned playlist, retaining first or last occurrence. Max 1000 entries, 20 writes per call.',
-                ['playlist_id' => $playlist, 'keep' => ['type' => 'string', 'enum' => ['first', 'last']]] + $op,
+                ['playlist_id' => $playlist, 'keep' => ['type' => 'string', 'enum' => ['first', 'last']]] + $operationProperties,
                 ['playlist_id', 'operation_key']
             ],
             'reorder_playlist' => [
@@ -77,7 +78,7 @@ final class WorkflowTools
                         'uniqueItems' => true,
                         'items' => $item
                     ]
-                ] + $op,
+                ] + $operationProperties,
                 ['playlist_id', 'playlist_item_ids', 'operation_key']
             ],
             'transfer_tracks' => [
@@ -93,7 +94,7 @@ final class WorkflowTools
                         'items' => $item
                     ],
                     'move' => ['type' => 'boolean']
-                ] + $op,
+                ] + $operationProperties,
                 ['source_playlist_id', 'playlist_id', 'playlist_item_ids', 'operation_key']
             ],
             'compare_playlists' => [

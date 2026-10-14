@@ -16,6 +16,7 @@ final class Config
     public static function load(string $root): self
     {
         Dotenv::createImmutable($root)->safeLoad();
+
         return new self(array_merge($_SERVER, $_ENV), $root);
     }
 
@@ -27,12 +28,14 @@ final class Config
     public function get(string $name, string $default = ''): string
     {
         $environment = getenv($name);
+
         return (string)($this->values[$name] ?? ($environment === false ? $default : $environment));
     }
 
     public function storage(): string
     {
         $path = $this->get('STORAGE_PATH', 'var');
+
         return str_starts_with($path, '/') || preg_match(
             '/^[A-Za-z]:[\\\\\/]/',
             $path
@@ -49,6 +52,7 @@ final class Config
         if (!preg_match('~^https://[^/]+$~', $this->url())) {
             throw new RuntimeException('APP_URL must be an HTTPS origin without a path.');
         }
+
         $key = base64_decode($this->get('APP_KEY'), true);
         if ($key === false || strlen($key) !== 32) {
             throw new RuntimeException('APP_KEY must be a base64 encoded 32-byte key.');

@@ -20,42 +20,45 @@ final class Presentation
                 if (!is_array($value) || !isset($value['id'])) {
                     continue;
                 }
+
                 $entries[] = ['step' => $step, 'id' => $value['id']] + array_filter([
                         'video_id' => $value['snippet']['resourceId']['videoId'] ?? null,
                         'position' => $value['snippet']['position'] ?? null
-                    ], fn($v) => $v !== null);
+                    ], fn($item) => $item !== null);
             }
             if ($entries) {
                 $result['entries'] = $entries;
             }
+
             return $result;
         }
         if ($tool === 'get_playlist') {
             return [
                 'playlist' => self::playlist($data['playlist']),
-                'entries' => array_map(fn($v) => self::entry($v), $data['entries']),
+                'entries' => array_map(fn($item) => self::entry($item), $data['entries']),
                 'next_page_token' => $data['next_page_token'] ?? null,
                 'links' => $data['links']
             ];
         }
         if (in_array($tool, ['list_playlists', 'list_liked_tracks', 'list_subscriptions', 'get_track_ratings'], true)) {
-            $items = array_map(function ($v) use ($tool) {
+            $items = array_map(function ($item) use ($tool) {
                 return match ($tool) {
-                    'list_playlists' => self::playlist($v),
+                    'list_playlists' => self::playlist($item),
                     'list_liked_tracks' => [
-                        'video_id' => $v['id'],
-                        'title' => $v['snippet']['title'] ?? '',
-                        'channel' => $v['snippet']['channelTitle'] ?? '',
-                        'duration' => $v['contentDetails']['duration'] ?? null
+                        'video_id' => $item['id'],
+                        'title' => $item['snippet']['title'] ?? '',
+                        'channel' => $item['snippet']['channelTitle'] ?? '',
+                        'duration' => $item['contentDetails']['duration'] ?? null
                     ],
                     'list_subscriptions' => [
-                        'subscription_id' => $v['id'],
-                        'channel_id' => $v['snippet']['resourceId']['channelId'] ?? null,
-                        'title' => $v['snippet']['title'] ?? ''
+                        'subscription_id' => $item['id'],
+                        'channel_id' => $item['snippet']['resourceId']['channelId'] ?? null,
+                        'title' => $item['snippet']['title'] ?? ''
                     ],
-                    default => ['video_id' => $v['videoId'], 'rating' => $v['rating']]
+                    default => ['video_id' => $item['videoId'], 'rating' => $item['rating']]
                 };
             }, $data['items'] ?? []);
+
             return ['items' => $items, 'next_page_token' => $data['nextPageToken'] ?? null] +
                 array_intersect_key($data, array_flip(['music_availability']));
         }
@@ -63,23 +66,23 @@ final class Presentation
         return self::omitThumbnails($data);
     }
 
-    private static function playlist(array $v): array
+    private static function playlist(array $item): array
     {
         return [
-            'playlist_id' => $v['id'],
-            'title' => $v['snippet']['title'] ?? '',
-            'privacy' => $v['status']['privacyStatus'] ?? null,
-            'item_count' => $v['contentDetails']['itemCount'] ?? null
+            'playlist_id' => $item['id'],
+            'title' => $item['snippet']['title'] ?? '',
+            'privacy' => $item['status']['privacyStatus'] ?? null,
+            'item_count' => $item['contentDetails']['itemCount'] ?? null
         ];
     }
 
-    private static function entry(array $v): array
+    private static function entry(array $item): array
     {
         return [
-            'playlist_item_id' => $v['id'],
-            'video_id' => $v['snippet']['resourceId']['videoId'] ?? $v['contentDetails']['videoId'] ?? null,
-            'title' => $v['snippet']['title'] ?? '',
-            'position' => $v['snippet']['position'] ?? null
+            'playlist_item_id' => $item['id'],
+            'video_id' => $item['snippet']['resourceId']['videoId'] ?? $item['contentDetails']['videoId'] ?? null,
+            'title' => $item['snippet']['title'] ?? '',
+            'position' => $item['snippet']['position'] ?? null
         ];
     }
 
@@ -93,6 +96,7 @@ final class Presentation
             }
         }
         unset($value);
+
         return $data;
     }
 }

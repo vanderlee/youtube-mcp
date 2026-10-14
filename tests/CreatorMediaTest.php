@@ -27,43 +27,61 @@ trait CreatorFixtures
             $db->execute('INSERT INTO google_connections VALUES (?,?,?,?,?,?)', [$user, 'channel-' . $user, 'Fixture',
                 $vault->encrypt(['access_token' => 'dummy-access', 'expires_at' => time() + 3600]), Google::YOUTUBE_SCOPE, 'generation-' . $user]);
         }
+
         $google = new Google($cfg, $db, $vault, new Client(), $locks);
         $api = new class($apiResponses) extends Api {
             public array $calls = [];
-            public function __construct(private array $responses) {}
+            public function __construct(private array $responses) {
+            }
             public function call(string $user, string $method, array $params = [], ?array $body = null, ?string $reservation = null, ?string $operation = null, ?string $token = null, int $ttl = 0): array {
                 $this->calls[] = [$method, $params, $body];
                 $result = array_shift($this->responses);
-                if ($result === null) { throw new \LogicException('Unexpected ' . $method); }
+                if ($result === null) {
+                    throw new \LogicException('Unexpected ' . $method);
+                }
+
                 return $result;
             }
         };
         $http = new class($mediaResponses) extends MediaClient {
             public array $calls = [];
-            public function __construct(private array $responses) {}
+            public function __construct(private array $responses) {
+            }
             public function exchange(string $method, string $url, array $headers, ?string $body = null, ?string $path = null): array {
                 $this->calls[] = [$method, $url, $headers, $body, $path];
                 $result = array_shift($this->responses);
-                if ($result instanceof \Throwable) { throw $result; }
-                if ($result === null) { throw new \LogicException('Unexpected media request'); }
+                if ($result instanceof \Throwable) {
+                    throw $result;
+                }
+                if ($result === null) {
+                    throw new \LogicException('Unexpected media request');
+                }
+
                 return $result;
             }
         };
         $assets = new MediaStore($db, $cfg);
         $media = new MediaApi($google, new Budget($db, $cfg), $vault, $http);
         $receipts = new Receipts($db, $locks);
+
         return [new CreatorService($google, $api, $receipts, $locks, $assets, $media), $assets, $api, $http, $db, $google, $media, $receipts, $locks];
     }
     private function captionUpload(): UploadedFile
     {
         $text = "1\n00:00:01,000 --> 00:00:02,000\nPrivate fixture caption\n";
+
         return new UploadedFile(Stream::create($text), strlen($text), UPLOAD_ERR_OK, '../../unsafe-name.srt', 'text/plain');
     }
 }
 
 uses(CreatorFixtures::class);
-beforeEach(function (): void { $this->dir = $this->tempDir(); });
-afterEach(function (): void { gc_collect_cycles(); $this->removeDir($this->dir); });
+beforeEach(function (): void {
+    $this->dir = $this->tempDir();
+});
+afterEach(function (): void {
+    gc_collect_cycles();
+    $this->removeDir($this->dir);
+});
 
 test('staged media ignores filenames and is isolated by user channel generation expiry and content hash', function (): void {
     [, $assets, , , $db, $google] = $this->creators();
@@ -74,12 +92,21 @@ test('staged media ignores filenames and is isolated by user channel generation 
     $this->assertFileExists($this->dir . '/media/' . $saved['asset_id']);
     $this->assertSame('text/plain', $file['mime']);
     foreach ([['u2', $google->connection('u2')], ['u1', array_replace($connection, ['generation' => 'new'])], ['u1', array_replace($connection, ['channel_id' => 'foreign'])]] as [$user, $binding]) {
-        try { $assets->get($user, $binding, $saved['asset_id']); $this->fail('Cross account media accepted'); }
-        catch (ServiceError $error) { $this->assertSame('MEDIA_NOT_FOUND', $error->reason); }
+        try {
+            $assets->get($user, $binding, $saved['asset_id']);
+            $this->fail('Cross account media accepted');
+        } catch (ServiceError $error) {
+            $this->assertSame('MEDIA_NOT_FOUND', $error->reason);
+        }
     }
     file_put_contents($file['path'], 'changed');
-    try { $assets->get('u1', $connection, $saved['asset_id']); $this->fail(); }
-    catch (ServiceError $error) { $this->assertSame('MEDIA_NOT_FOUND', $error->reason); }
+    try {
+        $assets->get('u1', $connection, $saved['asset_id']);
+        $this->fail();
+    } catch (ServiceError $error) {
+        $this->assertSame('MEDIA_NOT_FOUND', $error->reason);
+    }
+
     $db->execute('UPDATE media_assets SET created_at=0 WHERE id=?', [$saved['asset_id']]);
     $assets->cleanup(new Lock($this->dir . '/locks'));
     $this->assertFileDoesNotExist($file['path']);
@@ -88,8 +115,13 @@ test('staged media ignores filenames and is isolated by user channel generation 
 
 test('creator scopes and ownership checks stop writes before dispatch', function (): void {
     [$service, , $api, $http] = $this->creators([['items' => [['id' => 'aaaaaaaaaaa', 'snippet' => ['channelId' => 'foreign']]]]]);
-    try { $service->execute('u1', ['playlists.write'], 'delete_video', ['video_id' => 'aaaaaaaaaaa', 'operation_key' => 'creator-owner-test']); $this->fail(); }
-    catch (ServiceError $error) { $this->assertSame('INSUFFICIENT_SERVICE_SCOPE', $error->reason); }
+    try {
+        $service->execute('u1', ['playlists.write'], 'delete_video', ['video_id' => 'aaaaaaaaaaa', 'operation_key' => 'creator-owner-test']);
+        $this->fail();
+    } catch (ServiceError $error) {
+        $this->assertSame('INSUFFICIENT_SERVICE_SCOPE', $error->reason);
+    }
+
     $this->assertSame([], $api->calls);
     $result = $service->execute('u1', ['videos.write'], 'delete_video', ['video_id' => 'aaaaaaaaaaa', 'operation_key' => 'creator-owner-test']);
     $this->assertSame('NOT_VIDEO_OWNER', $result['error']['code']);
@@ -129,8 +161,13 @@ test('media upload receipts encrypt session urls and interrupted content cannot 
     $this->assertStringNotContainsString('private-session', json_encode($result));
     $this->assertStringNotContainsString('dummy-access', json_encode($result));
     $this->assertSame('PUT', $http->calls[1][0]);
-    try { $receipts->run('u1', $connection['generation'], 'upload_caption', $args + ['resume' => true], $work); $this->fail(); }
-    catch (ServiceError $error) { $this->assertSame('RECONCILIATION_REQUIRED', $error->reason); }
+    try {
+        $receipts->run('u1', $connection['generation'], 'upload_caption', $args + ['resume' => true], $work);
+        $this->fail();
+    } catch (ServiceError $error) {
+        $this->assertSame('RECONCILIATION_REQUIRED', $error->reason);
+    }
+
     $this->assertCount(2, $http->calls);
 });
 
@@ -138,8 +175,12 @@ test('upload session urls reject offsite hosts credentials nonhttps and unexpect
     foreach (['https://evil.test/upload/youtube/v3/videos', 'http://www.googleapis.com/upload/youtube/v3/videos',
         'https://user@www.googleapis.com/upload/youtube/v3/videos', 'https://www.googleapis.com/other',
         'https://www.googleapis.com:443/upload/youtube/v3/videos'] as $url) {
-        try { MediaApi::validateLocation($url); $this->fail('Unsafe session URL accepted'); }
-        catch (ServiceError $error) { $this->assertSame('UPSTREAM_UNCERTAIN', $error->reason); }
+        try {
+            MediaApi::validateLocation($url);
+            $this->fail('Unsafe session URL accepted');
+        } catch (ServiceError $error) {
+            $this->assertSame('UPSTREAM_UNCERTAIN', $error->reason);
+        }
     }
 });
 
@@ -155,8 +196,13 @@ test('caption download requires an exact track binding and preserves bounded raw
         ['items' => [['id' => 'aaaaaaaaaaa', 'snippet' => ['channelId' => 'channel-u1']]]],
         ['items' => [['id' => 'track', 'snippet' => ['videoId' => 'bbbbbbbbbbb']]]],
     ]);
-    try { $service->execute('u1', ['captions.read'], 'download_caption', ['video_id' => 'aaaaaaaaaaa', 'caption_id' => 'track']); $this->fail(); }
-    catch (ServiceError $error) { $this->assertSame('CAPTION_NOT_FOUND', $error->reason); }
+    try {
+        $service->execute('u1', ['captions.read'], 'download_caption', ['video_id' => 'aaaaaaaaaaa', 'caption_id' => 'track']);
+        $this->fail();
+    } catch (ServiceError $error) {
+        $this->assertSame('CAPTION_NOT_FOUND', $error->reason);
+    }
+
     $this->assertSame([], $http->calls);
 });
 
@@ -207,7 +253,12 @@ test('owned media purge removes only that users files and malformed captions are
     $this->assertFileExists($this->dir . '/media/' . $second['asset_id']);
     $this->assertSame('u2', $db->one('SELECT user_id FROM media_assets')['user_id']);
     $bad = 'not a timed subtitle';
-    try { $assets->save('u1', $google->connection('u1'), new UploadedFile(Stream::create($bad), strlen($bad), UPLOAD_ERR_OK, 'bad.srt')); $this->fail(); }
-    catch (ServiceError $error) { $this->assertSame('INVALID_MEDIA', $error->reason); }
+    try {
+        $assets->save('u1', $google->connection('u1'), new UploadedFile(Stream::create($bad), strlen($bad), UPLOAD_ERR_OK, 'bad.srt'));
+        $this->fail();
+    } catch (ServiceError $error) {
+        $this->assertSame('INVALID_MEDIA', $error->reason);
+    }
+
     $this->assertSame(1, (int)$db->one('SELECT COUNT(*) AS n FROM media_assets')['n']);
 });

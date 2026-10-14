@@ -26,18 +26,20 @@ final class OAuthRepository implements ClientRepositoryInterface, AccessTokenRep
 
     public function getClientEntity(string $clientIdentifier): ?ClientEntityInterface
     {
-        $r = $this->db->one('SELECT * FROM oauth_clients WHERE id=?', [$clientIdentifier]);
-        return $r ? new Client(
-            $r['id'], $r['name'], json_decode($r['redirect_uris'], true), (bool)$r['confidential']
+        $row = $this->db->one('SELECT * FROM oauth_clients WHERE id=?', [$clientIdentifier]);
+
+        return $row ? new Client(
+            $row['id'], $row['name'], json_decode($row['redirect_uris'], true), (bool)$row['confidential']
         ) : null;
     }
 
     public function validateClient(string $clientIdentifier, ?string $clientSecret, ?string $grantType): bool
     {
-        $r = $this->db->one('SELECT * FROM oauth_clients WHERE id=?', [$clientIdentifier]);
-        return $r && (!$r['confidential'] || ($clientSecret !== null && password_verify(
+        $row = $this->db->one('SELECT * FROM oauth_clients WHERE id=?', [$clientIdentifier]);
+
+        return $row && (!$row['confidential'] || ($clientSecret !== null && password_verify(
                         $clientSecret,
-                        $r['secret_hash']
+                        $row['secret_hash']
                     )));
     }
 
@@ -67,6 +69,7 @@ final class OAuthRepository implements ClientRepositoryInterface, AccessTokenRep
         foreach ($scopes as $scope) {
             $token->addScope($scope);
         }
+
         return $token;
     }
 
@@ -112,12 +115,12 @@ final class OAuthRepository implements ClientRepositoryInterface, AccessTokenRep
 
     public function persistNewRefreshToken(RefreshTokenEntityInterface $refreshTokenEntity): void
     {
-        $a = $refreshTokenEntity->getAccessToken();
+        $accessToken = $refreshTokenEntity->getAccessToken();
         $this->persist(
             'refresh',
             $refreshTokenEntity->getIdentifier(),
-            $a->getUserIdentifier(),
-            $a->getClient()->getIdentifier(),
+            $accessToken->getUserIdentifier(),
+            $accessToken->getClient()->getIdentifier(),
             $refreshTokenEntity->getExpiryDateTime()->getTimestamp()
         );
     }
@@ -139,8 +142,9 @@ final class OAuthRepository implements ClientRepositoryInterface, AccessTokenRep
 
     private function revoked(string $id, string $kind): bool
     {
-        $r = $this->db->one('SELECT * FROM oauth_tokens WHERE id=? AND kind=?', [hash('sha256', $id), $kind]);
-        return !$r || $r['revoked'] || $r['expires_at'] <= time();
+        $row = $this->db->one('SELECT * FROM oauth_tokens WHERE id=? AND kind=?', [hash('sha256', $id), $kind]);
+
+        return !$row || $row['revoked'] || $row['expires_at'] <= time();
     }
 
     public function revokeAuthCode(string $codeId): void

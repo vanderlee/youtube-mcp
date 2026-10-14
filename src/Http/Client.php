@@ -10,9 +10,9 @@ class Client
 {
     public function request(string $method, string $url, array $headers = [], ?string $body = null): array
     {
-        $ch = curl_init($url);
+        $curl = curl_init($url);
         curl_setopt_array(
-            $ch,
+            $curl,
             [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_CUSTOMREQUEST => $method,
@@ -24,13 +24,14 @@ class Client
             ]
         );
         if ($body !== null) {
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+            curl_setopt($curl, CURLOPT_POSTFIELDS, $body);
         }
-        $raw = curl_exec($ch);
-        $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        $error = curl_errno($ch);
-        curl_close($ch);
-        if ($raw === false || $error) {
+
+        $raw = curl_exec($curl);
+        $status = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+        $curlError = curl_errno($curl);
+        curl_close($curl);
+        if ($raw === false || $curlError) {
             throw new ServiceError(
                 'UPSTREAM_UNCERTAIN',
                 'Upstream request did not complete. A dispatched change may have succeeded; inspect the operation before retrying.',
@@ -38,10 +39,12 @@ class Client
                 502
             );
         }
+
         $data = $raw === '' ? [] : json_decode($raw, true);
         if (!is_array($data)) {
             throw new ServiceError('UPSTREAM_UNCERTAIN', 'Upstream response could not be decoded.', [], 502);
         }
+
         return ['status' => $status, 'data' => $data];
     }
 }

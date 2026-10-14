@@ -33,6 +33,7 @@ final class Database
             && in_array($match[1], ['google_connections', 'oauth_tokens', 'quota_windows', 'quota_requests'], true)) {
             $details['database_table'] = $match[1];
         }
+
         return $details;
     }
 
@@ -43,6 +44,7 @@ final class Database
         if ($path !== ':memory:' && !is_dir(dirname($path))) {
             mkdir(dirname($path), 0700, true);
         }
+
         $this->pdo = new PDO(
             'sqlite:' . $path,
             null,
@@ -61,6 +63,7 @@ final class Database
     {
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
+
         return $stmt;
     }
 
@@ -72,6 +75,7 @@ final class Database
                 if ($this->one('SELECT name FROM migrations WHERE name=?', [$name])) {
                     continue;
                 }
+
                 $this->transaction(function () use ($sql, $name) {
                     $this->pdo->exec($sql);
                     $this->execute('INSERT INTO migrations VALUES (?)', [$name]);
@@ -95,14 +99,17 @@ final class Database
         if (trim($parts[0]) !== '') {
             throw new \RuntimeException('SQL must follow a migration section marker.');
         }
+
         $sections = [];
         for ($index = 1; $index < count($parts); $index += 2) {
             $name = $parts[$index];
             if (isset($sections[$name])) {
                 throw new \RuntimeException('Duplicate migration section.');
             }
+
             $sections[$name] = $parts[$index + 1];
         }
+
         return $sections;
     }
 
@@ -117,6 +124,7 @@ final class Database
         try {
             $result = $fn();
             $this->pdo->exec('COMMIT');
+
             return $result;
         } catch (Throwable $e) {
             $this->pdo->exec('ROLLBACK');

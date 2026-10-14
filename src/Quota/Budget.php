@@ -88,6 +88,7 @@ final class Budget
         ?string $operation = null
     ): string {
         [$bucket, $cost] = $this->method($method);
+
         return $this->db->transaction(function () use ($user, $method, $operation, $bucket, $cost) {
             $window = $this->window();
             foreach (['project', 'user:' . $user] as $owner) {
@@ -96,11 +97,13 @@ final class Budget
                     [$window, $owner, $bucket, $cost]
                 );
             }
+
             $id = bin2hex(random_bytes(16));
             $this->db->execute(
                 'INSERT INTO quota_requests VALUES (?,?,?,?,?,?,?,?,?)',
                 [$id, $user, $operation, $method, $bucket, $cost, $window, 'dispatched', $this->now()]
             );
+
             return $id;
         });
     }
@@ -110,6 +113,7 @@ final class Budget
         if (!isset(self::COSTS[$method])) {
             throw new LogicException('Unknown YouTube method: ' . $method);
         }
+
         return [$method === 'search.list' ? 'search' : 'general', self::COSTS[$method]];
     }
 
@@ -140,19 +144,20 @@ final class Budget
             'buckets' => []
         ];
         foreach (['general', 'search'] as $bucket) {
-            $u = $this->db->one(
+            $userUsage = $this->db->one(
                 'SELECT spent FROM quota_windows WHERE window=? AND owner=? AND bucket=?',
                 [$this->window(), 'user:' . $user, $bucket]
             );
-            $p = $this->db->one(
+            $projectUsage = $this->db->one(
                 'SELECT spent FROM quota_windows WHERE window=? AND owner=? AND bucket=?',
                 [$this->window(), 'project', $bucket]
             );
             $result['buckets'][$bucket] = [
-                'user_spent' => (int)($u['spent'] ?? 0),
-                'project_spent' => (int)($p['spent'] ?? 0)
+                'user_spent' => (int)($userUsage['spent'] ?? 0),
+                'project_spent' => (int)($projectUsage['spent'] ?? 0)
             ];
         }
+
         return $result;
     }
 
