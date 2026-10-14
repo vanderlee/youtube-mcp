@@ -7,6 +7,7 @@ other work despite not being explicitly asked to do so.
 
 ## To do
 
+- Keep session open for longer by default
 - Add support for other LLM's
   - Claude
   - Gemini
