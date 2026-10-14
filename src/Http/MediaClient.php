@@ -77,7 +77,7 @@ class MediaClient
             if (is_resource($file)) {
                 fclose($file);
             }
-            curl_close($curl);
+            unset($curl);
         }
     }
 }

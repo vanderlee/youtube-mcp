@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Tests;
+namespace YouTubeMcp\Tests\Deployment;
 
 trait DeploymentTestHelpers
 {
@@ -78,11 +78,11 @@ beforeEach(function (): void {
     foreach (['bin', 'vendor', 'public'] as $d) {
         mkdir($this->dir . '/' . $d);
     }
-    copy(dirname(__DIR__) . '/bin/deploy-config.php', $this->dir . '/bin/deploy-config.php');
-    copy(dirname(__DIR__) . '/.env.example', $this->dir . '/.env.example');
+    copy(dirname(__DIR__, 2) . '/bin/deploy-config.php', $this->dir . '/bin/deploy-config.php');
+    copy(dirname(__DIR__, 2) . '/.env.example', $this->dir . '/.env.example');
     file_put_contents(
         $this->dir . '/vendor/autoload.php',
-        '<?php require ' . var_export(dirname(__DIR__) . '/vendor/autoload.php', true) . ';'
+        '<?php require ' . var_export(dirname(__DIR__, 2) . '/vendor/autoload.php', true) . ';'
     );
 });
 

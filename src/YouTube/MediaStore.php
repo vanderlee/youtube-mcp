@@ -69,6 +69,10 @@ final class MediaStore
     private function validateFile(string $path, int $size): string
     {
         $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($path);
+        // Linux libmagic identifies SRT separately; retain the caption text checks below.
+        if ($mime === 'application/x-subrip') {
+            $mime = 'text/plain';
+        }
         $allowed = [
             'video/mp4',
             'video/webm',

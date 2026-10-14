@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Tests;
+namespace YouTubeMcp\Tests\Auth;
 
 use YouTubeMcp\Auth\Vault;
+
+covers(\YouTubeMcp\Auth\Vault::class);
 
 test('encryption and wrong key', function (): void {
     $v = new Vault(base64_encode(random_bytes(32)));

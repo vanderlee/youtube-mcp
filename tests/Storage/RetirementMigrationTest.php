@@ -2,36 +2,16 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Tests;
+namespace YouTubeMcp\Tests\Storage;
 
-use YouTubeMcp\Auth\{OAuthRepository, Scope};
-use YouTubeMcp\Mcp\Tools;
 use YouTubeMcp\Storage\Database;
 
-test('expanded catalog retains official tools and never restores retired music permissions', function (): void {
-    $expected = ['list_liked_tracks', 'get_track_ratings', 'rate_track', 'list_subscriptions',
-        'subscribe_artist', 'unsubscribe_artist', 'get_connection_status', 'get_usage_status', 'get_operation',
-        'list_playlists', 'get_playlist', 'search_tracks', 'create_playlist', 'update_playlist', 'add_tracks',
-        'remove_tracks', 'move_track', 'delete_playlist'];
-    $actual = array_map(fn($tool) => $tool->name, Tools::definitions());
-    sort($expected);
-    sort($actual);
-    $this->assertSame([], array_diff($expected, $actual));
-    $this->assertCount(57, $actual);
-    $this->assertCount(count($actual), array_unique($actual));
-    foreach (Tools::definitions() as $tool) {
-        $this->assertContains(\YouTubeMcp\Playlist\Service::scope($tool->name), Scope::SUPPORTED);
-    }
-    $repo = new OAuthRepository($this->database(), 'https://music.example.test');
-    foreach (['catalog.read', 'discovery.read', 'library.read', 'library.write', 'history.read', 'history.write'] as $scope) {
-        $this->assertNull($repo->getScopeEntityByIdentifier($scope));
-    }
-});
+covers(Database::class);
 
 test('retirement migration removes only music credentials and preserves official connections and receipts', function (): void {
     $db = new Database(':memory:');
     $db->execute('CREATE TABLE migrations (name TEXT PRIMARY KEY)');
-    $root = dirname(__DIR__);
+    $root = dirname(__DIR__, 2);
     $sections = preg_split('/^-- Migration: ([a-zA-Z0-9_]+\.sql)\h*\r?\n/m', file_get_contents($root . '/migrations/001_initial.sql'), -1, PREG_SPLIT_DELIM_CAPTURE);
     for ($index = 1; $index <= 7; $index += 2) {
         $name = $sections[$index];

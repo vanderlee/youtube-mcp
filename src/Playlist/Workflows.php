@@ -205,7 +205,7 @@ final class Workflows
             $actions = $this->reorderActions($before[$target], $tool, $arguments);
         }
 
-        $targetCount = count($before[$target] ?? []);
+        $targetCount = $target === null ? 0 : count($before[$target] ?? []);
         foreach ($actions as $action) {
             if ($action['type'] === 'add') {
                 $targetCount++;
@@ -242,7 +242,8 @@ final class Workflows
             throw new ServiceError('INVALID_ARGUMENT', 'Source and destination playlists must differ.');
         }
 
-        $seen = array_fill_keys(array_filter(array_column($before[$target] ?? [], 'video_id')), true);
+        $targetEntries = $target === null ? [] : ($before[$target] ?? []);
+        $seen = array_fill_keys(array_filter(array_column($targetEntries, 'video_id')), true);
         $sourceCount = 0;
         foreach ($sources as $source) {
             if ($tool === 'transfer_tracks' && ($arguments['move'] ?? false)) {

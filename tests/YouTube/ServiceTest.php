@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Tests;
+namespace YouTubeMcp\Tests\YouTube;
 
 use YouTubeMcp\Auth\{Google, Vault};
 use YouTubeMcp\Http\Client;
@@ -10,6 +10,8 @@ use YouTubeMcp\Operations\Receipts;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Lock;
 use YouTubeMcp\YouTube\{Api, Service};
+
+covers(\YouTubeMcp\YouTube\Service::class);
 
 trait ExtendedYouTubeFixtures
 {

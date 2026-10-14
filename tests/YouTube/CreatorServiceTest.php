@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Tests;
+namespace YouTubeMcp\Tests\YouTube;
 
 use Nyholm\Psr7\{Stream, UploadedFile};
 use YouTubeMcp\Auth\{Google, Vault};
@@ -12,6 +12,10 @@ use YouTubeMcp\Quota\Budget;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Lock;
 use YouTubeMcp\YouTube\{Api, CreatorService, MediaApi, MediaStore};
+
+covers(\YouTubeMcp\YouTube\CreatorService::class);
+covers(\YouTubeMcp\YouTube\MediaStore::class);
+covers(\YouTubeMcp\YouTube\MediaApi::class);
 
 trait CreatorFixtures
 {

@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Tests;
+namespace YouTubeMcp\Tests\Operations;
 
 use YouTubeMcp\Operations\Receipts;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Lock;
+
+covers(\YouTubeMcp\Operations\Receipts::class);
 
 trait ReceiptsTestHelpers
 {

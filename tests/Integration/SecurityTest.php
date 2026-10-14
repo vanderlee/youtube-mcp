@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Tests;
+namespace YouTubeMcp\Tests\Integration;
 
 use DateTimeImmutable;
 use League\OAuth2\Server\CryptKey;
@@ -286,9 +286,11 @@ beforeEach(function (): void {
     $this->privateKey = $private;
     file_put_contents($this->dir . '/oauth-private.pem', $this->privateKey);
     file_put_contents($this->dir . '/oauth-public.pem', openssl_pkey_get_details($key)['key']);
+    chmod($this->dir . '/oauth-private.pem', 0600);
+    chmod($this->dir . '/oauth-public.pem', 0600);
     $this->cfg = $this->config(['STORAGE_PATH' => $this->dir, 'OAUTH_REDIRECT_URIS' => 'https://chatgpt.com/callback']);
     $this->db = new Database($this->dir . '/service.sqlite');
-    $this->db->migrate(dirname(__DIR__));
+    $this->db->migrate(dirname(__DIR__, 2));
     $this->user($this->db);
     $this->locks = new Lock($this->dir . '/locks');
     $this->oauth = new OAuth($this->db, $this->cfg, $this->locks);

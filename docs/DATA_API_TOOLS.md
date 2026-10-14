@@ -58,6 +58,8 @@ The existing Google `youtube.force-ssl` scope supports these official operations
 3. Choose a file: video MP4/WebM/MOV/AVI up to 64 MiB; PNG/JPEG image up to 2 MiB; UTF-8 timed SRT/VTT up to 1 MiB. MIME/content checks apply. The original filename is ignored.
 4. Use the returned `asset_id` in a creator tool. Alternatively grant `media.read` and use `list_media_assets`. Staging itself does not upload or publish anything to YouTube.
 
+Linux MIME databases may identify SRT files as `application/x-subrip`; staging normalizes this to `text/plain` and still enforces the UTF-8, timed-caption, and 1 MiB checks. Client-supplied MIME labels do not bypass content validation.
+
 Files live outside `public/` under private `STORAGE_PATH/media`, use random IDs and owner/channel/generation-bound database records, and expire after 24 hours. At most 50 active assets per user are allowed. SHA-256 checks reject changed files. No arbitrary server paths, remote URL downloads or binary MCP arguments are accepted. Reconnecting Google invalidates old assets. Account deletion removes owned files; the existing cleanup command removes expired files and old orphaned files. Preserve private ownership and backup controls for media too.
 
 Media uploads use Google's resumable-session protocol with one streamed content request per operation. Session URLs are encrypted in receipts and never printed. Individual calls time out after 20 seconds. Interrupted/HTTP 308 uploads are marked uncertain; no automatic chunk retransmission is attempted. Do not submit a new operation key to bypass an uncertain upload without checking whether the video or caption was created.

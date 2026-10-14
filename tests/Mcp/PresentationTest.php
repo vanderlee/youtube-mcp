@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Tests;
+namespace YouTubeMcp\Tests\Mcp;
 
 use YouTubeMcp\Mcp\Presentation;
+
+covers(\YouTubeMcp\Mcp\Presentation::class);
 
 test('compact listing retains ids and pagination with much smaller payload', function (): void {
     $raw = [

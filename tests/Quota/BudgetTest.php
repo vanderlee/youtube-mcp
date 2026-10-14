@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Tests;
+namespace YouTubeMcp\Tests\Quota;
 
 use YouTubeMcp\Quota\Budget;
+
+covers(\YouTubeMcp\Quota\Budget::class);
 
 test('legacy limits and breakers do not block requests', function (): void {
     $database = $this->database();

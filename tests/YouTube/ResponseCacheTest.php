@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Tests;
+namespace YouTubeMcp\Tests\YouTube;
 
 use YouTubeMcp\YouTube\ResponseCache;
+
+covers(\YouTubeMcp\YouTube\ResponseCache::class);
 
 test('playlist invalidation preserves other playlists searches and other users', function (): void {
     $cache = new ResponseCache($this->database());

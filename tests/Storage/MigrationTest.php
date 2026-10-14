@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Tests;
+namespace YouTubeMcp\Tests\Storage;
 
 use YouTubeMcp\Storage\Database;
 
 test('merged migrations preserve every historical upgrade point', function (int $completed): void {
-    $root = dirname(__DIR__);
+    $root = dirname(__DIR__, 2);
     $db = new Database(':memory:');
     $db->execute('CREATE TABLE migrations (name TEXT PRIMARY KEY)');
     $parts = preg_split('/^-- Migration: ([a-zA-Z0-9_]+\.sql)\h*\r?\n/m', file_get_contents($root . '/migrations/001_initial.sql'), -1, PREG_SPLIT_DELIM_CAPTURE);
@@ -43,7 +43,7 @@ test('merged migrations preserve every historical upgrade point', function (int 
 test('later standalone migrations work after the bundle and roll back failed SQL', function (): void {
     $root = $this->tempDir();
     mkdir($root . '/migrations');
-    copy(dirname(__DIR__) . '/migrations/001_initial.sql', $root . '/migrations/001_initial.sql');
+    copy(dirname(__DIR__, 2) . '/migrations/001_initial.sql', $root . '/migrations/001_initial.sql');
     file_put_contents($root . '/migrations/007_test.sql', 'CREATE TABLE migration_probe (id TEXT PRIMARY KEY);');
     file_put_contents($root . '/migrations/008_failure.sql', 'CREATE TABLE rollback_probe (id TEXT); INSERT INTO missing_table VALUES (1);');
     $db = new Database(':memory:');

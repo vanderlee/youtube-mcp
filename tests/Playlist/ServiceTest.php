@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Tests;
+namespace YouTubeMcp\Tests\Playlist;
 
 use YouTubeMcp\Auth\{Google, Vault};
 use YouTubeMcp\Http\Client;
@@ -12,6 +12,8 @@ use YouTubeMcp\Quota\Budget;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Lock;
 use YouTubeMcp\YouTube\Api;
+
+covers(\YouTubeMcp\Playlist\Service::class);
 
 trait PlaylistTestHelpers
 {

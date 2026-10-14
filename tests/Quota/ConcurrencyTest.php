@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Tests;
+namespace YouTubeMcp\Tests\Quota;
 
 use YouTubeMcp\Storage\Database;
 
 test('separate php workers are not locally quota limited', function (): void {
     $dir = $this->tempDir();
     $db = new Database($dir . '/test.sqlite');
-    $db->migrate(dirname(__DIR__));
+    $db->migrate(dirname(__DIR__, 2));
     unset($db);
     $ini = php_ini_loaded_file();
     $flags = [];
@@ -21,7 +21,7 @@ test('separate php workers are not locally quota limited', function (): void {
         foreach (['a', 'b'] as $user) {
             $command = array_merge([PHP_BINARY],
                 $flags,
-                [__DIR__ . '/concurrent-reserve.php', $dir . '/test.sqlite', $user]);
+                [dirname(__DIR__) . '/concurrent-reserve.php', $dir . '/test.sqlite', $user]);
             $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
             $this->assertIsResource($process);
             $workers[] = [$process, $pipes];

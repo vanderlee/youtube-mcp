@@ -9,6 +9,8 @@ use YouTubeMcp\{App};
 use YouTubeMcp\Auth\{Client, OAuthRepository, Scope};
 use YouTubeMcp\Storage\Database;
 
+covers(App::class);
+
 trait McpTestHelpers
 {
     private string $dir;
@@ -372,6 +374,8 @@ beforeEach(function (): void {
     openssl_pkey_export($key, $private);
     file_put_contents($this->dir . '/oauth-private.pem', $private);
     file_put_contents($this->dir . '/oauth-public.pem', openssl_pkey_get_details($key)['key']);
+    chmod($this->dir . '/oauth-private.pem', 0600);
+    chmod($this->dir . '/oauth-public.pem', 0600);
     $db = new Database($this->dir . '/service.sqlite');
     $db->migrate(dirname(__DIR__));
     $this->user($db);

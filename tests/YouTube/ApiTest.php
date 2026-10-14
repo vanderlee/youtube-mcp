@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Tests;
+namespace YouTubeMcp\Tests\YouTube;
 
 use YouTubeMcp\Http\Client;
 use YouTubeMcp\Quota\Budget;
@@ -10,6 +10,8 @@ use YouTubeMcp\ServiceError;
 use YouTubeMcp\YouTube\Api;
 use YouTubeMcp\Auth\{Google, Vault};
 use YouTubeMcp\Storage\Lock;
+
+covers(\YouTubeMcp\YouTube\Api::class);
 
 test('rating routes and empty write response', function (): void {
     $db = $this->database();

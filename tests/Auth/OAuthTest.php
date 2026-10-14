@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
-namespace YouTubeMcp\Tests;
+namespace YouTubeMcp\Tests\Auth;
 
 use Nyholm\Psr7\{Response, ServerRequest};
 use YouTubeMcp\Auth\{OAuth, User};
 use YouTubeMcp\ServiceError;
+
+covers(\YouTubeMcp\Auth\OAuth::class);
 
 trait OAuthTestHelpers
 {
@@ -155,6 +157,8 @@ beforeEach(function (): void {
     openssl_pkey_export($key, $private);
     file_put_contents($this->dir . '/oauth-private.pem', $private);
     file_put_contents($this->dir . '/oauth-public.pem', openssl_pkey_get_details($key)['key']);
+    chmod($this->dir . '/oauth-private.pem', 0600);
+    chmod($this->dir . '/oauth-public.pem', 0600);
 });
 
 afterEach(function (): void {
