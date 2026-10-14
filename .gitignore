@@ -6,5 +6,7 @@
 /var/*
 !/var/.gitkeep
 /.phpunit.cache/
+/.phpstan.cache/
+/.php-cs-fixer.cache
 /.composer-cache/
 /.idea/

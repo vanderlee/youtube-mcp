@@ -52,7 +52,7 @@ Keep AI-facing repository instructions in `AGENTS.md`.
   This path is machine-specific; check the installed PHP configuration if it is unavailable elsewhere.
 
 - Use fixtures, mocked HTTP responses, in-memory SQLite, or isolated temporary storage for automated tests. Do not run tests against a real user's playlists, tokens, or database.
-- Run `php -l` on changed PHP files and `composer audit` when changing dependencies. No repository-wide formatter or static-analysis command is currently configured; avoid unrelated formatting changes.
+- Run `php -l` on changed PHP files and `composer audit` when changing dependencies. Use `composer phpstan` for level-1 static analysis, `composer cs` for PHP_CodeSniffer, and `composer cs-check` for a PHP-CS-Fixer dry run (also available as Make targets). Apply `composer cs-fix` only to the intended formatting scope and avoid unrelated formatting changes. Existing style violations remain; CI gates tests and PHPStan.
 - Local tests do not establish live Google, ChatGPT, Music endpoint, or Plesk compatibility. State which checks ran and any live verification still needed.
 
 ## Storage, deployment, and documentation

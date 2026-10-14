@@ -1,0 +1,8 @@
+# Existing unused Config argument; keep the constructor unchanged in the QA rollout.
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Constructor of class YouTubeMcp\\Quota\\Budget has an unused parameter \$config\.$#'
+			identifier: constructor.unusedParameter
+			count: 1
+			path: src/Quota/Budget.php

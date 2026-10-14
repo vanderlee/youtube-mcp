@@ -117,12 +117,36 @@ composer test
 composer audit
 ```
 
+GNU Make provides the same commands through `make install`, `make test`, and `make audit`.
+Run `make phpstan` for PHPStan level 1, `make cs` for PHP_CodeSniffer, and
+`make cs-check` to preview PHP-CS-Fixer changes. `make cs-fix` applies formatting;
+review its diff before committing. `make qa` runs tests and all QA checks.
+Every QA target also has a matching Composer script, so Make is optional.
+
+PHPStan checks `src/`, `bin/`, and `public/` against PHP 8.2. Its initial baseline
+contains only the existing unused `Config` parameter in `Quota\Budget`'s
+constructor. New errors and obsolete baseline entries fail the check.
+PHP_CodeSniffer uses PSR-12; PHP-CS-Fixer uses the non-risky PER Coding Style 3.0
+preset (the installed tool does not yet provide a dedicated 3.1 preset).
+Both style tools check PHP files in `src/`, `tests/`, `bin/`, and `public/`, plus
+the fixer configuration, and exclude `HUMANS.md`. Existing style violations
+remain visible; this tooling change does not reformat the application.
+
+[GitHub Actions](.github/workflows/ci.yml) runs on pushes, pull requests, and
+manual dispatch. It installs locked development dependencies and runs tests on
+PHP 8.2 and 8.5, plus PHPStan on PHP 8.2. Style checks remain local until the
+existing violations are addressed; `make qa` currently reports those violations.
+CI uses test fixtures and needs no Google credentials or production configuration.
+
 On the current Windows development machine, required DLLs exist but are not enabled in the default PHP configuration. Run tests with:
 
 ```powershell
 $env:OPENSSL_CONF = 'C:/tools/php82/extras/ssl/openssl.cnf'
 php -d extension=fileinfo -d extension=pdo_sqlite -d extension=sodium vendor/bin/pest
 ```
+
+Make is optional on Windows. With those extensions enabled, use `composer phpstan`,
+`composer cs`, `composer cs-check`, or `composer cs-fix` directly.
 
 For a local HTTP smoke test only, run `php -S 127.0.0.1:8080 -t public public/router.php` with a temporary configuration, disabled secure cookies, and the configured Host header. Production configuration intentionally requires an HTTPS origin. Google callbacks and ChatGPT require a reachable HTTPS deployment; the PHP development server is not a production runtime.
 
