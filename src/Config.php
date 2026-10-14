@@ -53,6 +53,9 @@ final class Config
 
     public function validate(): void
     {
+        $this->clientOrigins();
+        $this->oauthRedirectOrigins();
+
         $ttl = $this->get('API_READ_CACHE_TTL', '30');
         if (!ctype_digit($ttl) || (int) $ttl > 300) {
             throw new RuntimeException('API_READ_CACHE_TTL must be an integer between 0 and 300 seconds.');
@@ -76,6 +79,47 @@ final class Config
     public function url(): string
     {
         return rtrim($this->get('APP_URL'), '/');
+    }
+
+    /** @return list<string> */
+    public function clientOrigins(): array
+    {
+        $origins = array_filter(array_map('trim', explode(',', $this->get(
+            'MCP_CLIENT_ORIGINS',
+            'https://chatgpt.com,https://claude.ai,https://claude.com',
+        ))));
+        foreach ($origins as $origin) {
+            if ($this->oauthOrigin($origin) !== $origin) {
+                throw new RuntimeException('MCP_CLIENT_ORIGINS must contain exact origins without paths.');
+            }
+        }
+
+        return array_values(array_unique([$this->url(), ...$origins]));
+    }
+
+    /** @return list<string> */
+    public function oauthRedirectOrigins(): array
+    {
+        return array_values(array_unique(array_map($this->oauthOrigin(...), $this->list('OAUTH_REDIRECT_URIS'))));
+    }
+
+    private function oauthOrigin(string $uri): string
+    {
+        $parts = parse_url($uri);
+        if (
+            $parts === false || !filter_var($uri, FILTER_VALIDATE_URL)
+            || preg_match('/[\s;\x27"<>]/', $uri)
+            || isset($parts['user']) || isset($parts['pass']) || isset($parts['fragment'])
+        ) {
+            throw new RuntimeException('OAuth client URLs must be valid HTTPS URLs or HTTP loopback URLs.');
+        }
+        $scheme = $parts['scheme'] ?? '';
+        $host = $parts['host'] ?? '';
+        if ($scheme !== 'https' && !($scheme === 'http' && in_array($host, ['localhost', '127.0.0.1', '[::1]'], true))) {
+            throw new RuntimeException('OAuth client URLs must be valid HTTPS URLs or HTTP loopback URLs.');
+        }
+
+        return $scheme . '://' . $host . (isset($parts['port']) ? ':' . $parts['port'] : '');
     }
 
     public function int(string $name, int $default): int

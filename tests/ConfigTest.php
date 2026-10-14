@@ -9,6 +9,30 @@ use YouTubeMcp\Config;
 
 covers(Config::class);
 
+test('client origins are exact and independent of callback destinations', function (): void {
+    $config = $this->config([
+        'MCP_CLIENT_ORIGINS' => 'https://claude.ai',
+        'OAUTH_REDIRECT_URIS' => 'https://claude.ai/api/mcp/auth_callback,http://localhost:8765/oauth/callback',
+    ]);
+    $config->validate();
+    expect($config->clientOrigins())->toBe(['https://music.example.test', 'https://claude.ai']);
+    expect($config->oauthRedirectOrigins())->toBe(['https://claude.ai', 'http://localhost:8765']);
+    expect($this->config(['MCP_CLIENT_ORIGINS' => ''])->clientOrigins())->toBe(['https://music.example.test']);
+});
+
+test('unsafe client security configuration fails closed', function (string $name, string $value): void {
+    expect(fn() => $this->config([$name => $value])->validate())->toThrow(RuntimeException::class);
+})->with([
+    ['MCP_CLIENT_ORIGINS', '*'],
+    ['MCP_CLIENT_ORIGINS', 'https://claude.ai/path'],
+    ['MCP_CLIENT_ORIGINS', 'https://claude.ai/'],
+    ['MCP_CLIENT_ORIGINS', 'https://user:pass@claude.ai'],
+    ['MCP_CLIENT_ORIGINS', 'http://attacker.test'],
+    ['OAUTH_REDIRECT_URIS', 'https://claude.ai/callback; form-action *'],
+    ['OAUTH_REDIRECT_URIS', 'javascript:alert(1)'],
+    ['OAUTH_REDIRECT_URIS', 'http://localhost.attacker.test/callback'],
+]);
+
 test('configuration resolves typed values and private storage paths', function (): void {
     $config = $this->config(['ENABLED' => 'yes', 'COUNT' => '12', 'MEMBERS' => ' a, ,b ', 'STORAGE_PATH' => 'private']);
 
@@ -39,7 +63,7 @@ test('invalid production configuration is rejected', function (array $values, st
 
 test('cache ttl boundaries are valid', function (string $ttl): void {
     $this->config(['API_READ_CACHE_TTL' => $ttl])->validate();
-    expect($this->config(['API_READ_CACHE_TTL' => $ttl])->int('API_READ_CACHE_TTL', -1))->toBe((int)$ttl);
+    expect($this->config(['API_READ_CACHE_TTL' => $ttl])->int('API_READ_CACHE_TTL', -1))->toBe((int) $ttl);
 })->with(['0', '300']);
 
 test('configuration loads an isolated environment file and retains its root', function (): void {

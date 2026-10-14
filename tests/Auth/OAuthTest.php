@@ -54,6 +54,52 @@ trait OAuthTestHelpers
 
 uses(OAuthTestHelpers::class);
 
+test('external clients use exact callbacks PKCE scoped tokens and refresh rotation', function (string $callback): void {
+    $db = $this->database();
+    $this->user($db);
+    $oauth = new OAuth($db, $this->config([
+        'STORAGE_PATH' => $this->dir, 'OAUTH_REDIRECT_URIS' => $callback,
+    ]));
+    $client = $oauth->register(['redirect_uris' => [$callback]], true);
+    expect(fn() => $oauth->register(['redirect_uris' => [$callback . '/other']], true))
+        ->toThrow(ServiceError::class);
+    $verifier = str_repeat('a', 64);
+    $query = [
+        'client_id' => $client['client_id'], 'redirect_uri' => $callback,
+        'response_type' => 'code', 'state' => 'external-state',
+        'scope' => 'playlists.read playlists.write',
+        'resource' => 'https://music.example.test/mcp',
+        'code_challenge_method' => 'S256',
+        'code_challenge' => rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '='),
+    ];
+    $authorization = $oauth->validateAuthorization(
+        (new ServerRequest('GET', 'https://music.example.test/oauth/authorize'))->withQueryParams($query),
+    );
+    $authorization->setUser(new User('u1'));
+    $authorization->setAuthorizationApproved(true);
+    $response = $oauth->server->completeAuthorizationRequest($authorization, new Response());
+    expect($response->getHeaderLine('Location'))->toStartWith($callback . '?');
+    parse_str(parse_url($response->getHeaderLine('Location'), PHP_URL_QUERY), $redirect);
+    expect($redirect['state'])->toBe('external-state');
+    $request = (new ServerRequest('POST', 'https://music.example.test/oauth/token'))->withParsedBody([
+        'grant_type' => 'authorization_code', 'client_id' => $client['client_id'],
+        'redirect_uri' => $callback, 'code' => $redirect['code'], 'code_verifier' => $verifier,
+        'resource' => 'https://music.example.test/mcp',
+    ]);
+    $tokens = json_decode((string) $oauth->exchange($request)->getBody(), true, 512, JSON_THROW_ON_ERROR);
+    $bearer = (new ServerRequest('POST', 'https://music.example.test/mcp'))
+        ->withHeader('Authorization', 'Bearer ' . $tokens['access_token']);
+    expect($oauth->authenticate($bearer)['scopes'])->toContain('playlists.read', 'playlists.write');
+    $refresh = $request->withParsedBody([
+        'grant_type' => 'refresh_token', 'client_id' => $client['client_id'],
+        'refresh_token' => $tokens['refresh_token'],
+    ]);
+    $next = json_decode((string) $oauth->exchange($refresh)->getBody(), true, 512, JSON_THROW_ON_ERROR);
+    expect($next['refresh_token'])->not->toBe($tokens['refresh_token']);
+    $db->execute('UPDATE oauth_tokens SET revoked=1 WHERE user_id=?', ['u1']);
+    expect(fn() => $oauth->authenticate($bearer))->toThrow(ServiceError::class);
+})->with(['https://claude.ai/api/mcp/auth_callback', 'http://localhost:8765/oauth/callback']);
+
 test('code pkce exchange audience and revocation', function (): void {
     [$db, $oauth, $client] = $this->environment();
     [$code, $verifier] = $this->code($oauth, $client);
@@ -66,7 +112,7 @@ test('code pkce exchange audience and revocation', function (): void {
     ];
     $request = (new ServerRequest('POST', 'https://music.example.test/oauth/token'))->withParsedBody($args);
     $r = $oauth->server->respondToAccessTokenRequest($request, new Response());
-    $tokens = json_decode((string)$r->getBody(), true);
+    $tokens = json_decode((string) $r->getBody(), true);
     $bearer = (new ServerRequest('POST', 'https://music.example.test/mcp'))->withHeader(
         'Authorization',
         'Bearer ' . $tokens['access_token'],
@@ -129,7 +175,7 @@ test('refresh rotates and cannot be replayed', function (): void {
             'code_verifier' => $verifier,
         ],
     );
-    $tokens = json_decode((string)$oauth->server->respondToAccessTokenRequest($r, new Response())->getBody(), true);
+    $tokens = json_decode((string) $oauth->server->respondToAccessTokenRequest($r, new Response())->getBody(), true);
     $refresh = $r->withParsedBody(
         [
             'grant_type' => 'refresh_token',
@@ -138,7 +184,7 @@ test('refresh rotates and cannot be replayed', function (): void {
         ],
     );
     $next = json_decode(
-        (string)$oauth->server->respondToAccessTokenRequest($refresh, new Response())->getBody(),
+        (string) $oauth->server->respondToAccessTokenRequest($refresh, new Response())->getBody(),
         true,
     );
     $this->assertNotSame($tokens['refresh_token'], $next['refresh_token']);

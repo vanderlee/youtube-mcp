@@ -1,4 +1,4 @@
-# Google and ChatGPT setup
+# Google and AI client setup
 
 ## Before connecting
 
@@ -109,7 +109,7 @@ Use browser developer tools and private Plesk access/error logs together. Record
 | Reads work but writes fail for scope | Complete fresh consent with `playlists.write` |
 | MCP returns 401 after Google reconnect | Reconnect ChatGPT; old service tokens were revoked |
 
-The application sends `Referrer-Policy: same-origin` and permits form redirects to Google Accounts and ChatGPT in its CSP. An additional restrictive CSP configured by the host is enforced alongside the app's policy and can still block redirects. Reload the dashboard after header changes and restart authorization. Do not remove Origin validation or disable the WAF globally to conceal a policy/routing problem.
+The application sends `Referrer-Policy: same-origin` and permits form redirects to Google Accounts, ChatGPT and configured OAuth callback origins in its CSP. An additional restrictive CSP configured by the host is enforced alongside the app's policy and can still block redirects. Reload the dashboard after header changes and restart authorization. Do not remove Origin validation or disable the WAF globally to conceal a policy/routing problem.
 
 ## Usage expectations
 
@@ -123,3 +123,56 @@ Refresh tools after deploying the compact-result and create-with-tracks changes.
 
 Then manually inspect Music playback, move/remove an entry, and delete only the disposable playlist. ChatGPT's own write confirmations are handled by ChatGPT; tool annotations do not replace permission checks on the server.
 
+
+## Claude and Gemini CLI
+
+All clients use `https://YOUR_DOMAIN/mcp` with authorization code OAuth, PKCE S256 and the existing service permissions. Connect Google first. No Anthropic or Gemini API key is required by this server. Google credentials and Google's `/google/callback` remain unchanged.
+
+Add only the callbacks you use to private deployment configuration, retaining existing ChatGPT callbacks:
+
+```dotenv
+OAUTH_REDIRECT_URIS=https://chatgpt.com/connector_platform/oauth/callback,https://claude.ai/api/mcp/auth_callback,http://localhost:8765/oauth/callback
+MCP_CLIENT_ORIGINS=https://chatgpt.com,https://claude.ai,https://claude.com
+```
+
+Callbacks must match exactly, including scheme, hostname, port and path. HTTP is accepted only for loopback clients (`localhost`, `127.0.0.1`, `[::1]`); the service still requires HTTPS. Allowed callback origins are included in the consent form redirect policy. Host-level CSP must also permit these destinations. Callback permission does not grant permission to make cross-origin browser requests.
+
+`MCP_CLIENT_ORIGINS` defaults to the three HTTPS origins above when unset. An explicitly empty value permits only the service origin, which is always included. The same list controls the initial Origin check, MCP CORS and SDK origin protection. Add an exact loopback origin only if a client actually sends it; native/server-to-server requests without Origin remain supported. Unknown origins, other ports, wildcard origins and non-loopback HTTP origins are rejected. Do not add `gemini.google.com` merely because you use Gemini CLI.
+
+### Claude remote connector
+
+1. Add a custom remote connector in Claude with the HTTPS MCP URL and OAuth.
+2. Verify the actual callback and allowlist it. Claude's documented callback is `https://claude.ai/api/mcp/auth_callback`; verify any different callback before adding it.
+3. Use public dynamic client registration when offered. If static credentials are needed, create a separate client with `php bin/console.php client:create https://EXACT_CALLBACK_URI Claude` and enter its credentials privately in Claude.
+4. Complete browser consent and verify the granted service permissions. Playlist writes require `playlists.write`; discovery alone does not prove write access.
+
+Reference: [Anthropic remote connector guidance](https://support.anthropic.com/en/articles/11503834-building-custom-integrations-via-remote-mcp-servers).
+
+### Gemini CLI
+
+Configure a fixed available callback port in Gemini CLI's `settings.json`, matching the exact server allowlist. Its default random port conflicts with exact callback matching:
+
+```json
+{
+  "mcpServers": {
+    "youtube": {
+      "httpUrl": "https://YOUR_DOMAIN/mcp",
+      "oauth": {
+        "enabled": true,
+        "redirectUri": "http://localhost:8765/oauth/callback",
+        "scopes": ["playlists.read", "playlists.write"]
+      }
+    }
+  }
+}
+```
+
+Run `/mcp auth youtube` and complete browser consent. Use OAuth discovery and public dynamic registration, not Google ADC credentials. The client must send `resource=https://YOUR_DOMAIN/mcp` and PKCE S256. This server does not advertise RFC 9207 authorization-response issuer support; prefer discovered metadata over configuring an explicit issuer that requires `iss`. For an explicitly configured issuer, Gemini documents `authorizationResponseIssParameterSupported: false` for servers without that response parameter.
+
+Reference: [Gemini CLI MCP and OAuth configuration](https://geminicli.com/docs/tools/mcp-server/). This targets Gemini CLI, not the Gemini chat website. Custom Gemini API applications need their own MCP client and OAuth implementation.
+
+### Verify each client
+
+Local regression tests cover exact callbacks, public registration, PKCE exchange, scopes, refresh, revocation and authenticated MCP initialization with configured origins. They do not establish live client compatibility. Verify authorization, tool discovery, usage reads, refresh and a disposable private playlist workflow in each real client. Never automatically retry an uncertain write.
+
+Dashboard revocation revokes all AI client grants for that account; reconnecting Google also invalidates all existing client tokens. Reauthorize each client afterward. Existing static clients retain their registered callbacks; create a new registration when changing a callback.

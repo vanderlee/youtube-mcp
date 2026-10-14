@@ -37,6 +37,44 @@ trait McpTestHelpers
 
 uses(McpTestHelpers::class);
 
+test('configured clients complete authenticated MCP initialization through every origin check', function (string $origin): void {
+    $this->app = new App($this->config([
+        'STORAGE_PATH' => $this->dir,
+        'MCP_CLIENT_ORIGINS' => 'https://chatgpt.com,https://claude.ai,http://localhost:8765',
+        'OAUTH_REDIRECT_URIS' => 'https://claude.ai/api/mcp/auth_callback,http://localhost:8765/oauth/callback',
+    ]));
+    $response = $this->app->handle(new ServerRequest(
+        'POST',
+        'https://music.example.test/mcp',
+        [
+            'Origin' => $origin,
+            'Authorization' => 'Bearer ' . $this->token,
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json, text/event-stream',
+        ],
+        json_encode([
+            'jsonrpc' => '2.0', 'id' => 1, 'method' => 'initialize',
+            'params' => [
+                'protocolVersion' => '2025-06-18', 'capabilities' => new \stdClass(),
+                'clientInfo' => ['name' => 'external-client', 'version' => '1'],
+            ],
+        ]),
+    ));
+    expect($response->getStatusCode())->toBe(200);
+    expect($response->getHeaderLine('Access-Control-Allow-Origin'))->toBe($origin);
+    expect($response->getHeaderLine('Content-Security-Policy'))
+        ->toContain('https://claude.ai', 'http://localhost:8765');
+})->with(['https://chatgpt.com', 'https://claude.ai', 'http://localhost:8765']);
+
+test('client origin configuration rejects wrong ports schemes and foreign hosts before authentication', function (string $origin): void {
+    $this->app = new App($this->config([
+        'STORAGE_PATH' => $this->dir,
+        'MCP_CLIENT_ORIGINS' => 'https://claude.ai,http://localhost:8765',
+    ]));
+    $response = $this->app->handle(new ServerRequest('POST', 'https://music.example.test/mcp', ['Origin' => $origin]));
+    expect($response->getStatusCode())->toBe(403);
+})->with(['http://claude.ai', 'https://claude.ai:8443', 'https://claude.ai.attacker.test', 'http://localhost:8766', 'null']);
+
 test('sdk handshake discovery and local usage tool', function (): void {
     $r = $this->rpc(
         [
@@ -50,15 +88,15 @@ test('sdk handshake discovery and local usage tool', function (): void {
             ],
         ],
     );
-    $this->assertSame(200, $r->getStatusCode(), (string)$r->getBody());
+    $this->assertSame(200, $r->getStatusCode(), (string) $r->getBody());
     $session = $r->getHeaderLine('Mcp-Session-Id');
     $this->assertNotEmpty($session);
     $this->rpc(['jsonrpc' => '2.0', 'method' => 'notifications/initialized'], $session);
     $list = $this->rpc(['jsonrpc' => '2.0', 'id' => 2, 'method' => 'tools/list'], $session);
-    $this->assertSame(200, $list->getStatusCode(), (string)$list->getBody());
-    $this->assertStringContainsString('add_tracks', (string)$list->getBody());
-    $this->assertStringNotContainsString('search_music', (string)$list->getBody());
-    $this->assertStringNotContainsString('history.write', (string)$list->getBody());
+    $this->assertSame(200, $list->getStatusCode(), (string) $list->getBody());
+    $this->assertStringContainsString('add_tracks', (string) $list->getBody());
+    $this->assertStringNotContainsString('search_music', (string) $list->getBody());
+    $this->assertStringNotContainsString('history.write', (string) $list->getBody());
     $usage = $this->rpc(
         [
             'jsonrpc' => '2.0',
@@ -68,9 +106,9 @@ test('sdk handshake discovery and local usage tool', function (): void {
         ],
         $session,
     );
-    $this->assertSame(200, $usage->getStatusCode(), (string)$usage->getBody());
-    $this->assertStringContainsString('quota_enforced_by', (string)$usage->getBody());
-    $result = json_decode((string)$usage->getBody(), true, 512, JSON_THROW_ON_ERROR)['result'];
+    $this->assertSame(200, $usage->getStatusCode(), (string) $usage->getBody());
+    $this->assertStringContainsString('quota_enforced_by', (string) $usage->getBody());
+    $result = json_decode((string) $usage->getBody(), true, 512, JSON_THROW_ON_ERROR)['result'];
     $this->assertSame('youtube', $result['structuredContent']['quota_enforced_by']);
     $this->assertLessThan(80, strlen($result['content'][0]['text']));
     $this->assertStringNotContainsString('quota_enforced_by', $result['content'][0]['text']);
@@ -91,12 +129,12 @@ test('retired music authentication routes return not found', function (): void {
             '/music/poll',
             '/music/disconnect',
             '/music/browser',
-            '/music/browser/disconnect'
+            '/music/browser/disconnect',
         ] as $path
     ) {
         $response = $this->app->handle(new ServerRequest('GET', 'https://music.example.test' . $path));
         $this->assertSame(404, $response->getStatusCode());
-        $this->assertStringContainsString('NOT_FOUND', (string)$response->getBody());
+        $this->assertStringContainsString('NOT_FOUND', (string) $response->getBody());
     }
 });
 
@@ -106,13 +144,13 @@ test(
         // Start an isolated browser session through the normal HTTP path.
         $this->app->handle(new ServerRequest('GET', 'https://music.example.test/'));
         (new \YouTubeMcp\Auth\BrowserSession(new Database($this->dir . '/service.sqlite'), $this->config()))->signIn(
-            'u1'
+            'u1',
         );
         $csrf = $_SESSION['csrf'];
         $db = new Database($this->dir . '/service.sqlite');
         $db->execute(
             'INSERT INTO google_connections VALUES (?,?,?,?,?,?)',
-            ['u1', 'channel-u1', 'Fixture', 'unused', 'scope', 'generation']
+            ['u1', 'channel-u1', 'Fixture', 'unused', 'scope', 'generation'],
         );
         try {
             $text = "1\n00:00:01,000 --> 00:00:02,000\nDo not echo this private caption\n";
@@ -120,29 +158,29 @@ test(
                 \Nyholm\Psr7\Stream::create($text),
                 strlen($text),
                 UPLOAD_ERR_OK,
-                'fixture.srt'
+                'fixture.srt',
             );
             $request = (new ServerRequest(
                 'POST',
                 'https://music.example.test/media',
-                ['Content-Type' => 'multipart/form-data; boundary=fixture']
+                ['Content-Type' => 'multipart/form-data; boundary=fixture'],
             ))
                 ->withUploadedFiles(['media' => $file])->withParsedBody(['csrf' => 'wrong']);
             $rejected = $this->app->handle($request);
             $this->assertSame(403, $rejected->getStatusCode());
             $this->assertSame([], $db->all('SELECT id FROM media_assets'));
             $accepted = $this->app->handle($request->withParsedBody(['csrf' => $csrf]));
-            $this->assertSame(200, $accepted->getStatusCode(), (string)$accepted->getBody());
+            $this->assertSame(200, $accepted->getStatusCode(), (string) $accepted->getBody());
             $row = $db->one('SELECT * FROM media_assets WHERE user_id=?', ['u1']);
             $this->assertSame('generation', $row['generation']);
-            $this->assertStringContainsString($row['id'], (string)$accepted->getBody());
-            $this->assertStringNotContainsString('Do not echo', (string)$accepted->getBody());
+            $this->assertStringContainsString($row['id'], (string) $accepted->getBody());
+            $this->assertStringNotContainsString('Do not echo', (string) $accepted->getBody());
         } finally {
             $_SESSION = [];
             session_write_close();
             unset($db);
         }
-    }
+    },
 );
 
 test('preference tools advertise separate scopes', function (): void {
@@ -182,8 +220,8 @@ test('browser dashboard reflects only the signed in users connection', function 
         $request = new ServerRequest('GET', 'https://music.example.test/');
         $disconnected = $this->app->handle($request);
         $this->assertSame(200, $disconnected->getStatusCode());
-        $this->assertStringContainsString('Not connected', (string)$disconnected->getBody());
-        $this->assertStringNotContainsString('Other channel', (string)$disconnected->getBody());
+        $this->assertStringContainsString('Not connected', (string) $disconnected->getBody());
+        $this->assertStringNotContainsString('Other channel', (string) $disconnected->getBody());
 
         $database->execute(
             'INSERT INTO google_connections VALUES (?,?,?,?,?,?)',
@@ -191,9 +229,9 @@ test('browser dashboard reflects only the signed in users connection', function 
         );
         $connected = $this->app->handle($request);
         $this->assertSame(200, $connected->getStatusCode());
-        $this->assertStringContainsString('My channel', (string)$connected->getBody());
-        $this->assertStringContainsString('Creator media', (string)$connected->getBody());
-        $this->assertStringNotContainsString('Other channel', (string)$connected->getBody());
+        $this->assertStringContainsString('My channel', (string) $connected->getBody());
+        $this->assertStringContainsString('Creator media', (string) $connected->getBody());
+        $this->assertStringNotContainsString('Other channel', (string) $connected->getBody());
     } finally {
         $_SESSION = [];
         session_write_close();
@@ -224,7 +262,7 @@ test('browser authorization preserves consent csrf and expiration checks', funct
         $request = (new ServerRequest('GET', 'https://music.example.test/oauth/authorize'))->withQueryParams($query);
         $needsConnection = $this->app->handle($request);
         $this->assertSame(200, $needsConnection->getStatusCode());
-        $this->assertStringContainsString('Connect YouTube first', (string)$needsConnection->getBody());
+        $this->assertStringContainsString('Connect YouTube first', (string) $needsConnection->getBody());
 
         $database->execute(
             'INSERT INTO google_connections VALUES (?,?,?,?,?,?)',
@@ -232,24 +270,26 @@ test('browser authorization preserves consent csrf and expiration checks', funct
         );
         $consent = $this->app->handle($request);
         $this->assertSame(200, $consent->getStatusCode());
-        $this->assertStringContainsString('Authorize Browser fixture', (string)$consent->getBody());
-        $this->assertStringContainsString('playlists.read', (string)$consent->getBody());
+        $this->assertStringContainsString('Authorize Browser fixture', (string) $consent->getBody());
+        $this->assertStringContainsString('playlists.read', (string) $consent->getBody());
 
         $approval = (new ServerRequest('POST', 'https://music.example.test/oauth/authorize'))
             ->withParsedBody(['decision' => 'approve', 'csrf' => 'wrong']);
         $rejected = $this->app->handle($approval);
         $this->assertSame(403, $rejected->getStatusCode());
-        $this->assertStringContainsString('CSRF_FAILED', (string)$rejected->getBody());
+        $this->assertStringContainsString('CSRF_FAILED', (string) $rejected->getBody());
         $this->assertSame($query, $_SESSION['authorization_query']);
 
         $_SESSION['authorization_at'] = time() - 601;
-        $expired = $this->app->handle($approval->withParsedBody(['decision' => 'approve', 'csrf' => $_SESSION['csrf']])
+        $expired = $this->app->handle(
+            $approval->withParsedBody(['decision' => 'approve', 'csrf' => $_SESSION['csrf']]),
         );
         $this->assertSame(400, $expired->getStatusCode());
-        $this->assertStringContainsString('Authorization request expired', (string)$expired->getBody());
+        $this->assertStringContainsString('Authorization request expired', (string) $expired->getBody());
 
         $this->app->handle($request);
-        $accepted = $this->app->handle($approval->withParsedBody(['decision' => 'approve', 'csrf' => $_SESSION['csrf']])
+        $accepted = $this->app->handle(
+            $approval->withParsedBody(['decision' => 'approve', 'csrf' => $_SESSION['csrf']]),
         );
         $this->assertSame(302, $accepted->getStatusCode());
         parse_str(parse_url($accepted->getHeaderLine('Location'), PHP_URL_QUERY), $redirectQuery);
@@ -289,7 +329,7 @@ test('full receipt is available on demand and not duplicated in text', function 
     $db = new Database($this->dir . '/service.sqlite');
     $db->execute(
         'INSERT INTO google_connections VALUES (?,?,?,?,?,?)',
-        ['u1', 'channel-u1', 'Fixture', 'unused', 'scope', 'generation']
+        ['u1', 'channel-u1', 'Fixture', 'unused', 'scope', 'generation'],
     );
     $db->execute(
         'INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)',
@@ -334,7 +374,7 @@ test('full receipt is available on demand and not duplicated in text', function 
             ],
             $session,
         );
-        $result = json_decode((string)$r->getBody(), true, 512, JSON_THROW_ON_ERROR)['result'];
+        $result = json_decode((string) $r->getBody(), true, 512, JSON_THROW_ON_ERROR)['result'];
         $this->assertTrue($result['isError']);
         $this->assertStringNotContainsString('raw detail', $result['content'][0]['text']);
         if ($detail === 'full') {
@@ -365,12 +405,12 @@ test('duplicate host headers do not block authenticated initialization', functio
     $r = $this->app->handle(
         new ServerRequest('POST', 'https://music.example.test/mcp', $headers, json_encode($payload)),
     );
-    $this->assertSame(200, $r->getStatusCode(), (string)$r->getBody());
+    $this->assertSame(200, $r->getStatusCode(), (string) $r->getBody());
     $invalid = $this->app->handle(
         new ServerRequest('POST', 'https://attacker.test/mcp', $headers, json_encode($payload)),
     );
     $this->assertSame(400, $invalid->getStatusCode());
-    $this->assertStringContainsString('INVALID_HOST', (string)$invalid->getBody());
+    $this->assertStringContainsString('INVALID_HOST', (string) $invalid->getBody());
 });
 
 test('browser policies permit google and chat gpt form redirects', function (): void {

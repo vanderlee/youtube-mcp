@@ -124,7 +124,12 @@ final class App
             ->withHeader('Referrer-Policy', 'same-origin')
             ->withHeader(
                 'Content-Security-Policy',
-                "default-src 'none'; style-src 'self'; form-action 'self' https://accounts.google.com https://chatgpt.com; frame-ancestors 'none'; base-uri 'none'",
+                "default-src 'none'; style-src 'self'; form-action 'self' "
+                . implode(' ', array_unique([
+                    'https://accounts.google.com', 'https://chatgpt.com',
+                    ...$this->config->oauthRedirectOrigins(),
+                ]))
+                . "; frame-ancestors 'none'; base-uri 'none'",
             );
     }
 
@@ -200,7 +205,7 @@ final class App
         if (empty($_SESSION['user'])) {
             return $this->html(
                 'YouTube Music MCP',
-                '<p>Connect your YouTube account to manage playlists through ChatGPT.</p><a href="/login">Sign in with Google</a>',
+                '<p>Connect your YouTube account to manage playlists through your AI client.</p><a href="/login">Sign in with Google</a>',
             );
         }
 
@@ -278,10 +283,13 @@ final class App
         $factory = new Psr17Factory();
         $middleware = [
             new CorsMiddleware(
-                [$this->config->url(), 'https://chatgpt.com'],
+                $this->config->clientOrigins(),
             ),
             new DnsRebindingProtectionMiddleware(
-                [(string) parse_url($this->config->url(), PHP_URL_HOST), 'chatgpt.com'],
+                array_map(
+                    fn(string $origin) => (string) parse_url($origin, PHP_URL_HOST),
+                    $this->config->clientOrigins(),
+                ),
                 $factory,
                 $factory,
             ),
@@ -316,20 +324,20 @@ final class App
         if (empty($_SESSION['user'])) {
             return $this->html(
                 'Sign in',
-                '<p>Sign in to authorize ChatGPT.</p><a href="/login">Sign in with Google</a>',
+                '<p>Sign in to authorize your AI client.</p><a href="/login">Sign in with Google</a>',
             );
         }
 
         $query = $_SESSION['authorization_query'] ?? null;
         if (!$query || ($_SESSION['authorization_at'] ?? 0) < time() - 600) {
-            throw new ServiceError('invalid_request', 'Authorization request expired. Reconnect from ChatGPT.');
+            throw new ServiceError('invalid_request', 'Authorization request expired. Reconnect from your AI client.');
         }
 
         $authorization = $this->oauth->validateAuthorization($request->withQueryParams($query));
         if (!$this->db->one('SELECT user_id FROM google_connections WHERE user_id=?', [$_SESSION['user']])) {
             return $this->html(
                 'Connect YouTube first',
-                '<p>Connect and confirm your YouTube channel before granting ChatGPT access.</p><a href="/">Open dashboard</a><p>Then restart the connection from ChatGPT.</p>',
+                '<p>Connect and confirm your YouTube channel before granting an AI client access.</p><a href="/">Open dashboard</a><p>Then restart the connection from your AI client.</p>',
             );
         }
         if ($method === 'POST') {
@@ -396,7 +404,7 @@ final class App
     private function dashboard(string $user): ResponseInterface
     {
         $connection = $this->db->one('SELECT channel_id,channel_name FROM google_connections WHERE user_id=?', [$user]);
-        $body = '<p class="intro">Connect your channel and authorize ChatGPT to manage your playlists.</p><div class="dashboard-grid"><section class="card"><div class="channel-summary"><span class="youtube-mark" aria-hidden="true">▶</span><div><p class="status' . ($connection ? ' connected' : '') . '">' . ($connection ? 'Connected' : 'Not connected') . '</p><h2>' . ($connection ? htmlspecialchars(
+        $body = '<p class="intro">Connect your channel and authorize your AI client to manage your playlists.</p><div class="dashboard-grid"><section class="card"><div class="channel-summary"><span class="youtube-mark" aria-hidden="true">▶</span><div><p class="status' . ($connection ? ' connected' : '') . '">' . ($connection ? 'Connected' : 'Not connected') . '</p><h2>' . ($connection ? htmlspecialchars(
             $connection['channel_name'],
         ) : 'Your YouTube channel') . '</h2><p class="muted channel-id">' . ($connection ? 'Channel ID: ' . htmlspecialchars(
             $connection['channel_id'],
@@ -417,14 +425,14 @@ final class App
         ) . '</dd></div><div><dt>Search calls</dt><dd>' . number_format(
             $usage['buckets']['search']['user_spent'],
         ) . '</dd></div></dl><p class="muted usage-note">Estimates only. YouTube enforces quotas.</p></section></div>';
-        $body .= '<section class="card chatgpt-card"><h2>Connect to ChatGPT</h2><p class="muted">Add this endpoint as a custom MCP server using OAuth.</p><label class="endpoint-label" for="mcp-endpoint">MCP server URL</label><input class="endpoint" id="mcp-endpoint" type="text" readonly spellcheck="false" value="' . htmlspecialchars(
+        $body .= '<section class="card chatgpt-card"><h2>Connect an AI client</h2><p class="muted">Add this endpoint as a custom MCP server using OAuth.</p><label class="endpoint-label" for="mcp-endpoint">MCP server URL</label><input class="endpoint" id="mcp-endpoint" type="text" readonly spellcheck="false" value="' . htmlspecialchars(
             $this->config->url() . '/mcp',
             ENT_QUOTES,
-        ) . '"><p class="muted endpoint-help">Select the URL to copy it into ChatGPT.</p>';
+        ) . '"><p class="muted endpoint-help">Select the URL to copy it into ChatGPT, Claude, or Gemini CLI.</p>';
         $body .= $connection ? $this->form(
             '/oauth/revoke',
-            'Revoke ChatGPT access',
-        ) : '<p class="muted">Connect and confirm your YouTube channel before authorizing ChatGPT.</p>';
+            'Revoke all AI client access',
+        ) : '<p class="muted">Connect and confirm your YouTube channel before authorizing an AI client.</p>';
         $body .= '</section><section class="account-section"><div><h2>Account</h2><p class="muted">Delete your service account and stored connections.</p></div>' . $this->form(
             '/account/delete',
             'Delete account',
@@ -609,7 +617,7 @@ final class App
             $request->getHeaderLine('Origin') !== ''
             && !in_array(
                 $request->getHeaderLine('Origin'),
-                [$this->config->url(), 'https://chatgpt.com'],
+                $this->config->clientOrigins(),
                 true,
             )
         ) {

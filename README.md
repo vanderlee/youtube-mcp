@@ -1,6 +1,6 @@
 # YouTube Music MCP service
 
-A multi-user PHP service for managing YouTube playlists, video ratings and channel subscriptions from ChatGPT through the official YouTube Data API. Each user signs in with Google, authorizes their own YouTube channel, and grants ChatGPT separate service permissions. Google credentials stay on the server.
+A multi-user PHP service for managing YouTube playlists, video ratings and channel subscriptions from ChatGPT, Claude, and Gemini CLI through the official YouTube Data API. Each user signs in with Google, authorizes their own YouTube channel, and grants each AI client separate service permissions. Google credentials stay on the server.
 
 This is an initial implementation with automated local verification. It has **not yet been validated against a live Google account, YouTube Music, ChatGPT, or a Plesk installation**. Complete the [live acceptance checklist](docs/ACCEPTANCE.md) before treating the deployment as ready for personal playlists.
 
@@ -170,3 +170,7 @@ For a local HTTP smoke test only, run `php -S 127.0.0.1:8080 -t public public/ro
 
 See [PLAN.md](PLAN.md) for the design and [operations guide](docs/OPERATIONS.md) for recovery and maintenance.
 
+
+## Claude and Gemini CLI
+
+Use the same HTTPS MCP endpoint with OAuth. Configure exact callbacks in `OAUTH_REDIRECT_URIS`; `MCP_CLIENT_ORIGINS` controls browser origins independently. See [Claude and Gemini CLI setup](docs/CONNECTIONS.md#claude-and-gemini-cli) for examples and Gemini's fixed localhost callback port. Real client acceptance testing is still required. Gemini CLI support does not establish compatibility with the Gemini chat website.
