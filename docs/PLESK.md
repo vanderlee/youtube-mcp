@@ -245,7 +245,7 @@ php bin/console.php client:create https://EXACT_CALLBACK_URI ChatGPT
 - Complete the appropriate Google consent publishing/verification process before broader distribution.
 - Record the deployed PHP version, dependency versions, actual quota values, and successful acceptance checks.
 
-The initial implementation supports a single Plesk host with local SQLite and filesystem locks. Docker and multi-host deployment remain deferred.
+The implementation supports a single host with local SQLite and filesystem locks. [Docker deployment](DOCKER.md) is an alternative to this direct Plesk installation; multi-host deployment remains unsupported.
 
 ## Troubleshooting browser authorization
 

@@ -1,0 +1,48 @@
+services:
+  app:
+    image: youtube-mcp:local
+    build:
+      context: .
+      target: app
+    env_file: .env
+    environment:
+      APP_URL: ${APP_URL:?Set APP_URL to your public HTTPS origin in .env}
+      APP_KEY: ${APP_KEY:?Generate and save APP_KEY in .env before starting}
+      STORAGE_PATH: /app/var
+      COOKIE_SECURE: "true"
+    volumes:
+      - app-data:/app/var
+    restart: unless-stopped
+    stop_grace_period: 180s
+
+  web:
+    image: youtube-mcp-web:local
+    build:
+      context: .
+      target: web
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+
+  https:
+    image: caddy:2-alpine
+    environment:
+      APP_URL: ${APP_URL:?Set APP_URL to your public HTTPS origin in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      web:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  app-data:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,19 @@
+# Allow only build inputs; credentials, runtime state and human files never enter the context.
+**
+!Dockerfile
+!composer.json
+!composer.lock
+!src/
+!src/**
+!public/
+!public/**
+!migrations/
+!migrations/*.sql
+!bin/
+!bin/console.php
+!docker/
+!docker/**
+**/HUMANS.md
+**/.env*
+**/*.pem
+**/*.sqlite*

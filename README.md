@@ -17,7 +17,7 @@ TV/Devices OAuth, browser-cookie login, unofficial Music tools and Music diagnos
 - Owned-video uploads/metadata/thumbnails/captions and channel branding/banner/sections, using privately staged media IDs.
 - Informational, cache-aware daily usage estimates; YouTube enforces quotas and rate limits.
 - Mutation receipts, explicit partial resume, and protection against replay of completed operations.
-- PHP-FPM hosting in Plesk, SQLite storage, no Docker or background worker.
+- PHP-FPM hosting in Plesk or Docker Compose, SQLite storage, no background worker.
 
 ## Requirements
 
@@ -26,6 +26,8 @@ PHP 8.2 or newer compatible with the locked dependencies, Composer 2, HTTPS, and
 The implemented database backend is SQLite on local storage. MariaDB remains a future enhancement. Run one application instance with local filesystem locks and shared PHP-FPM storage; multiple hosts or network filesystems are unsupported.
 
 ## Setup
+
+For containers, follow [Docker deployment](docs/DOCKER.md). The included Compose stack builds the PHP-FPM and Nginx images, provides HTTPS through Caddy, and preserves private state in a local volume. After configuring `.env`, start it with `docker compose up -d --build`. Use one application instance per installation.
 
 Plesk's `deploy.sh` hook delegates dependency installation, initialization, and checks to `bin/post-deploy.sh --non-interactive` on every deployment. It defaults to `/opt/plesk/php/8.5/bin/php` and `/usr/lib/plesk-9.0/composer.phar`; override these with `PHP_BIN` and `COMPOSER_BIN` as needed. Configure the private `.env` before unattended deployment. A failed setup or HTTPS check fails the hook; details are in the private project-root `deploy.log`.
 

@@ -2,8 +2,6 @@
 
 ## To do
 
-- Human readable code
-- Security review
 - Add support for other LLM's besides ChatGTP.
 - Create full suite of unittests.
 - Simply rollout on Plesk (Docker?).
