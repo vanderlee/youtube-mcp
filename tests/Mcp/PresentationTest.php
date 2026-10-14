@@ -8,28 +8,33 @@ use YouTubeMcp\Mcp\Presentation;
 
 covers(\YouTubeMcp\Mcp\Presentation::class);
 
-test('compact searches retain resource ids and pagination without descriptions', function (string $tool, string $id, string $field): void {
-    $raw = [
-        'items' => [[
-            'id' => [$id => 'resource1'],
-            'snippet' => [
-                'title' => 'Result',
-                'description' => str_repeat('description ', 1000),
-                'channelId' => 'owner1',
-                'channelTitle' => 'Owner',
+test(
+    'compact searches retain resource ids and pagination without descriptions',
+    function (string $tool, string $id, string $field): void {
+        $raw = [
+            'items' => [
+                [
+                    'id' => [$id => 'resource1'],
+                    'snippet' => [
+                        'title' => 'Result',
+                        'description' => str_repeat('description ', 1000),
+                        'channelId' => 'owner1',
+                        'channelTitle' => 'Owner',
+                    ],
+                ]
             ],
-        ]],
-        'nextPageToken' => 'next',
-    ];
-    $result = Presentation::compact($tool, $raw);
-    expect($result['items'][0][$field])->toBe('resource1');
-    expect($result['items'][0]['title'])->toBe('Result');
-    expect($result['items'][0]['channel'])->toBe('Owner');
-    expect($result['next_page_token'])->toBe('next');
-    expect(strlen(json_encode($result)))->toBeLessThan(strlen(json_encode($raw)) / 10);
-    expect($raw['items'][0]['snippet'])->toHaveKey('description');
-    expect(Presentation::compact($tool, ['items' => []]))->toBe(['items' => [], 'next_page_token' => null]);
-})->with([
+            'nextPageToken' => 'next',
+        ];
+        $result = Presentation::compact($tool, $raw);
+        expect($result['items'][0][$field])->toBe('resource1');
+        expect($result['items'][0]['title'])->toBe('Result');
+        expect($result['items'][0]['channel'])->toBe('Owner');
+        expect($result['next_page_token'])->toBe('next');
+        expect(strlen(json_encode($result)))->toBeLessThan(strlen(json_encode($raw)) / 10);
+        expect($raw['items'][0]['snippet'])->toHaveKey('description');
+        expect(Presentation::compact($tool, ['items' => []]))->toBe(['items' => [], 'next_page_token' => null]);
+    }
+)->with([
     ['search_channels', 'channelId', 'channel_id'],
     ['search_playlists', 'playlistId', 'playlist_id'],
 ]);

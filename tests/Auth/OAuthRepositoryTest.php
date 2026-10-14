@@ -12,7 +12,11 @@ covers(OAuthRepository::class);
 test('repository validates confidential clients and returns only supported scopes', function (): void {
     $db = $this->database();
     $db->execute('INSERT INTO oauth_clients VALUES (?,?,?,?,?)', [
-        'client', 'Fixture', '["https://example.test/callback"]', password_hash('dummy-secret', PASSWORD_DEFAULT), 1,
+        'client',
+        'Fixture',
+        '["https://example.test/callback"]',
+        password_hash('dummy-secret', PASSWORD_DEFAULT),
+        1,
     ]);
     $repository = new OAuthRepository($db, 'https://example.test');
 

@@ -39,7 +39,7 @@ test('invalid production configuration is rejected', function (array $values, st
 
 test('cache ttl boundaries are valid', function (string $ttl): void {
     $this->config(['API_READ_CACHE_TTL' => $ttl])->validate();
-    expect($this->config(['API_READ_CACHE_TTL' => $ttl])->int('API_READ_CACHE_TTL', -1))->toBe((int) $ttl);
+    expect($this->config(['API_READ_CACHE_TTL' => $ttl])->int('API_READ_CACHE_TTL', -1))->toBe((int)$ttl);
 })->with(['0', '300']);
 
 test('configuration loads an isolated environment file and retains its root', function (): void {

@@ -84,7 +84,7 @@ test('media cleanup deletes expired owned assets and orphans while preserving fr
         expect(is_file($orphan))->toBeFalse();
         expect($store->listing('u1', $connection))->toHaveCount(1);
         $asset = $store->get('u1', $connection, $fresh['asset_id']);
-        expect((int) $asset['bytes'])->toBe(strlen($text));
+        expect((int)$asset['bytes'])->toBe(strlen($text));
         expect(file_get_contents($asset['path']))->toBe($text);
         expect(fn() => $store->get('u1', $connection, $old['asset_id']))->toThrow(ServiceError::class);
         $store->delete('u1', $connection, $fresh['asset_id']);

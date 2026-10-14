@@ -10,8 +10,14 @@ covers(\YouTubeMcp\YouTube\ResponseCache::class);
 
 test('playlist invalidation preserves other playlists searches and other users', function (): void {
     $cache = new ResponseCache($this->database());
-    foreach ([['a', 'first', ['playlist-data', 'playlist:P1']], ['a', 'second', ['playlist-data', 'playlist:P2']],
-        ['a', 'search', ['search:video']], ['b', 'other-user', ['playlist-data', 'playlist:P1']]] as [$user, $key, $tags]) {
+    foreach (
+        [
+            ['a', 'first', ['playlist-data', 'playlist:P1']],
+            ['a', 'second', ['playlist-data', 'playlist:P2']],
+            ['a', 'search', ['search:video']],
+            ['b', 'other-user', ['playlist-data', 'playlist:P1']]
+        ] as [$user, $key, $tags]
+    ) {
         $cache->put($user, $key, ['items' => [$key]], 30, $cache->versions($user, $tags));
     }
 
@@ -48,7 +54,14 @@ test('unknown playlist item deletion invalidates playlist data conservatively', 
 
 test('rating changes retain video metadata and search but clear ratings and likes', function (): void {
     $cache = new ResponseCache($this->database());
-    foreach (['metadata' => 'video:v1', 'search' => 'search:video', 'rating' => 'rating:v1', 'likes' => 'likes'] as $key => $tag) {
+    foreach (
+        [
+            'metadata' => 'video:v1',
+            'search' => 'search:video',
+            'rating' => 'rating:v1',
+            'likes' => 'likes'
+        ] as $key => $tag
+    ) {
         $cache->put('a', $key, [], 30, $cache->versions('a', [$tag]));
     }
     $cache->invalidate('a', 'videos.rate', ['id' => 'v1'], null, null);

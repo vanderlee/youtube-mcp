@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Tests\YouTube;
 
+use YouTubeMcp\Auth\{Google, Vault};
 use YouTubeMcp\Http\Client;
 use YouTubeMcp\Quota\Budget;
 use YouTubeMcp\ServiceError;
-use YouTubeMcp\YouTube\Api;
-use YouTubeMcp\Auth\{Google, Vault};
 use YouTubeMcp\Storage\Lock;
+use YouTubeMcp\YouTube\Api;
 
 covers(\YouTubeMcp\YouTube\Api::class);
 
@@ -89,6 +89,7 @@ test('new read cache skips network calls while default mutation checks stay fres
     $db = $this->database();
     $http = new class extends Client {
         public int $calls = 0;
+
         public function request(string $method, string $url, array $headers = [], ?string $body = null): array
         {
             $this->calls++;
@@ -107,6 +108,7 @@ test('failed and uncertain writes invalidate dependent caches but preserve searc
     $db = $this->database();
     $http = new class extends Client {
         public array $methods = [];
+
         public function request(string $method, string $url, array $headers = [], ?string $body = null): array
         {
             $this->methods[] = $method;
@@ -134,12 +136,16 @@ test('lookup maps a deleted occurrence to its playlist without clearing unrelate
     $db = $this->database();
     $http = new class extends Client {
         public int $calls = 0;
+
         public function request(string $method, string $url, array $headers = [], ?string $body = null): array
         {
             $this->calls++;
-            return ['status' => 200, 'data' => str_contains($url, 'playlistItems?part=snippet')
-                ? ['items' => [['id' => 'entry1', 'snippet' => ['playlistId' => 'P1']]]]
-                : ['items' => []]];
+            return [
+                'status' => 200,
+                'data' => str_contains($url, 'playlistItems?part=snippet')
+                    ? ['items' => [['id' => 'entry1', 'snippet' => ['playlistId' => 'P1']]]]
+                    : ['items' => []]
+            ];
         }
     };
     $api = new Api($http, new Budget($db, $this->config()), $db);
@@ -157,12 +163,19 @@ test('configured read ttl caches confirmed connections and zero disables additio
     $this->user($db);
     $config = $this->config();
     $vault = new Vault($config->get('APP_KEY'));
-    $db->execute('INSERT INTO google_connections VALUES (?,?,?,?,?,?)', ['u1', 'channel1', 'Test',
-        $vault->encrypt(['access_token' => 'dummy-token', 'expires_at' => time() + 3600]), 'scope', 'generation1']);
+    $db->execute('INSERT INTO google_connections VALUES (?,?,?,?,?,?)', [
+        'u1',
+        'channel1',
+        'Test',
+        $vault->encrypt(['access_token' => 'dummy-token', 'expires_at' => time() + 3600]),
+        'scope',
+        'generation1'
+    ]);
     $directory = $this->tempDir();
     try {
         $http = new class extends Client {
             public int $calls = 0;
+
             public function request(string $method, string $url, array $headers = [], ?string $body = null): array
             {
                 $this->calls++;

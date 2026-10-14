@@ -43,7 +43,11 @@ test('PER checks agree and codesniffer never writes the fixture', function (stri
             ->and(file_get_contents($path))->toBe($source);
 
         [$status, $output] = $this->qaCommand('php-cs-fixer', [
-            'fix', '--config=.php-cs-fixer.dist.php', '--using-cache=no', '--sequential', $path,
+            'fix',
+            '--config=.php-cs-fixer.dist.php',
+            '--using-cache=no',
+            '--sequential',
+            $path,
         ]);
         expect($status)->toBe(0, $output)
             ->and(file_get_contents($path))->not->toBe($source);
@@ -51,7 +55,12 @@ test('PER checks agree and codesniffer never writes the fixture', function (stri
         [$status, $output] = $this->qaCommand('phpcs', ['--standard=phpcs.xml.dist', $path]);
         expect($status)->toBe(0, $output);
         [$status, $output] = $this->qaCommand('php-cs-fixer', [
-            'fix', '--config=.php-cs-fixer.dist.php', '--using-cache=no', '--sequential', '--dry-run', $path,
+            'fix',
+            '--config=.php-cs-fixer.dist.php',
+            '--using-cache=no',
+            '--sequential',
+            '--dry-run',
+            $path,
         ]);
         expect($status)->toBe(0, $output);
     } finally {

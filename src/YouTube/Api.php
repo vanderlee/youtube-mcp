@@ -71,22 +71,11 @@ class Api
     ): array {
         [$resource, $action] = explode('.', $method);
         [$bucket] = $this->budget->method($method);
-        $verb = [
-            'list' => 'GET',
-            'getRating' => 'GET',
-            'rate' => 'POST',
-            'setModerationStatus' => 'POST',
-            'insert' => 'POST',
-            'update' => 'PUT',
-            'delete' => 'DELETE',
-        ][$action];
-        $path = in_array($action, ['rate', 'getRating', 'setModerationStatus'], true) ? $resource . '/' . $action : $resource;
+        [$verb, $path] = $this->route($resource, $action);
         $connection = $token === null ? $this->google?->connection($user) : null;
         // Explicit tokens (such as pending Google consent) have no confirmed connection binding.
         $cacheBinding = $connection === null ? hash('sha256', $token ?? '') : $connection['channel_id'] . '|' . $connection['generation'];
-        $cacheParams = $params;
-        ksort($cacheParams);
-        $key = hash('sha256', $user . '|' . $cacheBinding . '|' . $method . '|' . json_encode($cacheParams));
+        $key = $this->cacheKey($user, $cacheBinding, $method, $params);
         $cache = new ResponseCache($this->db);
         $tags = $cache->tags($method, $params);
         if ($verb === 'GET' && $ttl > 0) {
@@ -111,15 +100,7 @@ class Api
                 $cache->invalidate($user, $method, $params, $body, $playlist);
             }
             try {
-                $response = $this->http->request(
-                    $verb,
-                    'https://www.googleapis.com/youtube/v3/' . $path . '?' . http_build_query($params),
-                    ['Authorization: Bearer ' . $access, 'Content-Type: application/json'],
-                    $body === null ? null : json_encode($body, JSON_THROW_ON_ERROR),
-                );
-            } catch (ServiceError $e) {
-                $this->budget->outcome($request, 'uncertain');
-                throw $e;
+                $response = $this->send($request, $verb, $path, $params, $access, $body);
             } finally {
                 if ($verb !== 'GET') {
                     $cache->invalidate($user, $method, $params, $body, $playlist);
@@ -147,60 +128,116 @@ class Api
                 return $data;
             }
 
-            $reason = (string) ($data['error']['errors'][0]['reason'] ?? 'unknown');
-            if (in_array($reason, ['quotaExceeded', 'dailyLimitExceeded'], true)) {
-                throw new ServiceError(
-                    'YOUTUBE_QUOTA_EXHAUSTED',
-                    'YouTube daily quota is exhausted.',
-                    ['bucket' => $bucket, 'upstream_reason' => $reason],
-                    429,
-                );
-            }
-            if ($status === 429 || in_array($reason, ['rateLimitExceeded', 'userRateLimitExceeded'], true)) {
-                throw new ServiceError(
-                    'YOUTUBE_RATE_LIMITED',
-                    'YouTube is throttling requests. Retry later.',
-                    ['upstream_reason' => $reason],
-                    429,
-                );
-            }
-            if ($verb === 'GET' && $status >= 500 && $attempt < 2) {
-                usleep((int) (100000 * (2 ** $attempt) + random_int(0, 50000)));
-                $attempt++;
-                continue;
-            }
-            if ($status >= 500 && $verb !== 'GET') {
-                throw new ServiceError(
-                    'UPSTREAM_UNCERTAIN',
-                    'YouTube failed while processing a change. Check the playlist before resuming.',
-                    [],
-                    502,
-                );
-            }
-
-            $code = match (true) {
-                $status === 401 => 'GOOGLE_RECONNECT_REQUIRED',
-                $reason === 'insufficientPermissions' => 'INSUFFICIENT_GOOGLE_SCOPE',
-                in_array(
-                    $reason,
-                    [
-                        'playlistOperationUnsupported',
-                        'playlistContainsMaximumNumberOfVideos',
-                        'playlistLimitExceeded',
-                        'tooManyPlaylists',
-                    ],
-                    true,
-                ) => 'YOUTUBE_CHANNEL_LIMIT_REACHED',
-                $status === 404 => 'YOUTUBE_NOT_FOUND',
-                default => 'YOUTUBE_REQUEST_REJECTED',
-            };
-            throw new ServiceError(
-                $code,
-                'YouTube rejected this request.',
-                ['upstream_reason' => $reason],
-                $status === 401 ? 401 : 400,
-            );
+            $this->retryOrThrow($status, $data, $verb, $bucket, $attempt);
+            $attempt++;
         } while (true);
+    }
+
+    /**
+     * @param array<string, mixed> $params
+     * @param array<string, mixed>|null $body
+     * @return array{status: int, data: array<array-key, mixed>}
+     */
+    private function send(string $request, string $verb, string $path, array $params, string $access, ?array $body): array
+    {
+        try {
+            return $this->http->request(
+                $verb,
+                'https://www.googleapis.com/youtube/v3/' . $path . '?' . http_build_query($params),
+                ['Authorization: Bearer ' . $access, 'Content-Type: application/json'],
+                $body === null ? null : json_encode($body, JSON_THROW_ON_ERROR),
+            );
+        } catch (ServiceError $e) {
+            $this->budget->outcome($request, 'uncertain');
+            throw $e;
+        }
+    }
+
+    /** @return array{string, string} */
+    private function route(string $resource, string $action): array
+    {
+        $verb = [
+            'list' => 'GET',
+            'getRating' => 'GET',
+            'rate' => 'POST',
+            'setModerationStatus' => 'POST',
+            'insert' => 'POST',
+            'update' => 'PUT',
+            'delete' => 'DELETE',
+        ][$action];
+        $path = in_array($action, ['rate', 'getRating', 'setModerationStatus'], true) ? $resource . '/' . $action : $resource;
+
+        return [$verb, $path];
+    }
+
+    /** @param array<string, mixed> $params */
+    private function cacheKey(string $user, string $binding, string $method, array $params): string
+    {
+        ksort($params);
+
+        return hash('sha256', $user . '|' . $binding . '|' . $method . '|' . json_encode($params));
+    }
+
+    /**
+     * Returns only when another read attempt is permitted, after its backoff.
+     * Writes and transport failures are never retried here.
+     *
+     * @param array<array-key, mixed> $data
+     */
+    private function retryOrThrow(int $status, array $data, string $verb, string $bucket, int $attempt): void
+    {
+        $reason = (string) ($data['error']['errors'][0]['reason'] ?? 'unknown');
+        if (in_array($reason, ['quotaExceeded', 'dailyLimitExceeded'], true)) {
+            throw new ServiceError(
+                'YOUTUBE_QUOTA_EXHAUSTED',
+                'YouTube daily quota is exhausted.',
+                ['bucket' => $bucket, 'upstream_reason' => $reason],
+                429,
+            );
+        }
+        if ($status === 429 || in_array($reason, ['rateLimitExceeded', 'userRateLimitExceeded'], true)) {
+            throw new ServiceError(
+                'YOUTUBE_RATE_LIMITED',
+                'YouTube is throttling requests. Retry later.',
+                ['upstream_reason' => $reason],
+                429,
+            );
+        }
+        if ($verb === 'GET' && $status >= 500 && $attempt < 2) {
+            usleep((int) (100000 * (2 ** $attempt) + random_int(0, 50000)));
+            return;
+        }
+        if ($status >= 500 && $verb !== 'GET') {
+            throw new ServiceError(
+                'UPSTREAM_UNCERTAIN',
+                'YouTube failed while processing a change. Check the playlist before resuming.',
+                [],
+                502,
+            );
+        }
+
+        $code = match (true) {
+            $status === 401 => 'GOOGLE_RECONNECT_REQUIRED',
+            $reason === 'insufficientPermissions' => 'INSUFFICIENT_GOOGLE_SCOPE',
+            in_array(
+                $reason,
+                [
+                    'playlistOperationUnsupported',
+                    'playlistContainsMaximumNumberOfVideos',
+                    'playlistLimitExceeded',
+                    'tooManyPlaylists',
+                ],
+                true,
+            ) => 'YOUTUBE_CHANNEL_LIMIT_REACHED',
+            $status === 404 => 'YOUTUBE_NOT_FOUND',
+            default => 'YOUTUBE_REQUEST_REJECTED',
+        };
+        throw new ServiceError(
+            $code,
+            'YouTube rejected this request.',
+            ['upstream_reason' => $reason],
+            $status === 401 ? 401 : 400,
+        );
     }
 
     /**

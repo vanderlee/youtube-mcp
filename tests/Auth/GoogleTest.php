@@ -41,7 +41,11 @@ test('google preserves compatibility with existing broader youtube grants', func
     $google = new Google($cfg, $db, new Vault($cfg->get('APP_KEY')), new Client(), new Lock($this->dir));
     $google->connect(
         'u1',
-        ['scope' => 'https://www.googleapis.com/auth/youtube', 'refresh_token' => 'dummy-refresh', 'access_token' => 'dummy-access'],
+        [
+            'scope' => 'https://www.googleapis.com/auth/youtube',
+            'refresh_token' => 'dummy-refresh',
+            'access_token' => 'dummy-access'
+        ],
         ['id' => 'dummy-channel', 'snippet' => ['title' => 'Dummy']],
     );
     $this->assertSame('https://www.googleapis.com/auth/youtube', $google->connection('u1')['scopes']);

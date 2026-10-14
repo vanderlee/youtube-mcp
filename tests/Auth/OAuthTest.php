@@ -66,7 +66,7 @@ test('code pkce exchange audience and revocation', function (): void {
     ];
     $request = (new ServerRequest('POST', 'https://music.example.test/oauth/token'))->withParsedBody($args);
     $r = $oauth->server->respondToAccessTokenRequest($request, new Response());
-    $tokens = json_decode((string) $r->getBody(), true);
+    $tokens = json_decode((string)$r->getBody(), true);
     $bearer = (new ServerRequest('POST', 'https://music.example.test/mcp'))->withHeader(
         'Authorization',
         'Bearer ' . $tokens['access_token'],
@@ -129,7 +129,7 @@ test('refresh rotates and cannot be replayed', function (): void {
             'code_verifier' => $verifier,
         ],
     );
-    $tokens = json_decode((string) $oauth->server->respondToAccessTokenRequest($r, new Response())->getBody(), true);
+    $tokens = json_decode((string)$oauth->server->respondToAccessTokenRequest($r, new Response())->getBody(), true);
     $refresh = $r->withParsedBody(
         [
             'grant_type' => 'refresh_token',
@@ -138,7 +138,7 @@ test('refresh rotates and cannot be replayed', function (): void {
         ],
     );
     $next = json_decode(
-        (string) $oauth->server->respondToAccessTokenRequest($refresh, new Response())->getBody(),
+        (string)$oauth->server->respondToAccessTokenRequest($refresh, new Response())->getBody(),
         true,
     );
     $this->assertNotSame($tokens['refresh_token'], $next['refresh_token']);
