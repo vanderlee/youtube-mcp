@@ -22,7 +22,10 @@ final class Service
         'add_tracks',
         'remove_tracks',
         'move_track',
-        'delete_playlist'
+        'delete_playlist',
+        ...\YouTubeMusicMcp\YouTube\Tools::WRITES,
+        ...WorkflowTools::WRITES,
+        ...\YouTubeMusicMcp\YouTube\CreatorTools::WRITES,
     ];
 
     public function __construct(
@@ -30,12 +33,23 @@ final class Service
         private Api $api,
         private Budget $budget,
         private Receipts $receipts,
-        private Lock $locks
+        private Lock $locks,
+        private ?\YouTubeMusicMcp\YouTube\CreatorService $creator = null
     ) {
     }
 
     public function execute(string $user, array $scopes, string $tool, array $a): array
     {
+        if (isset(\YouTubeMusicMcp\YouTube\CreatorTools::specs()[$tool])) {
+            if (!$this->creator) { throw new ServiceError('SETUP_REQUIRED', 'Creator service is unavailable.', [], 503); }
+            return $this->creator->execute($user, $scopes, $tool, $a);
+        }
+        if (isset(\YouTubeMusicMcp\YouTube\Tools::specs()[$tool])) {
+            return (new \YouTubeMusicMcp\YouTube\Service($this->google, $this->api, $this->receipts, $this->locks))->execute($user, $scopes, $tool, $a);
+        }
+        if (isset(WorkflowTools::specs()[$tool])) {
+            return (new Workflows($this->google, $this->api, $this->receipts, $this->locks))->execute($user, $scopes, $tool, $a);
+        }
         $write = in_array($tool, self::WRITES, true);
         if (!in_array(self::scope($tool), $scopes, true)) {
             throw new ServiceError(
@@ -121,7 +135,10 @@ final class Service
             ];
         }
         if ($tool === 'search_tracks') {
+            $filterArguments = array_intersect_key($a, \YouTubeMusicMcp\YouTube\Tools::searchFilters());
+            \YouTubeMusicMcp\Mcp\Arguments::validate($filterArguments, \YouTubeMusicMcp\YouTube\Tools::searchFilters(), []);
             $query = ['part' => 'snippet', 'type' => 'video', 'q' => $a['query'], 'maxResults' => $a['limit'] ?? 10];
+            $query += \YouTubeMusicMcp\YouTube\Service::searchParameters($a);
             foreach (['region' => 'regionCode', 'page_token' => 'pageToken'] as $arg => $param) {
                 if (!empty($a[$arg])) {
                     $query[$param] = $a[$arg];
@@ -166,6 +183,8 @@ final class Service
 
     public static function scope(string $tool): string
     {
+        if (isset(\YouTubeMusicMcp\YouTube\CreatorTools::specs()[$tool])) { return \YouTubeMusicMcp\YouTube\CreatorTools::scope($tool); }
+        if (isset(\YouTubeMusicMcp\YouTube\Tools::specs()[$tool])) { return \YouTubeMusicMcp\YouTube\Tools::scope($tool); }
         $group = match ($tool) {
             'list_liked_tracks', 'get_track_ratings', 'rate_track' => 'likes',
             'list_subscriptions', 'subscribe_artist', 'unsubscribe_artist' => 'subscriptions',

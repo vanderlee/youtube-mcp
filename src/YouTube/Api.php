@@ -36,11 +36,12 @@ class Api
             'list' => 'GET',
             'getRating' => 'GET',
             'rate' => 'POST',
+            'setModerationStatus' => 'POST',
             'insert' => 'POST',
             'update' => 'PUT',
             'delete' => 'DELETE'
         ][$action];
-        $path = in_array($action, ['rate', 'getRating'], true) ? $resource . '/' . $action : $resource;
+        $path = in_array($action, ['rate', 'getRating', 'setModerationStatus'], true) ? $resource . '/' . $action : $resource;
         $key = hash('sha256', $user . '|' . $method . '|' . json_encode($params));
         if ($verb === 'GET' && $ttl > 0) {
             $cached = $this->db->one(

@@ -4,7 +4,7 @@ A multi-user PHP service for managing YouTube playlists, video ratings and chann
 
 This is an initial implementation with automated local verification. It has **not yet been validated against a live Google account, YouTube Music, ChatGPT, or a Plesk installation**. Complete the [live acceptance checklist](docs/ACCEPTANCE.md) before treating the deployment as ready for personal playlists.
 
-TV/Devices OAuth, browser-cookie login, unofficial Music tools and Music diagnostics have been removed. The service retains 18 official Data API and local-service tools. Migration 005 removes stored Music credentials while preserving standard Google connections and operation receipts. Refresh the ChatGPT tool catalog after deployment.
+TV/Devices OAuth, browser-cookie login, unofficial Music tools and Music diagnostics have been removed. The service now provides 57 official Data API and local-service tools. Migration 005 retires Music credentials; migration 006 adds private creator media assets. Refresh ChatGPT's tools and authorize the new service permissions after deployment. See [expanded tools, workflows and limits](docs/DATA_API_TOOLS.md).
 
 ## Features
 
@@ -12,6 +12,9 @@ TV/Devices OAuth, browser-cookie login, unofficial Music tools and Music diagnos
 - Google sign-in, invite-only onboarding, explicit channel confirmation, offline token refresh, and encrypted credentials.
 - OAuth authorization code with PKCE S256, expiring service tokens, refresh rotation, revocation, and audience validation.
 - Playlist listing, inspection, search, creation, metadata updates, track addition/removal/movement, and deletion.
+- Video/channel details, uploads listing, channel/playlist search, enhanced video search and scoped comment management.
+- Copy/merge/sort/deduplicate/reorder/transfer workflows, playlist comparison, paged export and read-only availability audits.
+- Owned-video uploads/metadata/thumbnails/captions and channel branding/banner/sections, using privately staged media IDs.
 - Informational, cache-aware daily usage estimates; YouTube enforces quotas and rate limits.
 - Mutation receipts, explicit partial resume, and protection against replay of completed operations.
 - PHP-FPM hosting in Plesk, SQLite storage, no Docker or background worker.

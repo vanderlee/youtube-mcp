@@ -89,6 +89,21 @@ trait PlaylistTestHelpers
 
 uses(PlaylistTestHelpers::class);
 
+test('enhanced video search forwards validated filters without extra detail reads', function (): void {
+    [$service, $api] = $this->service([['items' => [], 'nextPageToken' => 'next']]);
+    $result = $service->execute('u1', ['playlists.read'], 'search_tracks', ['query' => 'fixture',
+        'channel_id' => 'UC' . str_repeat('a', 22), 'published_after' => '2020-01-01T00:00:00Z',
+        'published_before' => '2021-01-01T00:00:00Z', 'order' => 'date', 'duration' => 'short', 'category_id' => '10']);
+    $this->assertCount(1, $api->calls);
+    $this->assertSame('short', $api->calls[0][1]['videoDuration']);
+    $this->assertSame('10', $api->calls[0][1]['videoCategoryId']);
+    $this->assertSame('date', $api->calls[0][1]['order']);
+    $this->assertSame('next', $result['next_page_token']);
+    try { $service->execute('u1', ['playlists.read'], 'search_tracks', ['query' => 'fixture', 'duration' => 'invalid']); $this->fail(); }
+    catch (ServiceError $error) { $this->assertSame('INVALID_ARGUMENT', $error->reason); }
+    $this->assertCount(1, $api->calls);
+});
+
 test('connection diagnostics expose granted scope names without credentials or live access claims', function (): void {
     [$service, $api] = $this->service([]);
     $result = $service->execute('u1', ['playlists.read'], 'get_connection_status', []);

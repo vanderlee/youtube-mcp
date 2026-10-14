@@ -8,7 +8,7 @@ use YouTubeMusicMcp\Auth\{OAuthRepository, Scope};
 use YouTubeMusicMcp\Mcp\Tools;
 use YouTubeMusicMcp\Storage\Database;
 
-test('data api only catalog retains exactly the eighteen supported tools and six scopes', function (): void {
+test('expanded catalog retains official tools and never restores retired music permissions', function (): void {
     $expected = ['list_liked_tracks', 'get_track_ratings', 'rate_track', 'list_subscriptions',
         'subscribe_artist', 'unsubscribe_artist', 'get_connection_status', 'get_usage_status', 'get_operation',
         'list_playlists', 'get_playlist', 'search_tracks', 'create_playlist', 'update_playlist', 'add_tracks',
@@ -16,8 +16,12 @@ test('data api only catalog retains exactly the eighteen supported tools and six
     $actual = array_map(fn($tool) => $tool->name, Tools::definitions());
     sort($expected);
     sort($actual);
-    $this->assertSame($expected, $actual);
-    $this->assertSame(['playlists.read', 'playlists.write', 'likes.read', 'likes.write', 'subscriptions.read', 'subscriptions.write'], Scope::SUPPORTED);
+    $this->assertSame([], array_diff($expected, $actual));
+    $this->assertCount(57, $actual);
+    $this->assertCount(count($actual), array_unique($actual));
+    foreach (Tools::definitions() as $tool) {
+        $this->assertContains(\YouTubeMusicMcp\Playlist\Service::scope($tool->name), Scope::SUPPORTED);
+    }
     $repo = new OAuthRepository($this->database(), 'https://music.example.test');
     foreach (['catalog.read', 'discovery.read', 'library.read', 'library.write', 'history.read', 'history.write'] as $scope) {
         $this->assertNull($repo->getScopeEntityByIdentifier($scope));

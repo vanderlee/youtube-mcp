@@ -155,6 +155,8 @@ final class Tools
                 ['playlist_id', 'operation_key']
             ],
         ];
+        $specs['search_tracks'][1] += \YouTubeMusicMcp\YouTube\Tools::searchFilters();
+        $specs += \YouTubeMusicMcp\YouTube\Tools::specs() + \YouTubeMusicMcp\Playlist\WorkflowTools::specs() + \YouTubeMusicMcp\YouTube\CreatorTools::specs();
         $result = [];
         foreach ($specs as $name => [$desc, $props, $required]) {
             $write = in_array($name, Service::WRITES, true);
@@ -187,11 +189,15 @@ final class Tools
                                 'move_track',
                                 'rate_track',
                                 'unsubscribe_artist',
+                                'update_comment', 'delete_comment', 'moderate_comments',
+                                'sort_playlist', 'remove_playlist_duplicates', 'reorder_playlist', 'transfer_tracks',
+                                'update_video', 'delete_video', 'set_video_thumbnail', 'update_caption', 'delete_caption',
+                                'update_channel_branding', 'set_channel_banner', 'update_channel_section', 'delete_channel_section', 'delete_media_asset',
                             ],
                             true
                         ),
                         'idempotentHint' => !$write,
-                        'openWorldHint' => !in_array($name, ['get_usage_status', 'get_operation'], true)
+                        'openWorldHint' => !in_array($name, ['get_usage_status', 'get_operation', 'list_media_assets', 'delete_media_asset'], true)
                     ]
                 ),
                 meta: [

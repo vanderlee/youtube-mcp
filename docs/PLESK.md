@@ -24,6 +24,14 @@ TV/Devices authentication, browser-cookie login and the unofficial Music tools a
 
 ## Routing
 
+### Creator media and expanded tools
+
+The official catalog now includes 57 tools. Apply migration `006_media_assets.sql` through normal initialization as the subscription user; it creates user/channel/generation-bound media records. The authenticated `/media` dashboard form stages private assets, not YouTube uploads. `STORAGE_PATH/media` must be writable by PHP-FPM and the existing cleanup user, outside `public/`, with private directory/file permissions.
+
+For full-size videos, set PHP `upload_max_filesize=64M` and `post_max_size=65M`; permit about 65 MiB of form data for `/media`. Retain a 64 KiB request limit for MCP/OAuth routes. The application's media request cap is 64 MiB plus 64 KiB form overhead; file caps are 64 MiB for video, 2 MiB for PNG/JPEG and 1 MiB for captions. Streaming avoids loading video contents into PHP memory. Files expire after 24 hours; hourly cleanup removes expired assets and old orphan files. Account deletion removes owned media.
+
+Reconnect ChatGPT to grant the new videos/channels/comments/captions/media service scopes. The normal Google Web OAuth client and `youtube.force-ssl` scope remain sufficient. Creator uploads default private; Google's project verification, thumbnail eligibility and media validation still apply. Session URLs are encrypted in receipts and interrupted uploads require reconciliation. Run the [expanded live acceptance checks](DATA_API_TOOLS.md#live-acceptance) on disposable content; local tests do not establish live endpoint compatibility.
+
 For Apache-backed hosting, `public/.htaccess` routes non-file requests to `index.php` and forwards Authorization. Confirm that `.htaccess` overrides and rewrite rules are enabled.
 
 For nginx serving PHP directly, use a front-controller rule appropriate to the Plesk-generated vhost:
@@ -56,7 +64,7 @@ Root-owned files can pass CLI initialization yet fail under PHP-FPM. SQLite need
 
 Set PHP `display_errors=Off`, `log_errors=On`, and a memory limit such as 128 MiB. Allow approximately 180 seconds for PHP requests and the corresponding FPM/proxy timeout to accommodate bounded preflight and write windows; tune down bulk sizes if hosting policy permits shorter requests. Individual upstream requests have a 20-second timeout. Disable proxy buffering only if actual negotiated streaming behavior requires it, and verify rather than assuming.
 
-Limit request bodies to 64 KiB at the web server and set a matching PHP `post_max_size`; the application also performs a bounded read. Configure PHP session garbage collection or a subscription-scoped cleanup for private session files. Session data includes transient authorization state; Google tokens pending confirmation are encrypted.
+Limit MCP/OAuth request bodies to 64 KiB at the web server; the application also performs a bounded read. Allow the separately bounded `/media` form and configure PHP upload/post limits as described above if creator assets are needed. Configure PHP session garbage collection or a subscription-scoped cleanup for private session files. Session data includes transient authorization state; Google tokens pending confirmation are encrypted.
 
 ## Scheduled maintenance
 

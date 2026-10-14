@@ -47,6 +47,8 @@ Reconnect replaces the active connection and revokes existing ChatGPT service to
 
 ## ChatGPT connection
 
+The expanded official tools use separate `videos.read/write/upload`, `channels.read/write`, `comments.read/write/moderate`, `captions.read/write` and `media.read/write` service permissions. Existing playlist, like and subscription grants remain independent. Reconnect ChatGPT to request desired new permissions; merely deploying does not expand a grant. No TV/device client, cookies or new Google scope are required. See [tool-permission mapping](DATA_API_TOOLS.md).
+
 
 Use the current custom MCP connection interface on a ChatGPT account/workspace with permission to add custom integrations. The service URL is `https://YOUR_DOMAIN/mcp`.
 

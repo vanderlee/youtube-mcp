@@ -90,6 +90,34 @@ test('retired music authentication routes return not found', function (): void {
     }
 });
 
+test('browser media staging requires csrf and stores user bound assets without echoing file contents', function (): void {
+    // Start an isolated browser session through the normal HTTP path.
+    $this->app->handle(new ServerRequest('GET', 'https://music.example.test/'));
+    $_SESSION['user'] = 'u1';
+    $csrf = $_SESSION['csrf'];
+    $db = new Database($this->dir . '/service.sqlite');
+    $db->execute('INSERT INTO google_connections VALUES (?,?,?,?,?,?)', ['u1', 'channel-u1', 'Fixture', 'unused', 'scope', 'generation']);
+    try {
+        $text = "1\n00:00:01,000 --> 00:00:02,000\nDo not echo this private caption\n";
+        $file = new \Nyholm\Psr7\UploadedFile(\Nyholm\Psr7\Stream::create($text), strlen($text), UPLOAD_ERR_OK, 'fixture.srt');
+        $request = (new ServerRequest('POST', 'https://music.example.test/media', ['Content-Type' => 'multipart/form-data; boundary=fixture']))
+            ->withUploadedFiles(['media' => $file])->withParsedBody(['csrf' => 'wrong']);
+        $rejected = $this->app->handle($request);
+        $this->assertSame(403, $rejected->getStatusCode());
+        $this->assertSame([], $db->all('SELECT id FROM media_assets'));
+        $accepted = $this->app->handle($request->withParsedBody(['csrf' => $csrf]));
+        $this->assertSame(200, $accepted->getStatusCode(), (string)$accepted->getBody());
+        $row = $db->one('SELECT * FROM media_assets WHERE user_id=?', ['u1']);
+        $this->assertSame('generation', $row['generation']);
+        $this->assertStringContainsString($row['id'], (string)$accepted->getBody());
+        $this->assertStringNotContainsString('Do not echo', (string)$accepted->getBody());
+    } finally {
+        $_SESSION = [];
+        session_write_close();
+        unset($db);
+    }
+});
+
 test('preference tools advertise separate scopes', function (): void {
     $tools = array_column(\YouTubeMusicMcp\Mcp\Tools::definitions(), null, 'name');
     foreach (

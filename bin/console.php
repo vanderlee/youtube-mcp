@@ -79,6 +79,7 @@ try {
     if ($command === 'cleanup') {
         $db = new Database($config->storage() . '/service.sqlite');
         (new \YouTubeMusicMcp\Quota\Budget($db, $config))->cleanup();
+        (new \YouTubeMusicMcp\YouTube\MediaStore($db, $config))->cleanup(new \YouTubeMusicMcp\Storage\Lock($config->storage() . '/locks'));
         $now = time();
         $cutoff = $now - 86400 * $config->int('OPERATION_RETENTION_DAYS', 7);
         $db->execute('DELETE FROM api_cache WHERE expires_at<=?', [$now]);

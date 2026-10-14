@@ -17,6 +17,18 @@ final class Scope implements ScopeEntityInterface
         'likes.write',
         'subscriptions.read',
         'subscriptions.write',
+        'videos.read',
+        'videos.write',
+        'videos.upload',
+        'channels.read',
+        'channels.write',
+        'comments.read',
+        'comments.write',
+        'comments.moderate',
+        'captions.read',
+        'captions.write',
+        'media.read',
+        'media.write',
     ];
     use EntityTrait;
     use ScopeTrait;

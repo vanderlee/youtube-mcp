@@ -33,18 +33,24 @@ final class App
     private Budget $budget;
     private Api $api;
     private Service $playlists;
+    private \YouTubeMusicMcp\YouTube\MediaStore $mediaAssets;
+    private Lock $locks;
 
     public function __construct(private Config $config)
     {
         $config->validate();
         $this->db = new Database($config->storage() . '/service.sqlite');
         $locks = new Lock($config->storage() . '/locks');
+        $this->locks = $locks;
         $http = new Client();
         $this->budget = new Budget($this->db, $config);
         $this->google = new Google($config, $this->db, new Vault($config->get('APP_KEY')), $http, $locks);
         $this->api = new Api($http, $this->budget, $this->db, $this->google);
         $this->oauth = new OAuth($this->db, $config);
-        $this->playlists = new Service($this->google, $this->api, $this->budget, new Receipts($this->db, $locks), $locks);
+        $this->mediaAssets = new \YouTubeMusicMcp\YouTube\MediaStore($this->db, $config);
+        $mediaApi = new \YouTubeMusicMcp\YouTube\MediaApi($this->google, $this->budget, new Vault($config->get('APP_KEY')), new \YouTubeMusicMcp\Http\MediaClient());
+        $creator = new \YouTubeMusicMcp\YouTube\CreatorService($this->google, $this->api, new Receipts($this->db, $locks), $locks, $this->mediaAssets, $mediaApi);
+        $this->playlists = new Service($this->google, $this->api, $this->budget, new Receipts($this->db, $locks), $locks, $creator);
     }
 
     public function handle(ServerRequestInterface $request): ResponseInterface
@@ -69,15 +75,19 @@ final class App
                 ]));
                 throw new ServiceError('INVALID_ORIGIN', 'Unexpected origin.', [], 403);
             }
-            if ((int)$request->getHeaderLine('Content-Length') > 65536 || $request->getBody()->getSize() > 65536) {
-                throw new ServiceError('REQUEST_TOO_LARGE', 'Request exceeds 64 KiB.', [], 413);
+            $mediaUpload = $request->getUri()->getPath() === '/media' && $request->getMethod() === 'POST';
+            $maxBytes = $mediaUpload ? \YouTubeMusicMcp\YouTube\MediaStore::MAX_BYTES + 65536 : 65536;
+            if ((int)$request->getHeaderLine('Content-Length') > $maxBytes || $request->getBody()->getSize() > $maxBytes) {
+                throw new ServiceError('REQUEST_TOO_LARGE', $mediaUpload ? 'Media request exceeds 64 MiB plus form overhead.' : 'Request exceeds 64 KiB.', [], 413);
             }
-            $raw = $request->getBody()->read(65537);
-            if (strlen($raw) > 65536) {
+            // Multipart upload files are already represented by UploadedFile objects.
+            // Do not load their raw request body into PHP memory.
+            $raw = $mediaUpload ? '' : $request->getBody()->read(65537);
+            if (strlen($raw) > $maxBytes) {
                 throw new ServiceError('REQUEST_TOO_LARGE', 'Request exceeds 64 KiB.', [], 413);
             }
             $request = $request->withBody((new Psr17Factory())->createStream($raw));
-            if (str_contains($request->getHeaderLine('Content-Type'), 'application/x-www-form-urlencoded')) {
+            if (!$mediaUpload && str_contains($request->getHeaderLine('Content-Type'), 'application/x-www-form-urlencoded')) {
                 parse_str($raw, $parsed);
                 $request = $request->withParsedBody($parsed);
             }
@@ -294,6 +304,19 @@ final class App
             );
         }
         $user = $_SESSION['user'];
+        if ($path === '/media') {
+            if ($method === 'POST') {
+                $this->csrf($r);
+                $files = $r->getUploadedFiles();
+                $file = $files['media'] ?? null;
+                if (!$file instanceof \Psr\Http\Message\UploadedFileInterface) { throw new ServiceError('INVALID_MEDIA', 'Choose one media file. Check PHP upload limits.'); }
+                $asset = $this->locks->run('account:' . $user, fn() => $this->mediaAssets->save($user, $this->google->connection($user), $file));
+                return $this->html('Media staged', '<p>Use this asset ID in the corresponding creator tool:</p><pre>' . htmlspecialchars($asset['asset_id']) . '</pre><p>Expires after 24 hours. No YouTube upload has been performed.</p><a href="/media">Stage another file</a>');
+            }
+            $this->google->connection($user);
+            return $this->html('Stage media', '<p>Choose a video (up to 64 MiB), PNG/JPEG image (up to 2 MiB), or timed SRT/VTT caption (up to 1 MiB). Files are private, expire after 24 hours and are usable only with this account connection. Staging does not publish anything.</p><form method="post" action="/media" enctype="multipart/form-data"><input type="hidden" name="csrf" value="'
+                . htmlspecialchars($_SESSION['csrf'], ENT_QUOTES) . '"><input type="file" name="media" required><button type="submit">Stage file</button></form>');
+        }
         if ($path === '/google/connect') {
             $this->csrf($r);
             return $this->startGoogle(true);
@@ -328,8 +351,11 @@ final class App
         if ($path === '/account/delete') {
             $this->csrf($r);
             $this->google->disconnect($user);
-            $this->db->execute('DELETE FROM audit_events WHERE user_id=?', [$user]);
-            $this->db->execute('DELETE FROM users WHERE id=?', [$user]);
+            $this->locks->run('account:' . $user, function () use ($user) {
+                $this->mediaAssets->purge($user);
+                $this->db->execute('DELETE FROM audit_events WHERE user_id=?', [$user]);
+                $this->db->execute('DELETE FROM users WHERE id=?', [$user]);
+            });
             $_SESSION = [];
             session_regenerate_id(true);
             return $this->redirect('/');
@@ -348,6 +374,7 @@ final class App
             $body .= $this->form('/google/disconnect', 'Disconnect');
         }
         $body .= '</div></section>';
+        if ($c) { $body .= '<section class="card"><h2>Creator media</h2><p>Stage private files for video, thumbnail, banner or caption tools.</p><a href="/media">Stage media</a></section>'; }
         $usage = $this->budget->status($user);
         $body .= '<section class="card"><h2>Observed usage</h2><dl class="usage"><div><dt>General units</dt><dd>' . number_format(
                 $usage['buckets']['general']['user_spent']
