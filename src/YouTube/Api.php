@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\YouTube;
 
+use InvalidArgumentException;
 use YouTubeMcp\Auth\Google;
 use YouTubeMcp\Http\Client;
 use YouTubeMcp\Quota\Budget;
@@ -22,17 +23,24 @@ class Api
         private ?Google $google = null,
         int $readCacheTtl = 30
     ) {
-        if ($readCacheTtl < 0 || $readCacheTtl > 300) {
-            throw new \InvalidArgumentException('Read cache TTL must be between 0 and 300 seconds.');
+        if (
+            $readCacheTtl < 0
+            || $readCacheTtl > 300
+        ) {
+            throw new InvalidArgumentException('Read cache TTL must be between 0 and 300 seconds.');
         }
+
         $this->readCacheTtl = $readCacheTtl;
     }
 
     /** Opt-in for user-facing reads only; mutation checks keep call()'s zero-TTL default. */
     public function read(string $user, string $method, array $params): array
     {
-        if (!str_ends_with($method, '.list') && !str_ends_with($method, '.getRating')) {
-            throw new \InvalidArgumentException('Only reads may use the response cache.');
+        if (
+            !str_ends_with($method, '.list')
+            && !str_ends_with($method, '.getRating')
+        ) {
+            throw new InvalidArgumentException('Only reads may use the response cache.');
         }
 
         return $this->call($user, $method, $params, ttl: $this->readCacheTtl);

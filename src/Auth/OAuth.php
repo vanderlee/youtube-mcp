@@ -26,6 +26,7 @@ final class OAuth
     public function __construct(private Database $db, private Config $config, ?Lock $locks = null)
     {
         $this->locks = $locks ?? new Lock($config->storage() . '/locks');
+
         $this->repository = new OAuthRepository($db, $config->url());
         $this->server = new AuthorizationServer(
             $this->repository,
@@ -34,12 +35,15 @@ final class OAuth
             'file://' . $config->storage() . '/oauth-private.pem',
             base64_decode($config->get('APP_KEY'), true)
         );
+
         $grant = new AuthCodeGrant($this->repository, $this->repository, new DateInterval('PT5M'));
         $grant->setRefreshTokenTTL(new DateInterval('P30D'));
         $this->server->enableGrantType($grant, new DateInterval('PT1H'));
+
         $refresh = new RefreshTokenGrant($this->repository);
         $refresh->setRefreshTokenTTL(new DateInterval('P30D'));
         $this->server->enableGrantType($refresh, new DateInterval('PT1H'));
+
         $this->server->setDefaultScope('playlists.read');
     }
 
@@ -52,7 +56,7 @@ final class OAuth
             'authorization_endpoint' => $issuer . '/oauth/authorize',
             'token_endpoint' => $issuer . '/oauth/token',
             'registration_endpoint' => $issuer . '/oauth/register',
-            'scopes_supported' => \YouTubeMcp\Auth\Scope::SUPPORTED,
+            'scopes_supported' => Scope::SUPPORTED,
             'response_types_supported' => ['code'],
             'grant_types_supported' => ['authorization_code', 'refresh_token'],
             'code_challenge_methods_supported' => ['S256'],

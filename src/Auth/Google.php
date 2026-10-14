@@ -68,7 +68,10 @@ final class Google
                 ]
             )
         );
-        if ($response['status'] >= 500 || $response['status'] === 429) {
+        if (
+            $response['status'] >= 500
+            || $response['status'] === 429
+        ) {
             throw new ServiceError(
                 'GOOGLE_UNAVAILABLE',
                 'Google authorization is temporarily unavailable. Retry later.',
@@ -95,12 +98,21 @@ final class Google
             'https://openidconnect.googleapis.com/v1/userinfo',
             ['Authorization: Bearer ' . $accessToken]
         );
+
         $profile = $response['data'];
-        if ($response['status'] !== 200 || empty($profile['sub']) || ($profile['email_verified'] ?? false) !== true) {
+
+        if (
+            $response['status'] !== 200
+            || empty($profile['sub'])
+            || ($profile['email_verified'] ?? false) !== true
+        ) {
             throw new ServiceError('INVALID_IDENTITY', 'Google did not provide a verified identity.', [], 401);
         }
 
-        return ['subject' => 'https://accounts.google.com|' . $profile['sub'], 'email' => strtolower($profile['email'])];
+        return [
+            'subject' => 'https://accounts.google.com|' . $profile['sub'],
+            'email' => strtolower($profile['email'])
+        ];
     }
 
     public function signIn(array $identity): string
@@ -109,6 +121,7 @@ final class Google
         if ($existing) {
             return $existing['id'];
         }
+
         if (!$this->config->bool('ALLOW_REGISTRATION') && !in_array(
                 $identity['email'],
                 array_map('strtolower', $this->config->list('ALLOWED_EMAILS')),
@@ -117,12 +130,14 @@ final class Google
             throw new ServiceError('REGISTRATION_DISABLED', 'Your account is not invited to this installation.', [], 403
             );
         }
+
         // Keep usage history tied to the same installation-local identity after account recreation.
         $id = substr(
             hash_hmac('sha256', $identity['subject'], base64_decode($this->config->get('APP_KEY'), true)),
             0,
             32
         );
+
         $this->db->execute(
             'INSERT INTO users VALUES (?,?,?,?) ON CONFLICT(subject) DO NOTHING',
             [$id, $identity['subject'], $identity['email'], time()]
@@ -134,7 +149,13 @@ final class Google
     public function connect(string $user, array $tokens, array $channel): void
     {
         $scopes = preg_split('/\s+/', (string)($tokens['scope'] ?? ''));
-        if ((!in_array(self::YOUTUBE_SCOPE, $scopes, true) && !in_array('https://www.googleapis.com/auth/youtube', $scopes, true)) || empty($tokens['refresh_token'])) {
+        if (
+            (
+                !in_array(self::YOUTUBE_SCOPE, $scopes, true)
+                && !in_array('https://www.googleapis.com/auth/youtube', $scopes, true)
+            )
+            || empty($tokens['refresh_token'])
+        ) {
             throw new ServiceError(
                 'GOOGLE_RECONNECT_REQUIRED',
                 'Offline YouTube permission is required. Reconnect and grant access.'
@@ -168,7 +189,9 @@ final class Google
             $tokens = $this->vault->decrypt($connection['tokens']);
             if (($tokens['expires_at'] ?? 0) <= time() + 60) {
                 try {
-                    $refreshedTokens = $this->token(['grant_type' => 'refresh_token', 'refresh_token' => $tokens['refresh_token']]);
+                    $refreshedTokens = $this->token(
+                        ['grant_type' => 'refresh_token', 'refresh_token' => $tokens['refresh_token']]
+                    );
                 } catch (ServiceError $e) {
                     if ($e->reason === 'GOOGLE_RECONNECT_REQUIRED') {
                         $this->db->execute('UPDATE oauth_tokens SET revoked=1 WHERE user_id=?', [$user]);

@@ -39,15 +39,25 @@ final class BrowserSession
         }
 
         $account = $this->db->one('SELECT generation FROM browser_accounts WHERE user_id=?', [$_SESSION['user']]);
+
         $now = time();
+
         $signedIn = $_SESSION['signed_in_at'] ?? 0;
         $lastSeen = $_SESSION['last_seen_at'] ?? 0;
-        if (!$account || !is_string($_SESSION['user_generation'] ?? null)
+
+        if (
+            !$account
+            || !is_string($_SESSION['user_generation'] ?? null)
             || !hash_equals($account['generation'], $_SESSION['user_generation'])
-            || !is_int($signedIn) || !is_int($lastSeen) || $signedIn <= 0 || $lastSeen <= 0
-            || $signedIn > $now || $lastSeen > $now
+            || !is_int($signedIn)
+            || !is_int($lastSeen)
+            || $signedIn <= 0
+            || $lastSeen <= 0
+            || $signedIn > $now
+            || $lastSeen > $now
             || $signedIn <= $now - $this->config->int('SESSION_ABSOLUTE_SECONDS', 43200)
-            || $lastSeen <= $now - $this->config->int('SESSION_IDLE_SECONDS', 1800)) {
+            || $lastSeen <= $now - $this->config->int('SESSION_IDLE_SECONDS', 1800)
+        ) {
             $_SESSION = [];
             session_regenerate_id(true);
             return;

@@ -32,7 +32,7 @@ try {
         }
     }
     echo $response->getBody();
-} catch (\Throwable $e) {
+} catch (Throwable $e) {
     error_log(
         json_encode(
             [
