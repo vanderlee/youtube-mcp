@@ -43,6 +43,8 @@ Google's test-user list and this service's invitation list are separate controls
 
 Complete one authorization flow at a time in one browser session. Pending Google and service authorization state expires after ten minutes; starting another flow in a second tab replaces pending state. After an error or header change, reload the dashboard and start again rather than replaying an old callback or approval form.
 
+Browser sign-in expires after 30 minutes of inactivity or 12 hours in total by default. Configure positive `SESSION_IDLE_SECONDS` and `SESSION_ABSOLUTE_SECONDS` values to change these bounds. Account deletion invalidates all browser sessions; recreating the same Google identity does not restore those sessions. Browser expiry is independent of MCP access/refresh token expiry.
+
 Reconnect replaces the active connection and revokes existing ChatGPT service tokens. Connect ChatGPT again afterward. Disconnect removes local Google credentials and attempts Google revocation; if that call fails, the dashboard explains that access should also be removed in Google account settings.
 
 ## ChatGPT connection
@@ -54,7 +56,7 @@ Use the current custom MCP connection interface on a ChatGPT account/workspace w
 
 Choose **OAuth**, rather than No authentication or mixed authentication. This deployment requires authentication for all MCP transport requests. Discovery endpoints for OAuth metadata are public, but MCP initialization/tool listing require service authorization.
 
-The service supports dynamic client registration at `/oauth/register` for operator-allowed callbacks. If ChatGPT's setup supports DCR, leave static credentials unset and choose that registration route. It does not advertise CIMD support.
+The service supports public dynamic client registration at `/oauth/register` with exactly one operator-allowed callback and `token_endpoint_auth_method: "none"` (the default). Repeated registration reuses one public client per callback; its ID is public and each grant still requires consent and PKCE S256. Arbitrary client names do not create more public clients. If ChatGPT's setup supports this DCR mode, leave static credentials unset and choose that registration route. Confidential clients using `client_secret_post` or `client_secret_basic` must be created through the operator CLI, rather than the anonymous endpoint. It does not advertise CIMD support.
 
 For static credentials, first add the exact callback URL shown by the ChatGPT setup interface to `OAUTH_REDIRECT_URIS`, then run:
 

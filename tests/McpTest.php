@@ -93,7 +93,7 @@ test('retired music authentication routes return not found', function (): void {
 test('browser media staging requires csrf and stores user bound assets without echoing file contents', function (): void {
     // Start an isolated browser session through the normal HTTP path.
     $this->app->handle(new ServerRequest('GET', 'https://music.example.test/'));
-    $_SESSION['user'] = 'u1';
+    (new \YouTubeMcp\Auth\BrowserSession(new Database($this->dir . '/service.sqlite'), $this->config()))->signIn('u1');
     $csrf = $_SESSION['csrf'];
     $db = new Database($this->dir . '/service.sqlite');
     $db->execute('INSERT INTO google_connections VALUES (?,?,?,?,?,?)', ['u1', 'channel-u1', 'Fixture', 'unused', 'scope', 'generation']);
@@ -143,7 +143,7 @@ test('preference tools advertise separate scopes', function (): void {
 
 test('browser dashboard reflects only the signed in users connection', function (): void {
     $this->app->handle(new ServerRequest('GET', 'https://music.example.test/'));
-    $_SESSION['user'] = 'u1';
+    (new \YouTubeMcp\Auth\BrowserSession(new Database($this->dir . '/service.sqlite'), $this->config()))->signIn('u1');
     $database = new Database($this->dir . '/service.sqlite');
     $this->user($database, 'u2');
     $database->execute(
@@ -176,7 +176,7 @@ test('browser dashboard reflects only the signed in users connection', function 
 
 test('browser authorization preserves consent csrf and expiration checks', function (): void {
     $this->app->handle(new ServerRequest('GET', 'https://music.example.test/'));
-    $_SESSION['user'] = 'u1';
+    (new \YouTubeMcp\Auth\BrowserSession(new Database($this->dir . '/service.sqlite'), $this->config()))->signIn('u1');
     $database = new Database($this->dir . '/service.sqlite');
     $database->execute(
         'INSERT INTO oauth_clients VALUES (?,?,?,?,?)',
@@ -258,6 +258,7 @@ test('full receipt is available on demand and not duplicated in text', function 
         'error' => ['code' => 'YOUTUBE_QUOTA_EXHAUSTED']
     ];
     $db = new Database($this->dir . '/service.sqlite');
+    $db->execute('INSERT INTO google_connections VALUES (?,?,?,?,?,?)', ['u1', 'channel-u1', 'Fixture', 'unused', 'scope', 'generation']);
     $db->execute(
         'INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)',
         [

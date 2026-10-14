@@ -14,16 +14,19 @@ final class Receipts
     {
     }
 
-    public function get(string $user, string $id): array
+    public function get(string $user, string $id, string $generation, array $scopes): array
     {
-        $row = $this->db->one('SELECT receipt FROM operations WHERE id=? AND user_id=?', [$id, $user]);
+        $row = $this->db->one('SELECT receipt,tool FROM operations WHERE id=? AND user_id=? AND generation=?', [$id, $user, $generation]);
+        if (!$row) {
+            throw new ServiceError('OPERATION_NOT_FOUND', 'Operation was not found for this account connection.', [], 404);
+        }
+        $scope = \YouTubeMcp\Playlist\Service::scope($row['tool']);
+        $readScope = explode('.', $scope, 2)[0] . '.read';
+        if (!in_array($scope, $scopes, true) && !in_array($readScope, $scopes, true)) {
+            throw new ServiceError('INSUFFICIENT_SERVICE_SCOPE', 'Authorize ' . $readScope . ' or ' . $scope . ' to read this receipt.', [], 403);
+        }
 
-        return $row ? json_decode($row['receipt'], true) : throw new ServiceError(
-            'OPERATION_NOT_FOUND',
-            'Operation was not found.',
-            [],
-            404
-        );
+        return json_decode($row['receipt'], true);
     }
 
     public function run(string $user, string $generation, string $tool, array $args, callable $work): array

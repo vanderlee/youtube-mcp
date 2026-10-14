@@ -42,7 +42,10 @@ class Api
             'delete' => 'DELETE'
         ][$action];
         $path = in_array($action, ['rate', 'getRating', 'setModerationStatus'], true) ? $resource . '/' . $action : $resource;
-        $key = hash('sha256', $user . '|' . $method . '|' . json_encode($params));
+        $connection = $token === null ? $this->google?->connection($user) : null;
+        // Explicit tokens (such as pending Google consent) have no confirmed connection binding.
+        $cacheBinding = $connection === null ? hash('sha256', $token ?? '') : $connection['channel_id'] . '|' . $connection['generation'];
+        $key = hash('sha256', $user . '|' . $cacheBinding . '|' . $method . '|' . json_encode($params));
         if ($verb === 'GET' && $ttl > 0) {
             $cached = $this->db->one(
                 'SELECT value FROM api_cache WHERE cache_key=? AND user_id=? AND expires_at>?',
@@ -77,6 +80,15 @@ class Api
             $data = $response['data'];
             $this->budget->outcome($request, $status < 300 ? 'success' : 'rejected');
             if ($status < 300) {
+                if ($connection !== null) {
+                    $current = $this->db->one('SELECT channel_id,generation FROM google_connections WHERE user_id=?', [$user]);
+                    if (!$current || $current['generation'] !== $connection['generation'] || $current['channel_id'] !== $connection['channel_id']) {
+                        if ($verb !== 'GET') {
+                            throw new ServiceError('UPSTREAM_UNCERTAIN', 'The connection changed after a dispatched mutation. Inspect the account and receipt before retrying.', [], 502);
+                        }
+                        throw new ServiceError('GOOGLE_CONNECTION_CHANGED', 'The account connection changed during this request. Start a new request.', [], 409);
+                    }
+                }
                 if ($verb !== 'GET') {
                     $this->db->execute('DELETE FROM api_cache WHERE user_id=?', [$user]);
                 } elseif ($ttl > 0) {

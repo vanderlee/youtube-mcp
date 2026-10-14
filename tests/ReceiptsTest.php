@@ -32,7 +32,7 @@ test('replay does not execute again and other user cannot read receipt', functio
     $this->assertSame($a, $b);
     $this->assertSame(1, $calls);
     $this->expectException(ServiceError::class);
-    $r->get('another', $a['operation_id']);
+    $r->get('another', $a['operation_id'], 'g', ['playlists.read']);
 });
 
 test('partial resume skips completed steps', function (): void {

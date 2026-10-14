@@ -26,9 +26,13 @@ test('merged migrations preserve every historical upgrade point', function (int 
     $db->migrate($root);
 
     $this->assertSame('u1', $db->one('SELECT id FROM users')['id']);
+    if ($completed > 0) {
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{32}$/D', $db->one('SELECT generation FROM browser_accounts WHERE user_id=?', ['u1'])['generation']);
+    }
     $this->assertSame([
         '001_initial.sql', '002_quota_alerts.sql', '003_music_connections.sql',
         '004_music_browser_connections.sql', '005_remove_music_authentication.sql', '006_media_assets.sql',
+        '007_browser_sessions.sql',
     ], array_column($db->all('SELECT name FROM migrations ORDER BY name'), 'name'));
     $this->assertNotNull($db->one("SELECT name FROM sqlite_master WHERE type='table' AND name='media_assets'"));
     $this->assertNotNull($db->one("SELECT name FROM sqlite_master WHERE type='table' AND name='quota_alerts'"));

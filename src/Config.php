@@ -49,6 +49,12 @@ final class Config
 
     public function validate(): void
     {
+        foreach (['SESSION_IDLE_SECONDS' => 1800, 'SESSION_ABSOLUTE_SECONDS' => 43200] as $name => $default) {
+            if ($this->int($name, $default) < 1) {
+                throw new RuntimeException($name . ' must be a positive number of seconds.');
+            }
+        }
+
         if (!preg_match('~^https://[^/]+$~', $this->url())) {
             throw new RuntimeException('APP_URL must be an HTTPS origin without a path.');
         }

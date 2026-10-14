@@ -10,19 +10,22 @@ use Firebase\JWT\Key;
 use League\OAuth2\Server\AuthorizationServer;
 use League\OAuth2\Server\Grant\{AuthCodeGrant, RefreshTokenGrant};
 use League\OAuth2\Server\RequestTypes\AuthorizationRequestInterface;
-use Psr\Http\Message\ServerRequestInterface;
+use Nyholm\Psr7\Response;
+use Psr\Http\Message\{ResponseInterface, ServerRequestInterface};
 use RuntimeException;
 use Throwable;
 use YouTubeMcp\{Config, ServiceError};
-use YouTubeMcp\Storage\Database;
+use YouTubeMcp\Storage\{Database, Lock};
 
 final class OAuth
 {
     public readonly AuthorizationServer $server;
     public readonly OAuthRepository $repository;
+    private Lock $locks;
 
-    public function __construct(private Database $db, private Config $config)
+    public function __construct(private Database $db, private Config $config, ?Lock $locks = null)
     {
+        $this->locks = $locks ?? new Lock($config->storage() . '/locks');
         $this->repository = new OAuthRepository($db, $config->url());
         $this->server = new AuthorizationServer(
             $this->repository,
@@ -57,17 +60,8 @@ final class OAuth
         ];
     }
 
-    public function register(array $data): array
+    public function register(array $data, bool $public = false): array
     {
-        if (($this->db->one('SELECT COUNT(*) AS n FROM oauth_clients')['n'] ?? 0) >= 200) {
-            throw new ServiceError(
-                'CLIENT_REGISTRATION_LIMIT',
-                'Client registration capacity reached. Contact the operator.',
-                [],
-                429
-            );
-        }
-
         $redirects = $data['redirect_uris'] ?? [];
         if (!is_array($redirects) || !$redirects || count($redirects) > 5) {
             throw new ServiceError('invalid_client_metadata', 'Supply permitted redirect_uris.');
@@ -87,30 +81,70 @@ final class OAuth
         if (!in_array($method, ['none', 'client_secret_post', 'client_secret_basic'], true)) {
             throw new ServiceError('invalid_client_metadata', 'Unsupported client authentication.');
         }
+        if ($public && ($method !== 'none' || count($redirects) !== 1)) {
+            throw new ServiceError('invalid_client_metadata', 'Public registration requires one callback and token_endpoint_auth_method none. Create confidential clients through the operator CLI.');
+        }
+        $redirects = array_values(array_unique($redirects));
+        sort($redirects);
 
-        $id = bin2hex(random_bytes(24));
-        $secret = $method === 'none' ? null : bin2hex(random_bytes(32));
-        $name = mb_substr((string)($data['client_name'] ?? 'ChatGPT'), 0, 100);
-        $this->db->execute(
-            'INSERT INTO oauth_clients VALUES (?,?,?,?,?)',
-            [
-                $id,
-                $name,
-                json_encode($redirects),
-                $secret ? password_hash($secret, PASSWORD_DEFAULT) : null,
-                (int)($secret !== null)
-            ]
-        );
+        return $this->db->transaction(function () use ($data, $public, $method, $redirects) {
+            if ($method === 'none') {
+                $existing = $this->db->one('SELECT id,name FROM oauth_clients WHERE confidential=0 AND redirect_uris=? ORDER BY id LIMIT 1', [json_encode($redirects)]);
+                if ($existing) {
+                    return [
+                        'client_id' => $existing['id'], 'client_name' => $existing['name'],
+                        'redirect_uris' => $redirects, 'token_endpoint_auth_method' => 'none',
+                        'grant_types' => ['authorization_code', 'refresh_token'], 'response_types' => ['code'],
+                    ];
+                }
+            }
 
-        return [
-                'client_id' => $id,
-                'client_name' => $name,
-                'redirect_uris' => $redirects,
-                'token_endpoint_auth_method' => $method,
-                'grant_types' => ['authorization_code', 'refresh_token'],
-                'response_types' => ['code'],
-                'client_id_issued_at' => time()
-            ] + ($secret ? ['client_secret' => $secret, 'client_secret_expires_at' => 0] : []);
+            $id = bin2hex(random_bytes(24));
+            $secret = $method === 'none' ? null : bin2hex(random_bytes(32));
+            $name = $public ? 'ChatGPT' : mb_substr((string)($data['client_name'] ?? 'ChatGPT'), 0, 100);
+            $this->db->execute(
+                'INSERT INTO oauth_clients VALUES (?,?,?,?,?)',
+                [
+                    $id,
+                    $name,
+                    json_encode($redirects),
+                    $secret ? password_hash($secret, PASSWORD_DEFAULT) : null,
+                    (int)($secret !== null)
+                ]
+            );
+
+            return [
+                    'client_id' => $id,
+                    'client_name' => $name,
+                    'redirect_uris' => $redirects,
+                    'token_endpoint_auth_method' => $method,
+                    'grant_types' => ['authorization_code', 'refresh_token'],
+                    'response_types' => ['code'],
+                    'client_id_issued_at' => time()
+                ] + ($secret ? ['client_secret' => $secret, 'client_secret_expires_at' => 0] : []);
+        });
+    }
+
+    public function exchange(ServerRequestInterface $request): ResponseInterface
+    {
+        // SQLite's write transaction serializes validation/issuance against every revocation writer.
+        return $this->locks->run('oauth-token', fn() => $this->db->transaction(
+            fn() => $this->server->respondToAccessTokenRequest($request, new Response())
+        ));
+    }
+
+    public function runAuthenticated(array $identity, callable $work): mixed
+    {
+        return $this->locks->run('account:' . $identity['id'], function () use ($identity, $work) {
+            $connection = $this->db->one('SELECT generation FROM google_connections WHERE user_id=?', [$identity['id']]);
+            if ($identity['expires_at'] <= time() || $this->repository->isAccessTokenRevoked($identity['token_id'])
+                || !$this->db->one('SELECT id FROM users WHERE id=?', [$identity['id']])
+                || ($connection['generation'] ?? null) !== $identity['generation']) {
+                throw new ServiceError('AUTHENTICATION_REQUIRED', 'Session expired or revoked. Reconnect using OAuth.', [], 401);
+            }
+
+            return $work();
+        });
     }
 
     public function validateAuthorization(ServerRequestInterface $request
@@ -149,7 +183,11 @@ final class OAuth
                 throw new RuntimeException('Unknown user.');
             }
 
-            return ['id' => $claims['sub'], 'scopes' => (array)($claims['scopes'] ?? [])];
+            $connection = $this->db->one('SELECT generation FROM google_connections WHERE user_id=?', [$claims['sub']]);
+
+            return ['id' => $claims['sub'], 'scopes' => (array)($claims['scopes'] ?? []),
+                'token_id' => $claims['jti'], 'expires_at' => $claims['exp'], 'client_id' => $claims['client_id'],
+                'generation' => $connection['generation'] ?? null];
         } catch (Throwable) {
             throw new ServiceError(
                 'AUTHENTICATION_REQUIRED',

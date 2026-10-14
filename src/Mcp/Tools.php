@@ -10,6 +10,7 @@ use Mcp\Schema\Result\CallToolResult;
 use Mcp\Server\{ClientGateway};
 use Mcp\Server\Handler\ToolHandlerInterface;
 use stdClass;
+use YouTubeMcp\Auth\OAuth;
 use YouTubeMcp\Playlist\Service;
 use YouTubeMcp\ServiceError;
 
@@ -73,7 +74,7 @@ final class Tools
                 []
             ],
             'get_operation' => [
-                'Read a local operation receipt without making YouTube requests.',
+                'Read a receipt from your current connection without YouTube requests. Requires the originating tool permission or its corresponding read permission.',
                 ['operation_id' => $string],
                 ['operation_id']
             ],
@@ -205,7 +206,7 @@ final class Tools
                     'securitySchemes' => [
                         [
                             'type' => 'oauth2',
-                            'scopes' => [Service::scope($name)]
+                            'scopes' => $name === 'get_operation' ? [] : [Service::scope($name)]
                         ]
                     ]
                 ]
@@ -215,10 +216,10 @@ final class Tools
         return $result;
     }
 
-    public static function handler(Service $service, array $identity, string $name): ToolHandlerInterface
+    public static function handler(Service $service, array $identity, string $name, OAuth $oauth): ToolHandlerInterface
     {
-        return new class($service, $identity, $name) implements ToolHandlerInterface {
-            public function __construct(private Service $service, private array $identity, private string $name)
+        return new class($service, $identity, $name, $oauth) implements ToolHandlerInterface {
+            public function __construct(private Service $service, private array $identity, private string $name, private OAuth $oauth)
             {
             }
 
@@ -227,12 +228,12 @@ final class Tools
                 try {
                     $detail = $arguments['response_detail'] ?? 'compact';
                     unset($arguments['response_detail']);
-                    $result = $this->service->execute(
+                    $result = $this->oauth->runAuthenticated($this->identity, fn() => $this->service->execute(
                         $this->identity['id'],
                         $this->identity['scopes'],
                         $this->name,
                         $arguments
-                    );
+                    ));
                     $result = $detail === 'full' ? $result : Presentation::compact($this->name, $result);
 
                     return new CallToolResult(

@@ -40,6 +40,13 @@ final class Service
 
     public function execute(string $user, array $scopes, string $tool, array $a): array
     {
+        if ($tool === 'get_operation') {
+            return $this->locks->run('account:' . $user, function () use ($user, $scopes, $a) {
+                $connection = $this->google->connection($user);
+
+                return $this->receipts->get($user, $a['operation_id'], $connection['generation'], $scopes);
+            });
+        }
         if (isset(\YouTubeMcp\YouTube\CreatorTools::specs()[$tool])) {
             if (!$this->creator) {
                 throw new ServiceError('SETUP_REQUIRED', 'Creator service is unavailable.', [], 503);
@@ -66,10 +73,6 @@ final class Service
         if ($tool === 'get_usage_status') {
             return $this->budget->status($user);
         }
-        if ($tool === 'get_operation') {
-            return $this->receipts->get($user, $a['operation_id']);
-        }
-
         $connection = $this->google->connection($user);
         if ($tool === 'get_connection_status') {
             $googleScopes = array_values(array_filter(preg_split('/\s+/', trim($connection['scopes']))));

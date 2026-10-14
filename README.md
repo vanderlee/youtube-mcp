@@ -44,13 +44,15 @@ For automated Plesk post-deployment setup, run `bash bin/post-deploy.sh --php /o
 
 Migrations 001–006 are bundled in `migrations/001_initial.sql`. The `-- Migration: <original filename>` sections retain their existing database identities, so initialization applies only unfinished steps on upgrades and is safe to repeat. Keep these sections unchanged; add future schema changes as new ordered SQL files starting at `007`.
 
+Migration `007_browser_sessions.sql` separates browser authentication generations from the stable usage identity. Apply it before serving this release; existing browser sessions must sign in again. See [security upgrade steps](docs/PLESK.md#security-upgrade) for worker draining required by the bounded lock format.
+
 No OpenAI API key is needed: the service exposes tools to ChatGPT and does not call OpenAI's model API itself.
 
 ## Tools
 
 ### Fewer API calls and smaller ChatGPT results
 
-Read tools return compact data by default: essential IDs, titles, positions, privacy/counts where applicable, and pagination. Request `response_detail: "full"` for available raw details. Mutation results summarize receipts, including completed-step IDs, errors, and any uncertain pending step; use `get_operation` with `response_detail: "full"` to inspect the full persisted receipt without a YouTube request. Compact presentation does not change stored receipts or permissions.
+Read tools return compact data by default: essential IDs, titles, positions, privacy/counts where applicable, and pagination. Request `response_detail: "full"` for available raw details. Mutation results summarize receipts, including completed-step IDs, errors, and any uncertain pending step; use `get_operation` with `response_detail: "full"` to inspect the full persisted receipt without a YouTube request. Receipt access requires the current connection generation and the originating tool's permission or the corresponding service read permission. A playlist-only grant cannot read comment, video, caption, media or channel receipts. Compact presentation does not change stored receipts.
 
 MCP `content` contains a short summary, while the payload appears once in `structuredContent`. Music compact results omit thumbnails but retain action tokens, requested text, and truncation/bounds indicators. Refresh ChatGPT's tool definitions after deployment to pick up the changed schemas.
 

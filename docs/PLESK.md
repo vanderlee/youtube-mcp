@@ -18,6 +18,16 @@ The domain's PHP handler and shell's default `php` can differ. Select the instal
 
 These version/path values are examples; verify them on your host. A failed Composer run is a failed deployment. A Git deployment hook installing dependencies does not replace initialization, permissions checks, or browser acceptance.
 
+## Security upgrade
+
+This release adds `migrations/007_browser_sessions.sql` and changes filesystem locking to a bounded set of persistent lock slots. Pause incoming requests and drain/stop this domain's existing PHP-FPM workers before deploying it. Apply migrations with the existing `php bin/console.php migrate` command using the domain's PHP CLI and private configuration, then start/reload workers serving the complete new release. Do not run old and new workers or scheduled application commands concurrently across this upgrade: their lock filenames differ. Keep the existing database, credentials and keys.
+
+Existing browser sessions must sign in again. Account deletion invalidates every browser session, including sessions that remain in the session directory. Browser sessions expire after 30 minutes idle or 12 hours total by default; positive `SESSION_IDLE_SECONDS` and `SESSION_ABSOLUTE_SECONDS` values configure those limits. MCP token lifetimes remain unchanged.
+
+Each lock kind uses at most 256 persistent slots (five kinds, at most 1280 new files). A hash collision may return `OPERATION_BUSY` for otherwise unrelated operations; it does not allow concurrent access. Legacy lock files are left untouched and are no longer used after all old workers exit. Never delete active lock files to resolve contention.
+
+Public OAuth registration now supports one exact callback and public-client authentication (`none`), reusing a registration for that callback. Use `client:create` for confidential clients. Refresh the MCP tool catalog because receipt retrieval now checks its originating service permission and current connection generation. Check that revocation invalidates both access and refresh tokens, and that reconnect cannot reuse old requests or receipts, using isolated live acceptance accounts.
+
 ## Data API only upgrade
 
 TV/Devices authentication, browser-cookie login and the unofficial Music tools are removed. Deploy the complete release and run the existing initialization as the subscription user. Migration 005 removes only retired Music credential tables; it preserves standard Google credentials, signing keys and operation receipts. Refresh the ChatGPT tool catalog; reconnect if its existing authorization still requests removed scopes. Old MUSIC_* environment settings are ignored and can be removed privately. Remote Google grants and browser sessions are not revoked by this migration.
