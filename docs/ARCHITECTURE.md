@@ -18,7 +18,7 @@ This is a PHP 8.2+ multi-user MCP service running one application instance under
 
 `Auth/` owns Google credentials, OAuth and browser sessions. Credentials are encrypted with `APP_KEY`. Browser authentication generations, Google connection generations and selected channel IDs have distinct lifetimes; preserve them when changing storage or account flows.
 
-`Operations/Receipts.php` binds mutations to user, connection generation, tool, operation key and normalized arguments. It persists the pending step before an effect and the result afterward. Completed steps replay locally; partial operations require explicit resume. Running or uncertain effects cannot automatically resume. Receipt reads require the originating scope or its corresponding service read scope.
+`Operations/Receipts.php` binds mutations to user, connection generation, tool, operation key and normalized arguments. It persists the pending step before an effect and the result afterward. Completed steps replay locally; partial operations require explicit resume. Running or uncertain effects cannot automatically resume. Receipt reads require the originating scope or its corresponding service read scope. Workflow plans loaded from completed steps are validated before creating a copy target or dispatching further actions; malformed plans require reconciliation and are never rebuilt automatically.
 
 `Storage/Lock.php` uses bounded local lock slots. Independent owners fail busy rather than waiting indefinitely; the same request owner can reenter the same logical lock. Slot collisions can also return busy. This design requires local storage on one host.
 
@@ -30,4 +30,4 @@ This is a PHP 8.2+ multi-user MCP service running one application instance under
 
 Run the hourly CLI cleanup task, migrations and backups as described in [operations](OPERATIONS.md). Busy accounts defer expired media until a later run without stopping other cleanup. Real storage errors still fail the command.
 
-Tests use mocked upstream calls and isolated storage. CI checks locked dependencies, tests on PHP 8.2/8.5, PHPStan level 9 and formatting. These checks do not establish deployment or client compatibility; record the [live acceptance checks](ACCEPTANCE.md) separately.
+Tests use mocked upstream calls and isolated storage. CI checks locked dependencies, tests on PHP 8.2/8.5, PHPStan level 10 and formatting. These checks do not establish deployment or client compatibility; record the [live acceptance checks](ACCEPTANCE.md) separately.

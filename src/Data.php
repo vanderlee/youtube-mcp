@@ -53,6 +53,15 @@ final class Data
         return $value;
     }
 
+    public static function integer(mixed $value): int
+    {
+        if (!is_int($value)) {
+            throw new UnexpectedValueException('Expected an integer.');
+        }
+
+        return $value;
+    }
+
     /** @return array<array-key, mixed> */
     public static function array(mixed $value): array
     {

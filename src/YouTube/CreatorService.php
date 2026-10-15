@@ -16,6 +16,7 @@ use YouTubeMcp\Storage\Lock;
  * Implements creator tools for owned videos, captions and channel presentation.
  *
  * Coordinates ownership checks, Api, MediaApi and MediaStore with locks and mutation receipts.
+ * @phpstan-import-type Step from \YouTubeMcp\Operations\Receipts
  */
 final class CreatorService
 {
@@ -141,6 +142,7 @@ final class CreatorService
      * @param array<string, mixed> $arguments
      * @param array{channel_id: string, generation: string} $connection
      * @param array<string, mixed> $done
+     * @param Step $step
      * @return array<string, mixed>
      */
     private function write(
@@ -200,6 +202,7 @@ final class CreatorService
     /**
      * @param array<string, mixed> $arguments
      * @param array<string, mixed> $video
+     * @param Step $step
      * @return array<string, mixed>
      */
     private function videoChange(
@@ -290,6 +293,7 @@ final class CreatorService
      * @param array<string, mixed> $arguments
      * @param array<string, mixed>|null $asset
      * @param array{channel_id: string, generation: string} $connection
+     * @param Step $step
      * @return array<string, mixed>
      */
     private function captionChange(
@@ -333,7 +337,7 @@ final class CreatorService
             );
         }
 
-        $id = $result['id'] ?? $arguments['caption_id'] ?? null;
+        $id = Data::get($result, 'id') ?? $arguments['caption_id'] ?? null;
         if (!is_string($id) || $id === '') {
             throw new ServiceError('UPSTREAM_UNCERTAIN', 'Caption upload returned no track ID.', [], 502);
         }
@@ -345,6 +349,7 @@ final class CreatorService
      * @param array<string, mixed> $arguments
      * @param array<string, mixed>|null $asset
      * @param array{channel_id: string, generation: string} $connection
+     * @param Step $step
      * @return array<string, mixed>
      */
     private function brandingChange(
@@ -404,6 +409,7 @@ final class CreatorService
     /**
      * @param array<string, mixed> $arguments
      * @param array{channel_id: string, generation: string} $connection
+     * @param Step $step
      * @return array<string, mixed>
      */
     private function sectionChange(
@@ -448,7 +454,7 @@ final class CreatorService
                 operation: $operation,
             ),
         );
-        $id = $result['id'] ?? $arguments['section_id'] ?? null;
+        $id = Data::get($result, 'id') ?? $arguments['section_id'] ?? null;
         if (!is_string($id) || $id === '') {
             throw new ServiceError('UPSTREAM_UNCERTAIN', 'Section creation returned no ID.', [], 502);
         }
@@ -494,6 +500,7 @@ final class CreatorService
      * @param array{channel_id: string, generation: string} $connection
      * @param array<string, mixed> $arguments
      * @param array<string, mixed>|null $asset
+     * @param Step $step
      * @return array<string, mixed>
      */
     private function uploadVideo(

@@ -49,7 +49,7 @@ final class Google
     }
 
     /**
-     * @return array<array-key, mixed>
+     * @return array<string, mixed>
      */
     public function exchange(string $code, string $verifier): array
     {
@@ -277,7 +277,7 @@ final class Google
 
     /**
      * @param array<string, string> $args
-     * @return array<array-key, mixed>
+     * @return array<string, mixed>
      */
     private function token(array $args): array
     {
@@ -321,6 +321,6 @@ final class Google
             );
         }
 
-        return $response['data'] + ['expires_at' => time() + (int) (Data::scalar($response['data']['expires_in'] ?? 3600))];
+        return Data::object($response['data']) + ['expires_at' => time() + (int) (Data::scalar($response['data']['expires_in'] ?? 3600))];
     }
 }

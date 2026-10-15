@@ -60,8 +60,10 @@ final class Usage
         'channelSections.delete' => 50,
     ];
 
+    /** @var Closure(): int */
     private Closure $clock;
 
+    /** @param (callable(): int)|null $clock */
     public function __construct(private Database $db, ?callable $clock = null)
     {
         $this->clock = $clock ? Closure::fromCallable($clock) : static fn() => time();

@@ -23,6 +23,7 @@ use YouTubeMcp\YouTube\Api;
  *     |array{type: 'move', id: string, video_id: string, position: int}
  * @phpstan-type Snapshot array<string, list<array<string, mixed>>>
  * @phpstan-type WorkflowPlan array{before: Snapshot, actions: list<WorkflowAction>, skipped: int}
+ * @phpstan-import-type Step from \YouTubeMcp\Operations\Receipts
  */
 final class Workflows
 {
@@ -75,6 +76,7 @@ final class Workflows
      * @param array<string, mixed> $arguments
      * @param array{channel_id: string, generation: string} $connection
      * @param array<string, mixed> $done
+     * @param Step $step
      * @return array<string, mixed>
      */
     private function mutate(
@@ -87,7 +89,7 @@ final class Workflows
         array $done,
     ): array {
         // Persist a frozen plan before dispatching any write; resume never replans from changed inputs.
-        $plan = $step('plan', fn() => $this->plan($user, $connection['channel_id'], $tool, $arguments));
+        $plan = $this->savedPlan($step('plan', fn() => $this->plan($user, $connection['channel_id'], $tool, $arguments)));
         $target = isset($arguments['playlist_id']) ? Data::string($arguments['playlist_id']) : null;
         if ($tool === 'copy_playlist') {
             $target = $this->createCopyTarget($user, $arguments, $step, $operation);
@@ -125,6 +127,42 @@ final class Workflows
             'skipped_entries' => $plan['skipped'],
             'complete' => true,
         ];
+    }
+
+    /** @return WorkflowPlan */
+    private function savedPlan(mixed $value): array
+    {
+        try {
+            $plan = Data::object($value);
+
+            return [
+                'before' => array_map(Data::objects(...), Data::object($plan['before'] ?? null)),
+                'actions' => array_map($this->savedAction(...), Data::objects($plan['actions'] ?? null)),
+                'skipped' => Data::integer($plan['skipped'] ?? null),
+            ];
+        } catch (\UnexpectedValueException) {
+            throw new ServiceError('RECONCILIATION_REQUIRED', 'Saved workflow plan is invalid. Inspect the receipt before continuing.', [], 409);
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $action
+     * @return WorkflowAction
+     */
+    private function savedAction(array $action): array
+    {
+        return match ($action['type'] ?? null) {
+            'add' => ['type' => 'add', 'video_id' => Data::string($action['video_id'] ?? null)],
+            'move' => [
+                'type' => 'move',
+                'id' => Data::string($action['id'] ?? null),
+                'video_id' => Data::string($action['video_id'] ?? null),
+                'position' => Data::integer($action['position'] ?? null),
+            ],
+            'remove' => ['type' => 'remove', 'id' => Data::string($action['id'] ?? null)]
+                + (array_key_exists('playlist_id', $action) ? ['playlist_id' => Data::string($action['playlist_id'])] : []),
+            default => throw new \UnexpectedValueException('Unknown workflow action.'),
+        };
     }
 
     /**
@@ -537,6 +575,7 @@ final class Workflows
 
     /**
      * @param array<string, mixed> $arguments
+     * @param Step $step
      */
     private function createCopyTarget(string $user, array $arguments, callable $step, string $operation): string
     {
@@ -553,7 +592,7 @@ final class Workflows
                 operation: $operation,
             ),
         );
-        $target = $created['id'] ?? null;
+        $target = Data::get($created, 'id');
         if (!is_string($target) || $target === '') {
             throw new ServiceError('UPSTREAM_UNCERTAIN', 'Creation returned no playlist ID. Reconcile before retrying.', [], 502);
         }

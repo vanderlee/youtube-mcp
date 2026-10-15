@@ -46,7 +46,7 @@ class Api
      * Opt-in for user-facing reads only; mutation checks keep call()'s zero-TTL default.
      *
      * @param array<string, mixed> $params
-     * @return array<array-key, mixed>
+     * @return array<string, mixed>
      */
     public function read(string $user, string $method, array $params): array
     {
@@ -63,7 +63,7 @@ class Api
     /**
      * @param array<string, mixed>|null $body
      * @param array<string, mixed> $params
-     * @return array<array-key, mixed>
+     * @return array<string, mixed>
      */
     public function call(
         string $user,
@@ -86,7 +86,7 @@ class Api
         if ($verb === 'GET' && $ttl > 0) {
             $cached = $cache->get($user, $key);
             if ($cached !== null) {
-                return $cached;
+                return Data::object($cached);
             }
         }
         $versions = $verb === 'GET' && $ttl > 0 ? $cache->versions($user, $tags) : [];
@@ -130,7 +130,7 @@ class Api
                 $cache->put($user, $key, $data, $ttl, $versions);
             }
 
-            return $data;
+            return Data::object($data);
         }
 
         $this->throwUpstreamError($status, $data, $verb, $bucket);

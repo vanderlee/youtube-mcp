@@ -23,7 +23,7 @@ final class Config
     {
         Dotenv::createImmutable($root)->safeLoad();
 
-        return new self(array_merge($_SERVER, $_ENV), $root);
+        return new self(Data::object(array_merge($_SERVER, $_ENV)), $root);
     }
 
     public function bool(string $name, bool $default = false): bool

@@ -16,6 +16,7 @@ use YouTubeMcp\Storage\Lock;
  * Implements YouTube discovery, channel, subscription and comment tools.
  *
  * Uses Api with scope and argument checks, account locks and Receipts for mutations.
+ * @phpstan-import-type Step from \YouTubeMcp\Operations\Receipts
  */
 final class Service
 {
@@ -148,6 +149,7 @@ final class Service
     /**
      * @param array<string, mixed> $arguments
      * @param array{channel_id: string, generation: string} $connection
+     * @param Step $step
      * @return array<string, mixed>
      */
     private function write(
@@ -163,8 +165,8 @@ final class Service
         $result = $step('comment-change', fn() => $this->api->call($user, $method, $params, $body, operation: $operation));
         if (
             in_array($tool, ['post_comment', 'reply_to_comment'], true)
-            && (!is_string($result['id'] ?? null)
-                || $result['id'] === '')
+            && (!is_string(Data::get($result, 'id'))
+                || Data::get($result, 'id') === '')
         ) {
             throw new ServiceError(
                 'UPSTREAM_UNCERTAIN',
@@ -174,7 +176,7 @@ final class Service
             );
         }
 
-        return ['changed' => true, 'comment_id' => $result['id'] ?? $arguments['comment_id'] ?? null];
+        return ['changed' => true, 'comment_id' => Data::get($result, 'id') ?? $arguments['comment_id'] ?? null];
     }
 
     /**
@@ -229,7 +231,7 @@ final class Service
     }
 
     /**
-     * @param array<string, array<string, mixed>> $byId
+     * @param array<array-key, array<string, mixed>> $byId
      * @param array<string, mixed> $comments
      * @param list<string> $ids
      */
@@ -240,7 +242,7 @@ final class Service
         array $byId,
         array $ids,
     ): void {
-        $videos = array_unique(array_column(array_column(Data::array($comments['items']), 'snippet'), 'videoId'));
+        $videos = array_unique(Data::strings(array_column(array_column(Data::array($comments['items']), 'snippet'), 'videoId')));
         if (count($videos) === 0) {
             throw new ServiceError('NOT_VIDEO_OWNER', 'Cannot verify the comments video ownership.', [], 403);
         }
@@ -249,7 +251,7 @@ final class Service
         $owners = array_column(Data::array($response['items'] ?? []), 'snippet', 'id');
         foreach ($ids as $id) {
             $video = Data::get($byId, $id, 'snippet', 'videoId') ?? '';
-            if (($owners[Data::string($video)]['channelId'] ?? '') !== $channel) {
+            if ((Data::get($owners, Data::string($video), 'channelId') ?? '') !== $channel) {
                 throw new ServiceError(
                     'NOT_VIDEO_OWNER',
                     'Only comments on videos owned by your confirmed channel may be moderated.',
@@ -277,7 +279,7 @@ final class Service
 
         return [
             'items' => $response['items'] ?? [],
-            'not_returned_video_ids' => array_values(array_diff(Data::strings($arguments['video_ids']), array_column(Data::array($response['items'] ?? []), 'id'))),
+            'not_returned_video_ids' => array_values(array_diff(Data::strings($arguments['video_ids']), Data::strings(array_column(Data::array($response['items'] ?? []), 'id')))),
             'availability_note' => 'Omitted videos may be private, deleted or inaccessible; metadata alone does not prove playback availability.',
         ];
     }

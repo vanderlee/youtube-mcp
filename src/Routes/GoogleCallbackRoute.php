@@ -41,11 +41,13 @@ final class GoogleCallbackRoute
         if (
             !$flow
             || Data::get($flow, 'at') < time() - 600
+            || !is_string($query['state'] ?? null)
             || !hash_equals(
                 Data::string(Data::get($flow, 'state')),
-                (string) ($query['state'] ?? ''),
+                $query['state'],
             )
-            || empty($query['code'])
+            || !is_string($query['code'] ?? null)
+            || $query['code'] === ''
         ) {
             throw new ServiceError(
                 'INVALID_GOOGLE_STATE',

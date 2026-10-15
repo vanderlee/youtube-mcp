@@ -152,9 +152,10 @@ final class OAuth
         }
         if (
             ($query['code_challenge_method'] ?? null) !== 'S256'
+            || !is_string($query['code_challenge'] ?? null)
             || !preg_match(
                 '/^[A-Za-z0-9_-]{43}$/',
-                (string) ($query['code_challenge'] ?? ''),
+                $query['code_challenge'],
             )
         ) {
             throw new ServiceError('invalid_request', 'PKCE S256 is required.');
@@ -195,13 +196,14 @@ final class OAuth
                 || !is_string(
                     $claims['sub'] ?? null,
                 )
-                || $this->repository->isAccessTokenRevoked((string) ($claims['jti'] ?? ''))
+                || !is_string($claims['jti'] ?? null)
+                || $this->repository->isAccessTokenRevoked($claims['jti'])
             ) {
                 throw new RuntimeException('Invalid token.');
             }
             $scopes = $claims['scopes'] ?? [];
             if (
-                !is_string($claims['jti'] ?? null) || $claims['jti'] === ''
+                $claims['jti'] === ''
                 || !is_int($claims['exp'] ?? null)
                 || !is_string($claims['client_id'] ?? null) || $claims['client_id'] === ''
                 || !is_array($scopes) || !array_is_list($scopes)

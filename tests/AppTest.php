@@ -469,14 +469,17 @@ test('protocol write routes retain method json and resource validation', functio
     $response = $this->app->handle(new ServerRequest('POST', 'https://music.example.test/oauth/token', ['Content-Type' => 'application/json'], '{"resource":"https://other.example.test/mcp"}'));
     expect($response->getStatusCode())->toBe(400)
         ->and((string) $response->getBody())->toContain('invalid_target');
+    $response = $this->app->handle(new ServerRequest('POST', 'https://music.example.test/oauth/register', ['Content-Type' => 'application/json'], '[{"redirect_uris":[]}]'));
+    expect($response->getStatusCode())->toBe(400)
+        ->and((string) $response->getBody())->toContain('INVALID_REQUEST');
 });
 
-test('invalid google callbacks consume the flow without connecting an account', function (): void {
+test('invalid google callbacks consume the flow without connecting an account', function (array $query): void {
     $this->app->handle(new ServerRequest('GET', 'https://music.example.test/'));
     $_SESSION['google_flow'] = ['state' => 'expected', 'at' => time()];
     try {
         $response = $this->app->handle((new ServerRequest('GET', 'https://music.example.test/google/callback'))
-            ->withQueryParams(['state' => 'wrong', 'code' => 'dummy-code']));
+            ->withQueryParams($query));
         expect($response->getStatusCode())->toBe(400)
             ->and((string) $response->getBody())->toContain('INVALID_GOOGLE_STATE')
             ->and($_SESSION)->not->toHaveKey('google_flow');
@@ -484,7 +487,11 @@ test('invalid google callbacks consume the flow without connecting an account', 
         $_SESSION = [];
         session_write_close();
     }
-});
+})->with([
+    'wrong state' => [['state' => 'wrong', 'code' => 'dummy-code']],
+    'structured state' => [['state' => ['expected'], 'code' => 'dummy-code']],
+    'structured code' => [['state' => 'expected', 'code' => ['dummy-code']]],
+]);
 
 beforeEach(function (): void {
     $this->dir = $this->tempDir();

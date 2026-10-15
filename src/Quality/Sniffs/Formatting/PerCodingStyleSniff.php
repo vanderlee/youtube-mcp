@@ -8,6 +8,7 @@ use PHP_CodeSniffer\Files\File;
 use PHP_CodeSniffer\Sniffs\Sniff;
 use PhpCsFixer\Fixer\FixerInterface;
 use PhpCsFixer\FixerFactory;
+use PhpCsFixer\ConfigInterface;
 use PhpCsFixer\RuleSet\RuleSet;
 use PhpCsFixer\Tokenizer\Tokens;
 use PhpCsFixer\WhitespacesFixerConfig;
@@ -26,6 +27,9 @@ final class PerCodingStyleSniff implements Sniff
     public function __construct()
     {
         $config = require dirname(__DIR__, 4) . '/.php-cs-fixer.dist.php';
+        if (!$config instanceof ConfigInterface) {
+            throw new \RuntimeException('The formatter configuration must implement ConfigInterface.');
+        }
         $this->fixers = (new FixerFactory())
             ->registerBuiltInFixers()
             ->useRuleSet(new RuleSet($config->getRules()))

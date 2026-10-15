@@ -14,6 +14,7 @@ use YouTubeMcp\ServiceError;
  * Transfers creator media and downloads captions through official YouTube endpoints.
  *
  * Uses MediaClient and receipt steps for uploads, encrypting session URLs without automatic retransmission.
+ * @phpstan-import-type Step from \YouTubeMcp\Operations\Receipts
  */
 final class MediaApi
 {
@@ -29,6 +30,7 @@ final class MediaApi
      * @param array<string, mixed> $asset
      * @param array<string, mixed> $metadata
      * @param array<string, mixed> $params
+     * @param Step $step
      * @return array<string, mixed>
      */
     public function upload(
@@ -53,13 +55,13 @@ final class MediaApi
             'upload-session',
             fn() => $this->beginUploadSession($user, $method, $params, $metadata, $asset),
         );
-        $location = $this->vault->decrypt($session['session'])['location'];
+        $location = $this->vault->decrypt(Data::string(Data::get($session, 'session')))['location'];
         self::validateLocation(Data::string($location));
 
-        return $step(
+        return Data::object($step(
             'upload-content',
             fn() => $this->sendUploadContent($user, $method, $params, $metadata, $asset, Data::string($location)),
-        );
+        ));
     }
 
     /**

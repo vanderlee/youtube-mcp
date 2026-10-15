@@ -191,6 +191,37 @@ test(
     },
 );
 
+test('malformed saved plans stop before creating or resuming a playlist', function (array $invalidPlan): void {
+    [$service, $api, $db] = $this->workflows([
+        'PLsource00000' => ['owner' => 'public', 'items' => [$this->occurrence('one', 'aaaaaaaaaaa')]],
+    ]);
+    $api->failAt = 1;
+    $args = ['source_playlist_id' => 'PLsource00000', 'title' => 'Copy', 'operation_key' => 'invalid-plan-test'];
+    $receipt = $service->execute('u1', ['playlists.write'], 'copy_playlist', $args);
+    expect($receipt['status'])->toBe('partial');
+    expect($receipt['error']['code'])->toBe('YOUTUBE_REQUEST_REJECTED');
+    $receipt['completed']['plan'] = $invalidPlan;
+    $db->execute('UPDATE operations SET receipt=? WHERE id=?', [json_encode($receipt, JSON_THROW_ON_ERROR), $receipt['operation_id']]);
+    $calls = count($api->calls);
+
+    $resumed = $service->execute('u1', ['playlists.write'], 'copy_playlist', $args + ['resume' => true]);
+
+    expect($resumed['error']['code'])->toBe('RECONCILIATION_REQUIRED');
+    expect($resumed['completed']['plan'])->toBe($invalidPlan);
+    expect($api->calls)->toHaveCount($calls);
+    expect($api->writes)->toBe(1);
+    expect($api->playlists)->not->toHaveKey('PLcopy0000000');
+})->with([
+    'invalid snapshot' => [['before' => 'invalid', 'actions' => [], 'skipped' => 0]],
+    'invalid snapshot entries' => [['before' => ['PLsource00000' => 'invalid'], 'actions' => [], 'skipped' => 0]],
+    'non-list actions' => [['before' => [], 'actions' => ['key' => ['type' => 'add', 'video_id' => 'aaaaaaaaaaa']], 'skipped' => 0]],
+    'unknown action' => [['before' => [], 'actions' => [['type' => 'unknown']], 'skipped' => 0]],
+    'invalid video id type' => [['before' => [], 'actions' => [['type' => 'add', 'video_id' => []]], 'skipped' => 0]],
+    'invalid move position type' => [['before' => [], 'actions' => [['type' => 'move', 'id' => 'one', 'video_id' => 'aaaaaaaaaaa', 'position' => '0']], 'skipped' => 0]],
+    'invalid removal playlist type' => [['before' => [], 'actions' => [['type' => 'remove', 'id' => 'one', 'playlist_id' => []]], 'skipped' => 0]],
+    'invalid skipped count type' => [['before' => [], 'actions' => [], 'skipped' => '0']],
+]);
+
 test('sort and duplicate removal preserve the correct occurrences', function (): void {
     [$service, $api] = $this->workflows([
         'PLtarget00000' => [

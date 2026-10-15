@@ -30,9 +30,11 @@ test('boundary validation preserves lists and scalar conversions without coercin
     expect(Data::text(false))->toBe('');
     expect(Data::text(null))->toBe('');
     expect(Data::string('42'))->toBe('42');
+    expect(Data::integer(42))->toBe(42);
 
     foreach ([
         fn() => Data::string(42),
+        fn() => Data::integer('42'),
         fn() => Data::text(['private-fixture-value']),
         fn() => Data::scalar(new \stdClass()),
         fn() => Data::array('private-fixture-value'),

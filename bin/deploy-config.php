@@ -241,7 +241,7 @@ try {
             throw new RuntimeException('Invalid cron line.');
         }
         $run = static function (array $args, ?string $stdin = null): array {
-            $process = proc_open(array_values($args), [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+            $process = proc_open(Data::strings(array_values($args)), [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
             if (!is_resource($process)) {
                 throw new RuntimeException('Cannot invoke crontab.');
             }

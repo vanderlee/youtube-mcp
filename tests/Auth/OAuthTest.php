@@ -211,6 +211,21 @@ afterEach(function (): void {
     $this->removeDir($this->dir);
 });
 
+test('PKCE challenges must be strings before authorization validation', function (mixed $challenge): void {
+    [, $oauth] = $this->environment();
+    $request = (new ServerRequest('GET', 'https://music.example.test/oauth/authorize'))->withQueryParams([
+        'resource' => 'https://music.example.test/mcp',
+        'code_challenge_method' => 'S256',
+        'code_challenge' => $challenge,
+    ]);
+
+    expect(fn() => $oauth->validateAuthorization($request))->toThrow(ServiceError::class, 'PKCE S256');
+})->with([
+    'structured challenge' => [[str_repeat('a', 43)]],
+    'numeric challenge' => [123],
+    'missing challenge' => [null],
+]);
+
 test('signed tokens with malformed identity claims are rejected', function (array $overrides): void {
     [$db, $oauth, $client] = $this->environment();
     $id = 'malformed-token';
@@ -239,4 +254,5 @@ test('signed tokens with malformed identity claims are rejected', function (arra
     'empty client' => [['client_id' => '']],
     'non-string client' => [['client_id' => 123]],
     'non-integer expiry' => [['exp' => (string) (time() + 3600)]],
+    'structured token id' => [['jti' => ['malformed-token']]],
 ]);

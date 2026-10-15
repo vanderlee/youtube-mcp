@@ -42,7 +42,7 @@ final class Database
         };
         $details = [
             'database_reason' => $reason,
-            'database_sqlstate' => (string) ($error->errorInfo[0] ?? $error->getCode()),
+            'database_sqlstate' => Data::text($error->errorInfo[0] ?? $error->getCode()),
         ];
         if (isset($error->errorInfo[1]) && is_numeric($error->errorInfo[1])) {
             $details['database_driver_code'] = (int) $error->errorInfo[1];
@@ -81,7 +81,7 @@ final class Database
      */
     public function all(string $sql, array $params = []): array
     {
-        return array_values($this->execute($sql, $params)->fetchAll(PDO::FETCH_ASSOC));
+        return Data::objects($this->execute($sql, $params)->fetchAll(PDO::FETCH_ASSOC));
     }
 
     /**

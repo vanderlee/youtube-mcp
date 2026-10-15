@@ -20,7 +20,7 @@ final class Presentation
     public static function compact(string $tool, array $data): array
     {
         if (isset($data['operation_id'], $data['completed'])) {
-            return self::receipt($data);
+            return self::receipt(Data::object($data));
         }
         if (in_array($tool, ['search_channels', 'search_playlists'], true)) {
             $id = $tool === 'search_channels' ? 'channelId' : 'playlistId';

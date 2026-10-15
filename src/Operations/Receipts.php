@@ -13,6 +13,9 @@ use YouTubeMcp\Storage\{Database, Lock};
  * Records mutation steps so callers can inspect and explicitly resume partial operations.
  *
  * Uses Database and Lock to bind operation keys to arguments and connection generations without replaying completed writes.
+ *
+ * @phpstan-type Step callable(string, callable(): mixed): mixed
+ * @phpstan-type Work callable(Step, string, array<string, mixed>): mixed
  */
 final class Receipts
 {
@@ -47,6 +50,7 @@ final class Receipts
 
     /**
      * @param array<string, mixed> $args
+     * @param Work $work
      * @return array<string, mixed>
      */
     public function run(string $user, string $generation, string $tool, array $args, callable $work): array
@@ -172,13 +176,14 @@ final class Receipts
 
     /**
      * @param array<string, mixed> $receipt
+     * @param Work $work
      * @return array<string, mixed>
      */
     private function executeReceipt(string $user, string $tool, array $receipt, callable $work): array
     {
         $step = $this->receiptStep($receipt);
         try {
-            $receipt['result'] = $work($step, $receipt['operation_id'], $receipt['completed']);
+            $receipt['result'] = $work($step, Data::string($receipt['operation_id']), Data::object($receipt['completed']));
             $receipt['status'] = 'completed';
             unset($receipt['error'], $receipt['pending_step']);
         } catch (ServiceError $e) {
@@ -210,6 +215,7 @@ final class Receipts
      * The callback updates the current receipt and saves each step before and after its effect.
      *
      * @param array<string, mixed> $receipt
+     * @return Step
      */
     private function receiptStep(array &$receipt): callable
     {

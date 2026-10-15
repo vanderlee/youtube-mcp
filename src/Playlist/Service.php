@@ -20,6 +20,7 @@ use YouTubeMcp\YouTube\Tools as YouTubeTools;
  * Implements playlist reads, edits and video preferences through the official YouTube API.
  *
  * Combines argument and scope checks with Scanner, account locks and mutation receipts.
+ * @phpstan-import-type Step from \YouTubeMcp\Operations\Receipts
  */
 final class Service
 {
@@ -161,6 +162,7 @@ final class Service
      * @param array<string, mixed> $arguments
      * @param array{channel_id: string, generation: string} $connection
      * @param array<string, mixed> $done
+     * @param Step $step
      * @return array<string, mixed>
      */
     private function mutate(
@@ -247,6 +249,7 @@ final class Service
     /**
      * @param array<string, mixed> $arguments
      * @param array<string, mixed> $done
+     * @param Step $step
      * @return array<string, mixed>
      */
     private function mutatePreference(
@@ -346,6 +349,7 @@ final class Service
      * @param array<string, mixed> $arguments
      * @param array{channel_id: string, generation: string} $connection
      * @param array<string, mixed> $done
+     * @param Step $step
      * @return array<string, mixed>
      */
     private function create(
@@ -488,7 +492,7 @@ final class Service
             ];
         }
 
-        $ids = array_column(array_column(Data::array($results['items'] ?? []), 'id'), 'videoId');
+        $ids = Data::strings(array_column(array_column(Data::array($results['items'] ?? []), 'id'), 'videoId'));
         $videos = $ids ? $this->api->call(
             $user,
             'videos.list',
@@ -550,7 +554,7 @@ final class Service
             array_column($this->entries($user, $id), 'snippet'),
             'resourceId',
         ) : [];
-        $seen = array_fill_keys(array_column($present, 'videoId'), true);
+        $seen = array_fill_keys(Data::strings(array_column($present, 'videoId')), true);
         foreach ($videos as $n => $video) {
             if (isset($done['add:' . $n])) {
                 continue;
@@ -678,6 +682,7 @@ final class Service
 
     /**
      * @param array<array-key, string> $videos
+     * @param Step $step
      */
     private function populateCreatedPlaylist(
         string $user,
@@ -725,6 +730,7 @@ final class Service
 
     /**
      * @param array<string, mixed> $arguments
+     * @param Step $step
      */
     private function createPlaylist(string $user, array $arguments, callable $step, string $operation): string
     {
@@ -741,7 +747,7 @@ final class Service
                 operation: $operation,
             ),
         );
-        $id = $created['id'] ?? null;
+        $id = Data::get($created, 'id');
         if (!is_string($id) || $id === '') {
             throw new ServiceError(
                 'UPSTREAM_UNCERTAIN',

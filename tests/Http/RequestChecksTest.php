@@ -18,7 +18,7 @@ test('csrf accepts array and object parsed bodies and rejects missing or incorre
         foreach ([['csrf' => 'fixture-csrf'], (object) ['csrf' => 'fixture-csrf']] as $body) {
             RequestChecks::csrf($request->withParsedBody($body));
         }
-        foreach ([null, [], (object) [], ['csrf' => 'wrong'], (object) ['csrf' => 'wrong']] as $body) {
+        foreach ([null, [], (object) [], ['csrf' => 'wrong'], (object) ['csrf' => 'wrong'], ['csrf' => ['fixture-csrf']]] as $body) {
             expect(fn() => RequestChecks::csrf($request->withParsedBody($body)))
                 ->toThrow(ServiceError::class, 'Reload the page and retry.');
         }
