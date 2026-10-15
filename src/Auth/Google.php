@@ -9,6 +9,11 @@ use YouTubeMcp\{Config, ServiceError};
 use YouTubeMcp\Http\Client;
 use YouTubeMcp\Storage\{Database, Lock};
 
+/**
+ * Manages Google sign-in and each user's selected YouTube connection.
+ *
+ * Uses Vault for credentials and Database and Lock to coordinate token refresh and disconnects.
+ */
 final class Google
 {
     public const YOUTUBE_SCOPE = 'https://www.googleapis.com/auth/youtube.force-ssl';

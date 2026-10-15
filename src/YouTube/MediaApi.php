@@ -10,6 +10,11 @@ use YouTubeMcp\Http\MediaClient;
 use YouTubeMcp\Quota\Usage;
 use YouTubeMcp\ServiceError;
 
+/**
+ * Transfers creator media and downloads captions through official YouTube endpoints.
+ *
+ * Uses MediaClient and receipt steps for uploads, encrypting session URLs without automatic retransmission.
+ */
 final class MediaApi
 {
     public function __construct(

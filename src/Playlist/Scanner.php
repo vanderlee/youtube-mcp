@@ -8,6 +8,11 @@ use YouTubeMcp\Data;
 use YouTubeMcp\YouTube\Api;
 use YouTubeMcp\ServiceError;
 
+/**
+ * Reads playlist metadata and complete entries within explicit scan bounds.
+ *
+ * Shares ownership checks and deadline-aware pagination between playlist services and workflows.
+ */
 final class Scanner
 {
     public function __construct(private Api $api) {}

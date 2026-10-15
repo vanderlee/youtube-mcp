@@ -8,6 +8,11 @@ use Psr\Http\Message\ResponseInterface;
 use YouTubeMcp\Auth\Google;
 use YouTubeMcp\Http\Responses;
 
+/**
+ * Starts Google sign-in or YouTube authorization with state and PKCE S256.
+ *
+ * Stores callback context in the browser session and delegates the authorization URL to Google.
+ */
 final class GoogleFlow
 {
     public function __construct(

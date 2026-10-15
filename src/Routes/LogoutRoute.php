@@ -9,6 +9,11 @@ use Psr\Http\Message\ServerRequestInterface;
 use YouTubeMcp\Http\RequestChecks;
 use YouTubeMcp\Http\Responses;
 
+/**
+ * Clears browser session state after validating a CSRF-protected POST.
+ *
+ * Ends the current browser login and redirects back to the application.
+ */
 final class LogoutRoute
 {
     public function __invoke(ServerRequestInterface $request): ResponseInterface

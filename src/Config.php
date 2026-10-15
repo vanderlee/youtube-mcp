@@ -7,6 +7,11 @@ namespace YouTubeMcp;
 use Dotenv\Dotenv;
 use RuntimeException;
 
+/**
+ * Loads and validates environment settings for application services.
+ *
+ * Provides typed access to deployment paths, security settings and permitted origins.
+ */
 final class Config
 {
     /**

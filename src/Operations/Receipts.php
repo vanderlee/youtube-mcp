@@ -9,6 +9,11 @@ use Throwable;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\{Database, Lock};
 
+/**
+ * Records mutation steps so callers can inspect and explicitly resume partial operations.
+ *
+ * Uses Database and Lock to bind operation keys to arguments and connection generations without replaying completed writes.
+ */
 final class Receipts
 {
     public function __construct(private Database $db, private Lock $locks) {}

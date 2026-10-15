@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\YouTube;
 
+/**
+ * Declares schemas and descriptions for general YouTube tools.
+ *
+ * Provides Mcp\Tools and Service with matching discovery and argument-validation contracts.
+ */
 final class Tools
 {
     public const WRITES = ['post_comment', 'reply_to_comment', 'update_comment', 'delete_comment', 'moderate_comments'];

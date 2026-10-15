@@ -7,7 +7,11 @@ namespace YouTubeMcp\YouTube;
 use YouTubeMcp\Data;
 use YouTubeMcp\Storage\Database;
 
-/** Dependency versions stop a concurrent read from restoring an invalidated response. */
+/**
+ * Caches user-specific API responses with dependency-based invalidation.
+ *
+ * Uses database versions so a concurrent Api read cannot restore a response invalidated by a write.
+ */
 final class ResponseCache
 {
     public function __construct(private Database $db) {}

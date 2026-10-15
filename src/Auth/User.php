@@ -7,6 +7,11 @@ namespace YouTubeMcp\Auth;
 use League\OAuth2\Server\Entities\Traits\EntityTrait;
 use League\OAuth2\Server\Entities\UserEntityInterface;
 
+/**
+ * Wraps a local user identifier for the League OAuth authorization flow.
+ *
+ * Lets AuthorizeClientRoute associate browser consent with the server's user entity contract.
+ */
 final class User implements UserEntityInterface
 {
     use EntityTrait;

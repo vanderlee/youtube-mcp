@@ -14,6 +14,11 @@ use stdClass;
 use YouTubeMcp\Auth\OAuth;
 use YouTubeMcp\ServiceError;
 
+/**
+ * Adapts tool schemas and service handlers to the MCP SDK.
+ *
+ * Combines tool families, rechecks OAuth authorization and presents Dispatcher results to clients.
+ */
 final class Tools
 {
     /**

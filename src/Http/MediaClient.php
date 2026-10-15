@@ -6,7 +6,11 @@ namespace YouTubeMcp\Http;
 
 use YouTubeMcp\ServiceError;
 
-/** Streaming official uploads and bounded caption downloads; never follows redirects. */
+/**
+ * Streams official media uploads and bounds caption downloads without following redirects.
+ *
+ * Provides MediaApi with a transport that handles file content separately from JSON API requests.
+ */
 class MediaClient
 {
     /**

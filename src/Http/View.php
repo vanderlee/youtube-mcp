@@ -9,6 +9,11 @@ use Psr\Http\Message\ResponseInterface;
 use Throwable;
 use YouTubeMcp\Config;
 
+/**
+ * Renders browser pages and forms from PHP templates.
+ *
+ * Combines configured application context with response generation for dashboard and consent routes.
+ */
 final class View
 {
     public function __construct(private string $directory, private Config $config) {}

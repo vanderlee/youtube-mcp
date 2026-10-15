@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\YouTube;
 
+/**
+ * Declares schemas and descriptions for YouTube creator tools.
+ *
+ * Keeps MCP discovery and CreatorService argument validation on the same contracts.
+ */
 final class CreatorTools
 {
     public const WRITES = [

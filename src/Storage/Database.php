@@ -10,6 +10,11 @@ use PDOStatement;
 use PDOException;
 use Throwable;
 
+/**
+ * Provides SQLite queries, transactions and ordered schema migrations.
+ *
+ * Centralizes local persistence and migration handling for account data and operation state.
+ */
 final class Database
 {
     /**

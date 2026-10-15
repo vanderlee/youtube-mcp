@@ -6,6 +6,11 @@ namespace YouTubeMcp\Storage;
 
 use YouTubeMcp\ServiceError;
 
+/**
+ * Serializes named operations with local filesystem locks.
+ *
+ * Lets account services and Receipts coordinate concurrent PHP-FPM requests on one host.
+ */
 final class Lock
 {
     /**

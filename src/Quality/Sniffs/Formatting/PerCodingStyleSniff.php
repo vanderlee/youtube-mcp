@@ -13,7 +13,11 @@ use PhpCsFixer\Tokenizer\Tokens;
 use PhpCsFixer\WhitespacesFixerConfig;
 use SplFileInfo;
 
-/** Check the shared PER preset in memory; PHP-CS-Fixer owns writing changes. */
+/**
+ * Checks the shared PER coding-style preset through PHP_CodeSniffer.
+ *
+ * Runs PHP-CS-Fixer in memory so both style tools agree while PHP-CS-Fixer owns file repairs.
+ */
 final class PerCodingStyleSniff implements Sniff
 {
     /** @var list<FixerInterface> */

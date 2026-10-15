@@ -9,6 +9,11 @@ use Psr\Http\Message\ServerRequestInterface;
 use YouTubeMcp\Http\Responses;
 use YouTubeMcp\Storage\Database;
 
+/**
+ * Checks database access before returning an HTTP readiness response.
+ *
+ * Queries migration storage so monitoring can distinguish readiness from basic liveness.
+ */
 final class ReadyHealthRoute
 {
     public function __construct(

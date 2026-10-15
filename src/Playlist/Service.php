@@ -16,6 +16,11 @@ use YouTubeMcp\YouTube\Api;
 use YouTubeMcp\YouTube\Service as YouTubeService;
 use YouTubeMcp\YouTube\Tools as YouTubeTools;
 
+/**
+ * Implements playlist reads, edits and video preferences through the official YouTube API.
+ *
+ * Combines argument and scope checks with Scanner, account locks and mutation receipts.
+ */
 final class Service
 {
     public function __construct(

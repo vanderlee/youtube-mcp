@@ -7,6 +7,11 @@ namespace YouTubeMcp\Http;
 use Psr\Http\Message\ServerRequestInterface;
 use YouTubeMcp\ServiceError;
 
+/**
+ * Shares body parsing, POST enforcement and CSRF checks across HTTP routes.
+ *
+ * Keeps browser mutation guards consistent without embedding them in individual handlers.
+ */
 final class RequestChecks
 {
     /** @return array<array-key, mixed> */

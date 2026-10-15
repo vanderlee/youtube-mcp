@@ -17,6 +17,11 @@ use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Database;
 use YouTubeMcp\YouTube\Api;
 
+/**
+ * Completes Google sign-in or prepares a YouTube connection for confirmation.
+ *
+ * Validates callback state and PKCE context, then coordinates Google, BrowserSession and channel discovery.
+ */
 final class GoogleCallbackRoute
 {
     public function __construct(

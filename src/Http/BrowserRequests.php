@@ -8,6 +8,11 @@ use YouTubeMcp\Auth\BrowserSession;
 use YouTubeMcp\Config;
 use YouTubeMcp\ServiceError;
 
+/**
+ * Starts secure filesystem-backed browser sessions and initializes CSRF tokens.
+ *
+ * Delegates authentication validation to BrowserSession before browser routes use session state.
+ */
 final class BrowserRequests
 {
     public function __construct(

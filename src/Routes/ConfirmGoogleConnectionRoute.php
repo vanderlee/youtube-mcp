@@ -14,6 +14,11 @@ use YouTubeMcp\Http\RequestChecks;
 use YouTubeMcp\Http\Responses;
 use YouTubeMcp\ServiceError;
 
+/**
+ * Commits the YouTube connection explicitly confirmed in the browser.
+ *
+ * Checks pending session ownership and expiry before decrypting credentials and calling Google.
+ */
 final class ConfirmGoogleConnectionRoute
 {
     public function __construct(

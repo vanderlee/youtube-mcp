@@ -13,6 +13,11 @@ use YouTubeMcp\Storage\Database;
 use YouTubeMcp\Storage\Lock;
 use YouTubeMcp\YouTube\MediaStore;
 
+/**
+ * Deletes the local account and clears its browser session after a CSRF check.
+ *
+ * Disconnects Google and coordinates MediaStore cleanup and database deletion under the account lock.
+ */
 final class DeleteAccountRoute
 {
     public function __construct(

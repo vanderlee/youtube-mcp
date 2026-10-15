@@ -10,6 +10,11 @@ use League\OAuth2\Server\Entities\AccessTokenEntityInterface;
 use League\OAuth2\Server\Entities\Traits\EntityTrait;
 use League\OAuth2\Server\Entities\Traits\TokenEntityTrait;
 
+/**
+ * Represents a service access token for the League OAuth server.
+ *
+ * Signs an RS256 JWT with the MCP audience and client claims consumed by OAuth.
+ */
 final class AccessToken implements AccessTokenEntityInterface
 {
     use EntityTrait;

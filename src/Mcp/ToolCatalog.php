@@ -9,7 +9,11 @@ use YouTubeMcp\ServiceError;
 use YouTubeMcp\YouTube\CreatorTools;
 use YouTubeMcp\YouTube\Tools as YouTubeTools;
 
-/** Shared routing and permission policy for tool handlers, metadata and receipts. */
+/**
+ * Centralizes tool ownership, permission scopes and mutation policy.
+ *
+ * Keeps dispatch, published metadata and receipt access aligned across the tool families.
+ */
 final class ToolCatalog
 {
     private const WRITES = [

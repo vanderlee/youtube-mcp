@@ -12,6 +12,11 @@ use YouTubeMcp\Quota\Usage;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Database;
 
+/**
+ * Calls the official YouTube JSON API for the current user's connection.
+ *
+ * Combines Google credentials, Usage reporting and ResponseCache while guarding connection changes.
+ */
 class Api
 {
     private int $readCacheTtl = 30;

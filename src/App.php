@@ -36,6 +36,11 @@ use YouTubeMcp\YouTube\CreatorService;
 use YouTubeMcp\YouTube\MediaApi;
 use YouTubeMcp\YouTube\MediaStore;
 
+/**
+ * Wires application services and routes incoming HTTP requests.
+ *
+ * Centralizes request preparation and error responses for the route handlers.
+ */
 final class App
 {
     private Lock $locks;

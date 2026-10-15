@@ -11,6 +11,11 @@ use YouTubeMcp\Config;
 use YouTubeMcp\Http\RequestChecks;
 use YouTubeMcp\ServiceError;
 
+/**
+ * Handles OAuth code and refresh-token exchanges for the MCP resource.
+ *
+ * Checks the POST body and resource target before delegating token issuance to OAuth.
+ */
 final class TokenRoute
 {
     public function __construct(

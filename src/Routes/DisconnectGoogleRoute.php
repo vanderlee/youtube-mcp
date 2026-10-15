@@ -10,6 +10,11 @@ use YouTubeMcp\Auth\Google;
 use YouTubeMcp\Http\RequestChecks;
 use YouTubeMcp\Http\View;
 
+/**
+ * Disconnects the user's Google authorization after a CSRF check.
+ *
+ * Uses Google to revoke access and View to report whether upstream revocation succeeded.
+ */
 final class DisconnectGoogleRoute
 {
     public function __construct(

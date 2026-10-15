@@ -7,6 +7,11 @@ namespace YouTubeMcp\Mcp;
 use Opis\JsonSchema\Validator;
 use YouTubeMcp\ServiceError;
 
+/**
+ * Validates tool arguments against their declared JSON schemas.
+ *
+ * Rejects malformed calls before service handlers perform reads or mutations.
+ */
 final class Arguments
 {
     /**

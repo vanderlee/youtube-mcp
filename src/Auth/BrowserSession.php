@@ -7,7 +7,11 @@ namespace YouTubeMcp\Auth;
 use YouTubeMcp\{Config, ServiceError};
 use YouTubeMcp\Storage\Database;
 
-/** Browser authentication is independent of the stable identity used for usage history. */
+/**
+ * Maintains browser authentication separately from the stable user identity.
+ *
+ * Checks database session state so sign-out and expiry do not erase usage history.
+ */
 final class BrowserSession
 {
     public function __construct(private Database $db, private Config $config) {}

@@ -12,6 +12,11 @@ use YouTubeMcp\Operations\Receipts;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Lock;
 
+/**
+ * Implements YouTube discovery, channel, subscription and comment tools.
+ *
+ * Uses Api with scope and argument checks, account locks and Receipts for mutations.
+ */
 final class Service
 {
     public function __construct(

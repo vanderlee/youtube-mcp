@@ -9,6 +9,11 @@ use Psr\Http\Message\UploadedFileInterface;
 use YouTubeMcp\{Config, ServiceError};
 use YouTubeMcp\Storage\Database;
 
+/**
+ * Stages browser-uploaded files outside the web root for later creator operations.
+ *
+ * Binds assets to users and connections, validates files and manages expiry and cleanup.
+ */
 final class MediaStore
 {
     public const MAX_BYTES = 67_108_864;

@@ -12,6 +12,11 @@ use YouTubeMcp\Operations\Receipts;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Lock;
 
+/**
+ * Implements creator tools for owned videos, captions and channel presentation.
+ *
+ * Coordinates ownership checks, Api, MediaApi and MediaStore with locks and mutation receipts.
+ */
 final class CreatorService
 {
     public function __construct(

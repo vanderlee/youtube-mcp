@@ -18,6 +18,11 @@ use Throwable;
 use YouTubeMcp\{Config, ServiceError};
 use YouTubeMcp\Storage\{Database, Lock};
 
+/**
+ * Runs the service's OAuth authorization server for MCP clients.
+ *
+ * Uses OAuthRepository for grants and revocation, and validates bearer identities before tool execution.
+ */
 final class OAuth
 {
     public readonly AuthorizationServer $server;

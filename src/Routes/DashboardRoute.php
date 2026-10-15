@@ -11,6 +11,11 @@ use YouTubeMcp\Http\View;
 use YouTubeMcp\Quota\Usage;
 use YouTubeMcp\Storage\Database;
 
+/**
+ * Renders the signed-in user's account dashboard.
+ *
+ * Combines Database account details and Usage estimates with configured client information for View.
+ */
 final class DashboardRoute
 {
     public function __construct(

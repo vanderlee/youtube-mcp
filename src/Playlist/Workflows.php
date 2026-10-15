@@ -14,6 +14,10 @@ use YouTubeMcp\Storage\Lock;
 use YouTubeMcp\YouTube\Api;
 
 /**
+ * Plans and executes multi-step playlist transformations and analysis.
+ *
+ * Uses Scanner snapshots, locks and Receipts to verify changes and preserve progress across explicit resumes.
+ *
  * @phpstan-type WorkflowAction array{type: 'add', video_id: string}
  *     |array{type: 'remove', id: string, playlist_id?: string}
  *     |array{type: 'move', id: string, video_id: string, position: int}

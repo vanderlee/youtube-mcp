@@ -10,6 +10,11 @@ use YouTubeMcp\Auth\Scope;
 use YouTubeMcp\Config;
 use YouTubeMcp\Http\Responses;
 
+/**
+ * Publishes protected-resource metadata for the MCP endpoint.
+ *
+ * Uses Config and Scope to tell clients where and how to obtain service authorization.
+ */
 final class ResourceMetadataRoute
 {
     public function __construct(

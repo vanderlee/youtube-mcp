@@ -11,7 +11,11 @@ use DateTimeZone;
 use LogicException;
 use YouTubeMcp\Storage\Database;
 
-/** Local usage estimates only. YouTube enforces all quotas and rate limits. */
+/**
+ * Records local request outcomes and estimated YouTube API usage for reporting.
+ *
+ * Supports Api and MediaApi instrumentation; YouTube alone enforces quotas and rate limits.
+ */
 final class Usage
 {
     public const COSTS = [

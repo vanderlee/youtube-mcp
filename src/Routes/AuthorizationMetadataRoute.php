@@ -9,6 +9,11 @@ use Psr\Http\Message\ServerRequestInterface;
 use YouTubeMcp\Auth\OAuth;
 use YouTubeMcp\Http\Responses;
 
+/**
+ * Publishes OAuth authorization-server discovery metadata.
+ *
+ * Delegates to OAuth so clients discover the endpoints and capabilities actually configured.
+ */
 final class AuthorizationMetadataRoute
 {
     public function __construct(

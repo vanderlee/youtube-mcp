@@ -13,6 +13,11 @@ use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Lock;
 use YouTubeMcp\YouTube\MediaStore;
 
+/**
+ * Handles browser staging and deletion of media assets for creator tools.
+ *
+ * Combines CSRF checks, the current Google connection, account locks and MediaStore isolation.
+ */
 final class MediaRoute
 {
     public function __construct(

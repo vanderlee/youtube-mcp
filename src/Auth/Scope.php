@@ -8,6 +8,11 @@ use League\OAuth2\Server\Entities\ScopeEntityInterface;
 use League\OAuth2\Server\Entities\Traits\EntityTrait;
 use League\OAuth2\Server\Entities\Traits\ScopeTrait;
 
+/**
+ * Represents a supported service permission for the League OAuth server.
+ *
+ * Supplies scope identifiers used by OAuthRepository when granting client access.
+ */
 final class Scope implements ScopeEntityInterface
 {
     use EntityTrait;

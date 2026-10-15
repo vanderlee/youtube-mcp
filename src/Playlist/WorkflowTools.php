@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Playlist;
 
+/**
+ * Declares schemas and descriptions for playlist workflow tools.
+ *
+ * Supplies Mcp\Tools and Workflows with the argument contracts for planning and execution.
+ */
 final class WorkflowTools
 {
     public const WRITES = [

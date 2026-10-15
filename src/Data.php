@@ -6,7 +6,11 @@ namespace YouTubeMcp;
 
 use UnexpectedValueException;
 
-/** Validate values at JSON, session and storage boundaries without coercing their shape. */
+/**
+ * Validates values at JSON, session and storage boundaries without coercing their shape.
+ *
+ * Keeps untrusted or decoded data explicit before services rely on its types.
+ */
 final class Data
 {
     public static function text(mixed $value): string

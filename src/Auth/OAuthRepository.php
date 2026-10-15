@@ -17,6 +17,11 @@ use League\OAuth2\Server\Repositories\RefreshTokenRepositoryInterface;
 use League\OAuth2\Server\Repositories\ScopeRepositoryInterface;
 use YouTubeMcp\Storage\Database;
 
+/**
+ * Connects the League OAuth server's entity repositories to SQLite.
+ *
+ * Persists grants and token revocation state so OAuth can enforce client and user authorization.
+ */
 final class OAuthRepository implements
     ClientRepositoryInterface,
     AccessTokenRepositoryInterface,

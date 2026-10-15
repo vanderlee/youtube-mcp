@@ -7,6 +7,11 @@ namespace YouTubeMcp\Auth;
 use League\OAuth2\Server\Entities\ClientEntityInterface;
 use League\OAuth2\Server\Entities\Traits\EntityTrait;
 
+/**
+ * Adapts a registered MCP client to the League OAuth client contract.
+ *
+ * Exposes its name, permitted redirects and confidentiality to the authorization server.
+ */
 final class Client implements ClientEntityInterface
 {
     use EntityTrait;

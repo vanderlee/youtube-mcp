@@ -17,6 +17,11 @@ use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\Database;
 use YouTubeMcp\Storage\Lock;
 
+/**
+ * Handles browser consent for an MCP client's OAuth authorization request.
+ *
+ * Coordinates BrowserSession, OAuth and stored consent before issuing an authorization code.
+ */
 final class AuthorizeClientRoute
 {
     public function __construct(

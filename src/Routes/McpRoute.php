@@ -19,6 +19,11 @@ use YouTubeMcp\Config;
 use YouTubeMcp\Mcp\Tools;
 use YouTubeMcp\Mcp\Dispatcher;
 
+/**
+ * Serves authenticated MCP requests through the SDK's streamable HTTP transport.
+ *
+ * Connects OAuth identities, Tools and Dispatcher with session storage and transport security middleware.
+ */
 final class McpRoute
 {
     public function __construct(

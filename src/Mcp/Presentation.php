@@ -6,7 +6,11 @@ namespace YouTubeMcp\Mcp;
 
 use YouTubeMcp\Data;
 
-/** Shape model-facing results without changing persisted receipts or upstream data. */
+/**
+ * Shapes compact model-facing results without changing receipts or upstream data.
+ *
+ * Lets Tools reduce response size while preserving the full result for callers that request it.
+ */
 final class Presentation
 {
     /**

@@ -7,6 +7,11 @@ namespace YouTubeMcp\Auth;
 use YouTubeMcp\Data;
 use RuntimeException;
 
+/**
+ * Encrypts and decrypts credential payloads using the application key.
+ *
+ * Keeps Google tokens and sensitive upload-session data protected outside active requests.
+ */
 final class Vault
 {
     private string $key;

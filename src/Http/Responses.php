@@ -7,6 +7,11 @@ namespace YouTubeMcp\Http;
 use Nyholm\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
 
+/**
+ * Builds shared JSON and redirect responses for HTTP handlers.
+ *
+ * Keeps routine response construction consistent across routes and application errors.
+ */
 final class Responses
 {
     /** @param array<array-key, mixed> $data */

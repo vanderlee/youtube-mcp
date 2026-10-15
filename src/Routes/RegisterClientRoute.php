@@ -10,6 +10,11 @@ use YouTubeMcp\Auth\OAuth;
 use YouTubeMcp\Http\RequestChecks;
 use YouTubeMcp\Http\Responses;
 
+/**
+ * Accepts dynamic OAuth client registration requests.
+ *
+ * Parses POST bodies and delegates registration policy and persistence to OAuth.
+ */
 final class RegisterClientRoute
 {
     public function __construct(

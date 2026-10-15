@@ -9,6 +9,11 @@ use Psr\Http\Message\ServerRequestInterface;
 use YouTubeMcp\Auth\GoogleFlow;
 use YouTubeMcp\Http\RequestChecks;
 
+/**
+ * Starts YouTube connection authorization from an authenticated browser action.
+ *
+ * Checks CSRF before delegating state and PKCE setup to GoogleFlow.
+ */
 final class ConnectGoogleRoute
 {
     public function __construct(

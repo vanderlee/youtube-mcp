@@ -6,6 +6,11 @@ namespace YouTubeMcp\Http;
 
 use YouTubeMcp\ServiceError;
 
+/**
+ * Sends bounded HTTPS requests and decodes upstream JSON responses.
+ *
+ * Reuses request-local connections partitioned by origin and headers, and reports uncertain failures.
+ */
 class Client
 {
     /**

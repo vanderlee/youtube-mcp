@@ -6,6 +6,11 @@ namespace YouTubeMcp;
 
 use RuntimeException;
 
+/**
+ * Carries a service failure with a stable reason, details and HTTP status.
+ *
+ * Lets HTTP routes and MCP handlers present consistent errors to callers.
+ */
 final class ServiceError extends RuntimeException
 {
     /**

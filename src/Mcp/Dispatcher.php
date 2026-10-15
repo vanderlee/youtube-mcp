@@ -13,6 +13,11 @@ use YouTubeMcp\Storage\Lock;
 use YouTubeMcp\YouTube\CreatorService;
 use YouTubeMcp\YouTube\Service as YouTubeService;
 
+/**
+ * Routes tool execution to the owning playlist, workflow or YouTube service.
+ *
+ * Uses ToolCatalog for ownership and reads operation receipts under the account lock.
+ */
 final class Dispatcher
 {
     public function __construct(
