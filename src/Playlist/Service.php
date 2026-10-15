@@ -199,7 +199,7 @@ final class Service
      * @param array<string, mixed> $arguments
      * @param array{channel_id: string, generation: string} $connection
      * @param array<string, mixed> $done
-     * @return array{string|null, list<array{string, string, array<string, mixed>, array<string, mixed>|null}>}
+     * @return array{string, list<array{string, string, array<string, mixed>, array<string, mixed>|null}>}
      */
     private function planChanges(
         string $user,
@@ -209,19 +209,21 @@ final class Service
         array $done,
     ): array {
         $id = $arguments['playlist_id'] ?? null;
-        $metadata = null;
-        $planned = [];
-        if ($id) {
-            $metadata = $this->metadata($user, $id);
-            if (($metadata['snippet']['channelId'] ?? null) !== $connection['channel_id']) {
-                throw new ServiceError(
-                    'NOT_PLAYLIST_OWNER',
-                    'Only playlists owned by your connected channel may be changed.',
-                    [],
-                    403,
-                );
-            }
+        if (!is_string($id) || $id === '') {
+            throw new ServiceError('INVALID_ARGUMENT', 'A playlist ID is required for this operation.');
         }
+
+        $metadata = $this->metadata($user, $id);
+        $planned = [];
+        if (($metadata['snippet']['channelId'] ?? null) !== $connection['channel_id']) {
+            throw new ServiceError(
+                'NOT_PLAYLIST_OWNER',
+                'Only playlists owned by your connected channel may be changed.',
+                [],
+                403,
+            );
+        }
+
         if ($tool === 'update_playlist') {
             $planned = $this->planMetadataUpdate($id, $metadata, $arguments);
         } elseif ($tool === 'delete_playlist') {
@@ -505,11 +507,11 @@ final class Service
     }
 
     /**
-     * @param array<string, mixed>|null $metadata
+     * @param array<string, mixed> $metadata
      * @param array<string, mixed> $arguments
      * @return list<array{string, string, array<string, mixed>, array<string, mixed>|null}>
      */
-    private function planMetadataUpdate(?string $id, ?array $metadata, array $arguments): array
+    private function planMetadataUpdate(string $id, array $metadata, array $arguments): array
     {
         $snippet = $metadata['snippet'];
         unset($snippet['thumbnails'], $snippet['channelId'], $snippet['channelTitle'], $snippet['publishedAt'], $snippet['localized']);
@@ -534,7 +536,7 @@ final class Service
      * @param array<string, mixed> $done
      * @return list<array{string, string, array<string, mixed>, array<string, mixed>|null}>
      */
-    private function planTrackAdditions(string $user, ?string $id, array $arguments, array $done): array
+    private function planTrackAdditions(string $user, string $id, array $arguments, array $done): array
     {
         $planned = [];
         $videos = array_map(fn($v) => $this->video($v), $arguments['video_ids']);

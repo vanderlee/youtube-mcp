@@ -260,6 +260,9 @@ try {
         $begin = '# BEGIN ' . $marker;
         $end = '# END ' . $marker;
         $out = preg_replace('/^' . preg_quote($begin, '/') . '\R.*?^' . preg_quote($end, '/') . '\R?/ms', '', $out);
+        if ($out === null) {
+            throw new RuntimeException('Cannot parse current crontab; existing entries unchanged.');
+        }
         $new = rtrim($out) . "\n" . $begin . "\n" . $line . "\n" . $end . "\n";
         [$status] = $run(['crontab', '-'], $new);
         if ($status !== 0) {

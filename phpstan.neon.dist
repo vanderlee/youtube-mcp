@@ -1,5 +1,5 @@
 parameters:
-    level: 7
+    level: 8
     phpVersion: 80200
     bootstrapFiles:
         - vendor/squizlabs/php_codesniffer/autoload.php

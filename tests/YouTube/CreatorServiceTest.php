@@ -166,6 +166,21 @@ test(
     },
 );
 
+test('video uploads reject caption assets before any upstream request', function (): void {
+    [$service, $assets, $api, $http, , $google] = $this->creators();
+    $saved = $assets->save('u1', $google->connection('u1'), $this->captionUpload());
+
+    $result = $service->execute('u1', ['videos.upload'], 'upload_video', [
+        'asset_id' => $saved['asset_id'],
+        'title' => 'Fixture',
+        'operation_key' => 'wrong-upload-media-test',
+    ]);
+
+    expect($result['error']['code'])->toBe('INVALID_MEDIA');
+    expect($api->calls)->toBe([]);
+    expect($http->calls)->toBe([]);
+});
+
 test('creator scopes and ownership checks stop writes before dispatch', function (): void {
     [$service, , $api, $http] = $this->creators(
         [['items' => [['id' => 'aaaaaaaaaaa', 'snippet' => ['channelId' => 'foreign']]]]],

@@ -129,7 +129,7 @@ composer audit
 ```
 
 GNU Make provides the same commands through `make install`, `make test`, and `make audit`.
-Run `make phpstan` for PHPStan level 7, `make cs` for PHP_CodeSniffer, and
+Run `make phpstan` for PHPStan level 8, `make cs` for PHP_CodeSniffer, and
 `make cs-check` to preview PHP-CS-Fixer changes. `make cs-fix` applies formatting;
 review its diff before committing. `make qa` runs tests and all QA checks.
 Every QA target also has a matching Composer script, so Make is optional.

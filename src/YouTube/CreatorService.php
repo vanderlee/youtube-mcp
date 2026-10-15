@@ -175,6 +175,10 @@ final class CreatorService
             return ['video_id' => $arguments['video_id'], 'changed' => true];
         }
         if ($tool === 'update_video' || $tool === 'delete_video') {
+            if ($video === null) {
+                throw new ServiceError('INVALID_ARGUMENT', 'Supply a video ID for this operation.');
+            }
+
             return $this->videoChange($user, $tool, $arguments, $video, $step, $operation);
         }
         if (str_contains($tool, 'caption')) {
@@ -446,6 +450,7 @@ final class CreatorService
 
     /**
      * @param array<string, mixed>|null $asset
+     * @phpstan-assert non-empty-array<string, mixed> $asset
      */
     private function assertMime(?array $asset, string $prefix): void
     {

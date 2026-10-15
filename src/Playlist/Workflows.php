@@ -87,6 +87,9 @@ final class Workflows
         if ($tool === 'copy_playlist') {
             $target = $this->createCopyTarget($user, $arguments, $step, $operation);
         }
+        if (!is_string($target) || $target === '') {
+            throw new ServiceError('INVALID_ARGUMENT', 'A destination playlist is required.');
+        }
 
         $this->verifyPlan($user, $connection['channel_id'], $tool, $plan, $done, $target);
 
@@ -129,7 +132,7 @@ final class Workflows
         string $tool,
         array $plan,
         array $done,
-        ?string $target,
+        string $target,
     ): void {
         $expected = $plan['before'];
         if ($tool === 'copy_playlist') {

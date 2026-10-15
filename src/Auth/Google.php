@@ -122,7 +122,12 @@ final class Google
             [$id, $identity['subject'], $identity['email'], time()],
         );
 
-        return $this->db->one('SELECT id FROM users WHERE subject=?', [$identity['subject']])['id'];
+        $user = $this->db->one('SELECT id FROM users WHERE subject=?', [$identity['subject']]);
+        if ($user === null) {
+            throw new \RuntimeException('Cannot load signed-in user.');
+        }
+
+        return $user['id'];
     }
 
     /**

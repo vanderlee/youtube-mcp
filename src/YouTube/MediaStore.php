@@ -22,6 +22,9 @@ final class MediaStore
     {
         $size = $upload->getSize();
         $active = $this->db->one('SELECT COUNT(*) AS n FROM media_assets WHERE user_id=? AND created_at>?', [$user, time() - 86400]);
+        if ($active === null) {
+            throw new \RuntimeException('Cannot count active media assets.');
+        }
         if ((int) $active['n'] >= 50) {
             throw new ServiceError('MEDIA_LIMIT', 'Delete an asset before staging more than 50 active files.');
         }
