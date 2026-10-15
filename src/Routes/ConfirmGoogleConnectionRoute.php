@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Routes;
 
+use YouTubeMcp\Data;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use YouTubeMcp\Auth\Google;
@@ -24,14 +25,14 @@ final class ConfirmGoogleConnectionRoute
     {
         RequestChecks::csrf($request);
         $pending = $_SESSION['pending_connection'] ?? null;
-        if (!$pending || $pending['at'] < time() - 600 || $pending['user'] !== $user) {
+        if (!$pending || Data::get($pending, 'at') < time() - 600 || Data::get($pending, 'user') !== $user) {
             throw new ServiceError('CONNECTION_EXPIRED', 'Reconnect your Google account.');
         }
 
         $this->google->connect(
             $user,
-            (new Vault($this->config->get('APP_KEY')))->decrypt($pending['tokens']),
-            $pending['channel'],
+            (new Vault($this->config->get('APP_KEY')))->decrypt(Data::string(Data::get($pending, 'tokens'))),
+            Data::object(Data::get($pending, 'channel')),
         );
         unset($_SESSION['pending_connection']);
 

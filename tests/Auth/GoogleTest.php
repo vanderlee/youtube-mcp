@@ -21,6 +21,28 @@ trait GoogleTestHelpers
 
 uses(GoogleTestHelpers::class);
 
+test('malformed verified Google identities are rejected before creating a user', function (array $profile): void {
+    $db = $this->database();
+    $cfg = $this->config();
+    $http = new class ($profile) extends Client {
+        public function __construct(private array $profile) {}
+
+        public function request(string $method, string $url, array $headers = [], ?string $body = null): array
+        {
+            return ['status' => 200, 'data' => $this->profile];
+        }
+    };
+    $google = new Google($cfg, $db, new Vault($cfg->get('APP_KEY')), $http, new Lock($this->dir));
+
+    expect(fn() => $google->identity('dummy-access-token'))->toThrow(ServiceError::class, 'verified identity');
+    expect($db->all('SELECT id FROM users'))->toBe([]);
+})->with([
+    'numeric subject' => [['sub' => 123, 'email' => 'fixture@example.test', 'email_verified' => true]],
+    'structured subject' => [['sub' => ['private-fixture'], 'email' => 'fixture@example.test', 'email_verified' => true]],
+    'missing email' => [['sub' => 'fixture', 'email_verified' => true]],
+    'structured email' => [['sub' => 'fixture', 'email' => ['private-fixture'], 'email_verified' => true]],
+]);
+
 test('youtube connection requests only official data api scope without broadening sign in', function (): void {
     $cfg = $this->config(['GOOGLE_CLIENT_ID' => 'dummy-client']);
     $google = new Google($cfg, $this->database(), new Vault($cfg->get('APP_KEY')), new Client(), new Lock($this->dir));

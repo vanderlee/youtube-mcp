@@ -45,6 +45,7 @@ final class BrowserSession
 
         if (
             !$account
+            || !is_string($account['generation'])
             || !is_string($_SESSION['user_generation'] ?? null)
             || !hash_equals($account['generation'], $_SESSION['user_generation'])
             || !is_int($signedIn)

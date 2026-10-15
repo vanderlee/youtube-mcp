@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Quota;
 
+use YouTubeMcp\Data;
 use Closure;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -158,8 +159,8 @@ final class Usage
                 [$this->window(), 'project', $bucket],
             );
             $result['buckets'][$bucket] = [
-                'user_spent' => (int) ($userUsage['spent'] ?? 0),
-                'project_spent' => (int) ($projectUsage['spent'] ?? 0),
+                'user_spent' => (int) (Data::scalar($userUsage['spent'] ?? 0)),
+                'project_spent' => (int) (Data::scalar($projectUsage['spent'] ?? 0)),
             ];
         }
 

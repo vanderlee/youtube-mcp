@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Storage;
 
+use YouTubeMcp\Data;
 use PDO;
 use PDOStatement;
 use PDOException;
@@ -114,9 +115,16 @@ final class Database
      */
     public function one(string $sql, array $params = []): ?array
     {
-        return $this->execute($sql, $params)->fetch() ?: null;
+        $row = $this->execute($sql, $params)->fetch(PDO::FETCH_ASSOC);
+
+        return $row === false ? null : Data::object($row);
     }
 
+    /**
+     * @template T
+     * @param callable(): T $fn
+     * @return T
+     */
     public function transaction(callable $fn): mixed
     {
         $this->pdo->exec('BEGIN IMMEDIATE');

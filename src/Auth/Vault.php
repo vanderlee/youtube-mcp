@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Auth;
 
+use YouTubeMcp\Data;
 use RuntimeException;
 
 final class Vault
@@ -54,6 +55,6 @@ final class Vault
             throw new RuntimeException('Cannot decrypt credentials.');
         }
 
-        return json_decode($plain, true, 512, JSON_THROW_ON_ERROR);
+        return Data::array(json_decode($plain, true, 512, JSON_THROW_ON_ERROR));
     }
 }

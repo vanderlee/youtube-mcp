@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Routes;
 
+use YouTubeMcp\Data;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use YouTubeMcp\Auth\BrowserSession;
@@ -34,9 +35,9 @@ final class GoogleCallbackRoute
         unset($_SESSION['google_flow']);
         if (
             !$flow
-            || $flow['at'] < time() - 600
+            || Data::get($flow, 'at') < time() - 600
             || !hash_equals(
-                $flow['state'],
+                Data::string(Data::get($flow, 'state')),
                 (string) ($query['state'] ?? ''),
             )
             || empty($query['code'])
@@ -49,19 +50,19 @@ final class GoogleCallbackRoute
             );
         }
 
-        $tokens = $this->google->exchange($query['code'], $flow['verifier']);
-        $identity = $this->google->identity($tokens['access_token']);
-        if (!$flow['youtube']) {
+        $tokens = $this->google->exchange($query['code'], Data::string(Data::get($flow, 'verifier')));
+        $identity = $this->google->identity(Data::string($tokens['access_token']));
+        if (!Data::get($flow, 'youtube')) {
             $this->browser->signIn($this->google->signIn($identity));
 
             return Responses::redirect(
                 isset($_SESSION['authorization_query']) ? '/oauth/authorize?' . http_build_query(
-                    $_SESSION['authorization_query'],
+                    Data::array($_SESSION['authorization_query']),
                 ) : '/',
             );
         }
 
-        return $this->confirmGoogleChannel($flow['user'], $identity, $tokens);
+        return $this->confirmGoogleChannel(Data::string(Data::get($flow, 'user')), $identity, $tokens);
     }
 
     /**
@@ -83,16 +84,16 @@ final class GoogleCallbackRoute
             $user,
             'channels.list',
             ['part' => 'snippet', 'mine' => 'true'],
-            token: $tokens['access_token'],
+            token: Data::string($tokens['access_token']),
         );
-        if (count($channels['items'] ?? []) !== 1) {
+        if (count(Data::array($channels['items'] ?? [])) !== 1) {
             throw new ServiceError(
                 'CHANNEL_SELECTION_REQUIRED',
                 'Google must authorize exactly one YouTube channel. Reconnect using the intended channel.',
             );
         }
 
-        $channel = $channels['items'][0];
+        $channel = Data::get($channels, 'items', 0);
         $_SESSION['pending_connection'] = [
             'user' => $user,
             'tokens' => (new Vault($this->config->get('APP_KEY')))->encrypt($tokens),

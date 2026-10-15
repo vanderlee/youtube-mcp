@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Mcp;
 
+use YouTubeMcp\Data;
 use YouTubeMcp\Auth\Google;
 use YouTubeMcp\Operations\Receipts;
 use YouTubeMcp\Playlist\Service as PlaylistService;
@@ -39,7 +40,7 @@ final class Dispatcher
                 'account:' . $user,
                 fn() => $this->receipts->get(
                     $user,
-                    $arguments['operation_id'],
+                    Data::string($arguments['operation_id']),
                     $this->google->connection($user)['generation'],
                     $scopes,
                 ),

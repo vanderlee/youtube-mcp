@@ -248,7 +248,7 @@ final class App
         if (isset($this->browserRoutes[$path])) {
             return ($this->browserRoutes[$path])($request);
         }
-        if (empty($_SESSION['user'])) {
+        if (!is_string($_SESSION['user'] ?? null) || $_SESSION['user'] === '') {
             return $this->view->page('YouTube Music MCP', 'welcome');
         }
 

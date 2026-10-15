@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Playlist;
 
+use YouTubeMcp\Data;
 use YouTubeMcp\YouTube\Api;
 use YouTubeMcp\ServiceError;
 
@@ -17,12 +18,12 @@ final class Scanner
     public function metadata(string $user, string $playlist): array
     {
         $response = $this->api->call($user, 'playlists.list', ['part' => 'snippet,status,contentDetails', 'id' => $playlist]);
-        $metadata = $response['items'][0] ?? throw new ServiceError('PLAYLIST_NOT_FOUND', 'Playlist not accessible.', [], 404);
-        if (($metadata['id'] ?? '') !== $playlist) {
+        $metadata = Data::get($response, 'items', 0) ?? throw new ServiceError('PLAYLIST_NOT_FOUND', 'Playlist not accessible.', [], 404);
+        if ((Data::get($metadata, 'id') ?? '') !== $playlist) {
             throw new ServiceError('YOUTUBE_RESPONSE_INVALID', 'Google returned a different playlist.', [], 502);
         }
 
-        return $metadata;
+        return Data::object($metadata);
     }
 
     /**
@@ -31,7 +32,7 @@ final class Scanner
     public function owned(string $user, string $playlist, string $channel): array
     {
         $metadata = $this->metadata($user, $playlist);
-        if (($metadata['snippet']['channelId'] ?? '') !== $channel) {
+        if ((Data::get($metadata, 'snippet', 'channelId') ?? '') !== $channel) {
             throw new ServiceError('NOT_PLAYLIST_OWNER', 'Only playlists owned by your confirmed channel may be changed.', [], 403);
         }
 
@@ -59,7 +60,7 @@ final class Scanner
                 ['part' => 'snippet,contentDetails,status', 'playlistId' => $playlist, 'maxResults' => 50]
                     + ($page === null ? [] : ['pageToken' => $page]),
             );
-            foreach ($response['items'] ?? [] as $entry) {
+            foreach (Data::objects($response['items'] ?? []) as $entry) {
                 if (!is_string($entry['id'] ?? null) || isset($seen[$entry['id']])) {
                     throw new ServiceError('PLAYLIST_CHANGED', 'Playlist changed during scanning. Start a new operation.', [], 409);
                 }
@@ -67,11 +68,11 @@ final class Scanner
                 $seen[$entry['id']] = true;
                 $entries[] = [
                     'id' => $entry['id'],
-                    'video_id' => $entry['contentDetails']['videoId'] ?? $entry['snippet']['resourceId']['videoId'] ?? null,
-                    'title' => $entry['snippet']['title'] ?? '',
-                    'added_at' => $entry['snippet']['publishedAt'] ?? null,
-                    'position' => $entry['snippet']['position'] ?? count($entries),
-                    'privacy' => $entry['status']['privacyStatus'] ?? null,
+                    'video_id' => Data::get($entry, 'contentDetails', 'videoId') ?? Data::get($entry, 'snippet', 'resourceId', 'videoId'),
+                    'title' => Data::get($entry, 'snippet', 'title') ?? '',
+                    'added_at' => Data::get($entry, 'snippet', 'publishedAt'),
+                    'position' => Data::get($entry, 'snippet', 'position') ?? count($entries),
+                    'privacy' => Data::get($entry, 'status', 'privacyStatus'),
                 ];
             }
             if (count($entries) > 1000) {

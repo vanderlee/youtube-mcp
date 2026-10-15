@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+
+use YouTubeMcp\Data;
+
 // Private CLI helper for post-deploy.sh. Never place this directory in the web root.
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
@@ -300,14 +303,14 @@ try {
         foreach (['/health/live', '/health/ready'] as $path) {
             [$status, $body] = $get($config->url() . $path);
             $json = json_decode($body, true);
-            if ($status !== 200 || !in_array($json['status'] ?? null, ['ok', 'ready'], true)) {
+            if ($status !== 200 || !in_array(Data::get($json, 'status'), ['ok', 'ready'], true)) {
                 throw new RuntimeException('Health check failed: ' . $path);
             }
             echo 'HTTPS check passed: ' . $path . PHP_EOL;
         }
         [$status, $body] = $get($config->url() . '/.well-known/oauth-authorization-server');
         $json = json_decode($body, true);
-        if ($status !== 200 || ($json['issuer'] ?? null) !== $config->url()) {
+        if ($status !== 200 || (Data::get($json, 'issuer')) !== $config->url()) {
             throw new RuntimeException('OAuth metadata does not match the configured origin.');
         }
         [$status] = $get($config->url() . '/mcp', 'POST');
@@ -319,7 +322,7 @@ try {
             if ($status === 200 && (str_contains($body, 'APP_KEY=') || str_contains(
                 $body,
                 'PRIVATE KEY-----',
-            ) || (json_decode($body, true)['name'] ?? null) === 'youtube-music-mcp/service')) {
+            ) || (Data::get(json_decode($body, true), 'name')) === 'youtube-music-mcp/service')) {
                 throw new RuntimeException(
                     'Private project file appears publicly accessible. Fix the document root immediately.',
                 );

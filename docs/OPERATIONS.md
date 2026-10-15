@@ -23,6 +23,8 @@ Usage reports count requests observed by this installation. Compare actual limit
 
 Receipt access is limited to the current connection generation. Capture the receipt before reconnecting or disconnecting when possible. Reconnection creates a new key namespace and does not prove old effects failed. After retention removes a receipt, an old key no longer protects against replay; use retained records and the actual upstream state before deciding on a new operation.
 
+Malformed stored receipt JSON or an invalid receipt structure stops replay and resume before any work is dispatched. Preserve the stored record and investigate storage integrity; do not replace it or create a new key as an automatic recovery step.
+
 ## Authorization failures
 
 For Google unavailability, throttling or OAuth configuration errors, repair the reported cause and preserve stored credentials. Only an invalid Google grant requires reconnection. Reconnection invalidates existing service tokens; reauthorize clients afterward with only the scopes they need. Revoking client access is separate from disconnecting Google. Account deletion removes local account data and staged assets; check the reported Google revocation outcome.

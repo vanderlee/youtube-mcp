@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\YouTube;
 
+use YouTubeMcp\Data;
 use YouTubeMcp\Auth\Google;
 use YouTubeMcp\Mcp\Arguments;
 use YouTubeMcp\Mcp\ToolCatalog;
@@ -68,7 +69,7 @@ final class Service
         ];
         if (
             isset($arguments['published_after'], $arguments['published_before'])
-            && strtotime($arguments['published_after']) >= strtotime($arguments['published_before'])
+            && strtotime(Data::string($arguments['published_after'])) >= strtotime(Data::string($arguments['published_before']))
         ) {
             throw new ServiceError('INVALID_ARGUMENT', 'published_after must be before published_before.');
         }
@@ -193,14 +194,14 @@ final class Service
             $method = 'comments.insert';
             $body = ['snippet' => ['parentId' => $arguments['comment_id'], 'textOriginal' => $arguments['text']]];
         } else {
-            $ids = $arguments['comment_ids'] ?? [$arguments['comment_id']];
+            $ids = Data::strings($arguments['comment_ids'] ?? [$arguments['comment_id']]);
             $comments = $this->api->call($user, 'comments.list', ['part' => 'snippet', 'id' => implode(',', $ids), 'maxResults' => 50]);
-            $byId = array_column($comments['items'] ?? [], null, 'id');
+            $byId = array_column(Data::objects($comments['items'] ?? []), null, 'id');
             foreach ($ids as $id) {
                 $comment = $byId[$id] ?? throw new ServiceError('COMMENT_NOT_FOUND', 'A comment was not returned.', [], 404);
                 if (
                     $tool !== 'moderate_comments'
-                    && ($comment['snippet']['authorChannelId']['value'] ?? '') !== $connection['channel_id']
+                    && (Data::get($comment, 'snippet', 'authorChannelId', 'value') ?? '') !== $connection['channel_id']
                 ) {
                     throw new ServiceError('NOT_COMMENT_AUTHOR', 'Only comments authored by your confirmed channel may be changed.', [], 403);
                 }
@@ -234,16 +235,16 @@ final class Service
         array $byId,
         array $ids,
     ): void {
-        $videos = array_unique(array_column(array_column($comments['items'], 'snippet'), 'videoId'));
+        $videos = array_unique(array_column(array_column(Data::array($comments['items']), 'snippet'), 'videoId'));
         if (count($videos) === 0) {
             throw new ServiceError('NOT_VIDEO_OWNER', 'Cannot verify the comments video ownership.', [], 403);
         }
 
         $response = $this->api->call($user, 'videos.list', ['part' => 'snippet', 'id' => implode(',', $videos)]);
-        $owners = array_column($response['items'] ?? [], 'snippet', 'id');
+        $owners = array_column(Data::array($response['items'] ?? []), 'snippet', 'id');
         foreach ($ids as $id) {
-            $video = $byId[$id]['snippet']['videoId'] ?? '';
-            if (($owners[$video]['channelId'] ?? '') !== $channel) {
+            $video = Data::get($byId, $id, 'snippet', 'videoId') ?? '';
+            if (($owners[Data::string($video)]['channelId'] ?? '') !== $channel) {
                 throw new ServiceError(
                     'NOT_VIDEO_OWNER',
                     'Only comments on videos owned by your confirmed channel may be moderated.',
@@ -265,13 +266,13 @@ final class Service
             'videos.list',
             [
                 'part' => 'snippet,contentDetails,statistics,status',
-                'id' => implode(',', $arguments['video_ids']),
+                'id' => implode(',', Data::strings($arguments['video_ids'])),
             ],
         );
 
         return [
             'items' => $response['items'] ?? [],
-            'not_returned_video_ids' => array_values(array_diff($arguments['video_ids'], array_column($response['items'] ?? [], 'id'))),
+            'not_returned_video_ids' => array_values(array_diff(Data::strings($arguments['video_ids']), array_column(Data::array($response['items'] ?? []), 'id'))),
             'availability_note' => 'Omitted videos may be private, deleted or inaccessible; metadata alone does not prove playback availability.',
         ];
     }
@@ -293,7 +294,7 @@ final class Service
             'channels.list',
             ['part' => 'contentDetails', 'id' => $arguments['channel_id'] ?? $connection['channel_id']],
         );
-        $uploads = $channel['items'][0]['contentDetails']['relatedPlaylists']['uploads'] ?? null;
+        $uploads = Data::get($channel, 'items', 0, 'contentDetails', 'relatedPlaylists', 'uploads');
         if (!is_string($uploads) || $uploads === '') {
             throw new ServiceError('CHANNEL_NOT_FOUND', 'No accessible uploads playlist was returned.', [], 404);
         }

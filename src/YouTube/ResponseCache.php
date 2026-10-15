@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\YouTube;
 
+use YouTubeMcp\Data;
 use YouTubeMcp\Storage\Database;
 
 /** Dependency versions stop a concurrent read from restoring an invalidated response. */
@@ -21,7 +22,7 @@ final class ResponseCache
             [$key, $user, time()],
         );
 
-        return $row === null ? null : json_decode($row['value'], true, 512, JSON_THROW_ON_ERROR);
+        return $row === null ? null : Data::array(json_decode(Data::string($row['value']), true, 512, JSON_THROW_ON_ERROR));
     }
 
     /**
@@ -31,7 +32,7 @@ final class ResponseCache
     public function tags(string $method, array $params): array
     {
         [$resource] = explode('.', $method);
-        $ids = array_filter(explode(',', (string) ($params['id'] ?? '')));
+        $ids = array_filter(explode(',', Data::text($params['id'] ?? '')));
         if ($method === 'videos.getRating') {
             return array_map(fn($id) => 'rating:' . $id, $ids);
         }
@@ -39,13 +40,13 @@ final class ResponseCache
             'playlists' => ['playlist-data', ...($ids ? array_map(fn($id) => 'playlist:' . $id, $ids) : ['playlist-list'])],
             'playlistItems' => [
                 'playlist-data',
-                ...(isset($params['playlistId']) ? ['playlist:' . $params['playlistId']] : ['entry-lookup']),
+                ...(isset($params['playlistId']) ? ['playlist:' . Data::text($params['playlistId'])] : ['entry-lookup']),
             ],
             'videos' => isset($params['myRating']) ? ['likes'] : array_map(fn($id) => 'video:' . $id, $ids),
             'subscriptions' => ['subscriptions'],
             'channels' => ['channels'],
             'comments', 'commentThreads' => ['comments'],
-            'search' => ['search:' . ($params['type'] ?? 'video')],
+            'search' => ['search:' . (Data::text($params['type'] ?? 'video'))],
             default => ['resource:' . $resource],
         };
     }
@@ -58,7 +59,7 @@ final class ResponseCache
     {
         $versions = [];
         foreach ($tags as $tag) {
-            $versions[$tag] = (int) ($this->db->one('SELECT version FROM api_cache_versions WHERE user_id=? AND tag=?', [$user, $tag])['version'] ?? 0);
+            $versions[$tag] = (int) (Data::scalar($this->db->one('SELECT version FROM api_cache_versions WHERE user_id=? AND tag=?', [$user, $tag])['version'] ?? 0));
         }
 
         return $versions;
@@ -95,18 +96,18 @@ final class ResponseCache
     {
         [$resource] = explode('.', $method);
         $id = $params['id'] ?? $body['id'] ?? null;
-        $tags = $method === 'videos.rate' ? ['likes', 'rating:' . $id] : match ($resource) {
-            'playlists' => ['playlist-list', 'search:playlist', ...($id ? ['playlist:' . $id] : [])],
+        $tags = $method === 'videos.rate' ? ['likes', 'rating:' . Data::text($id)] : match ($resource) {
+            'playlists' => ['playlist-list', 'search:playlist', ...($id ? ['playlist:' . Data::text($id)] : [])],
             'playlistItems' => ['playlist-list', 'entry-lookup', ...($playlist ? ['playlist:' . $playlist] : ['playlist-data'])],
             'videos' => [
                 'likes',
                 'search:video',
                 'playlist-data',
                 'channels',
-                ...($id ? ['video:' . $id, 'rating:' . $id] : []),
+                ...($id ? ['video:' . Data::text($id), 'rating:' . Data::text($id)] : []),
             ],
             'channels', 'channelBanners' => ['channels', 'search:channel'],
-            'thumbnails' => ['search:video', ...(isset($params['videoId']) ? ['video:' . $params['videoId']] : [])],
+            'thumbnails' => ['search:video', ...(isset($params['videoId']) ? ['video:' . Data::text($params['videoId'])] : [])],
             'subscriptions' => ['subscriptions'],
             'comments', 'commentThreads' => ['comments'],
             default => ['resource:' . $resource],

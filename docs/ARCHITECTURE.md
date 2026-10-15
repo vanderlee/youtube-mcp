@@ -12,6 +12,8 @@ This is a PHP 8.2+ multi-user MCP service running one application instance under
 
 `Mcp/ToolCatalog.php` resolves tool ownership, write classification and permissions for dispatch, published metadata, service checks and receipt authorization. YouTube and creator tool definitions own their domain-specific scope rules. A new tool needs a schema, catalog routing/permission entry, handler behavior, tests and documentation together; unknown tool names fail closed.
 
+`Data.php` validates dynamic values consumed from JSON, storage and sessions. Missing optional paths return `null`; malformed containers or values fail without including their contents in the error. Lock and transaction callbacks preserve their return types for static analysis.
+
 ## Effects and isolation
 
 `Auth/` owns Google credentials, OAuth and browser sessions. Credentials are encrypted with `APP_KEY`. Browser authentication generations, Google connection generations and selected channel IDs have distinct lifetimes; preserve them when changing storage or account flows.
@@ -28,4 +30,4 @@ This is a PHP 8.2+ multi-user MCP service running one application instance under
 
 Run the hourly CLI cleanup task, migrations and backups as described in [operations](OPERATIONS.md). Busy accounts defer expired media until a later run without stopping other cleanup. Real storage errors still fail the command.
 
-Tests use mocked upstream calls and isolated storage. CI checks locked dependencies, tests on PHP 8.2/8.5, PHPStan level 8 and formatting. These checks do not establish deployment or client compatibility; record the [live acceptance checks](ACCEPTANCE.md) separately.
+Tests use mocked upstream calls and isolated storage. CI checks locked dependencies, tests on PHP 8.2/8.5, PHPStan level 9 and formatting. These checks do not establish deployment or client compatibility; record the [live acceptance checks](ACCEPTANCE.md) separately.

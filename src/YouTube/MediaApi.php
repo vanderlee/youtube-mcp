@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\YouTube;
 
+use YouTubeMcp\Data;
 use YouTubeMcp\Auth\{Google, Vault};
 use YouTubeMcp\Http\MediaClient;
 use YouTubeMcp\Quota\Usage;
@@ -48,11 +49,11 @@ final class MediaApi
             fn() => $this->beginUploadSession($user, $method, $params, $metadata, $asset),
         );
         $location = $this->vault->decrypt($session['session'])['location'];
-        self::validateLocation($location);
+        self::validateLocation(Data::string($location));
 
         return $step(
             'upload-content',
-            fn() => $this->sendUploadContent($user, $method, $params, $metadata, $asset, $location),
+            fn() => $this->sendUploadContent($user, $method, $params, $metadata, $asset, Data::string($location)),
         );
     }
 
@@ -142,8 +143,8 @@ final class MediaApi
                 [
                     'Authorization: Bearer ' . $this->google->accessToken($user),
                     'Content-Type: application/json',
-                    'X-Upload-Content-Type: ' . $asset['mime'],
-                    'X-Upload-Content-Length: ' . $asset['bytes'],
+                    'X-Upload-Content-Type: ' . Data::text($asset['mime']),
+                    'X-Upload-Content-Length: ' . Data::text($asset['bytes']),
                 ],
                 json_encode((object) $metadata, JSON_THROW_ON_ERROR),
             );
@@ -182,10 +183,10 @@ final class MediaApi
                 $location,
                 [
                     'Authorization: Bearer ' . $access,
-                    'Content-Type: ' . $asset['mime'],
-                    'Content-Length: ' . $asset['bytes'],
+                    'Content-Type: ' . Data::text($asset['mime']),
+                    'Content-Length: ' . Data::text($asset['bytes']),
                 ],
-                path: $asset['path'],
+                path: Data::string($asset['path']),
             );
         } finally {
             $this->cache?->invalidate($user, $method, $params, $metadata, null);

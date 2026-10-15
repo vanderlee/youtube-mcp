@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Auth;
 
+use YouTubeMcp\Data;
 use League\OAuth2\Server\Entities\AccessTokenEntityInterface;
 use League\OAuth2\Server\Entities\AuthCodeEntityInterface;
 use League\OAuth2\Server\Entities\ClientEntityInterface;
@@ -30,9 +31,9 @@ final class OAuthRepository implements
         $row = $this->db->one('SELECT * FROM oauth_clients WHERE id=?', [$clientIdentifier]);
 
         return $row ? new Client(
-            $row['id'],
-            $row['name'],
-            json_decode($row['redirect_uris'], true),
+            Data::string($row['id']),
+            Data::string($row['name']),
+            Data::strings(json_decode(Data::string($row['redirect_uris']), true, 512, JSON_THROW_ON_ERROR)),
             (bool) $row['confidential'],
         ) : null;
     }
@@ -48,7 +49,7 @@ final class OAuthRepository implements
             return true;
         }
 
-        return $clientSecret !== null && password_verify($clientSecret, $row['secret_hash']);
+        return $clientSecret !== null && password_verify($clientSecret, Data::string($row['secret_hash']));
     }
 
     public function getScopeEntityByIdentifier(string $identifier): ?ScopeEntityInterface

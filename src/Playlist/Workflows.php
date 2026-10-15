@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Playlist;
 
+use YouTubeMcp\Data;
 use YouTubeMcp\Auth\Google;
 use YouTubeMcp\Mcp\Arguments;
 use YouTubeMcp\Mcp\ToolCatalog;
@@ -83,7 +84,7 @@ final class Workflows
     ): array {
         // Persist a frozen plan before dispatching any write; resume never replans from changed inputs.
         $plan = $step('plan', fn() => $this->plan($user, $connection['channel_id'], $tool, $arguments));
-        $target = $arguments['playlist_id'] ?? null;
+        $target = isset($arguments['playlist_id']) ? Data::string($arguments['playlist_id']) : null;
         if ($tool === 'copy_playlist') {
             $target = $this->createCopyTarget($user, $arguments, $step, $operation);
         }
@@ -141,7 +142,7 @@ final class Workflows
 
         foreach ($plan['actions'] as $n => $action) {
             if (isset($done['action:' . $n])) {
-                $this->apply($expected, $action, $done['action:' . $n], $target);
+                $this->apply($expected, $action, Data::object($done['action:' . $n]), $target);
             }
         }
 
@@ -207,7 +208,7 @@ final class Workflows
     {
         $deadline = microtime(true) + 45;
         $before = [];
-        $target = $arguments['playlist_id'] ?? null;
+        $target = isset($arguments['playlist_id']) ? Data::string($arguments['playlist_id']) : null;
         if ($target !== null) {
             $this->scanner->owned($user, $target, $channel);
             $before[$target] = $this->scanner->entries($user, $target, $deadline);
@@ -218,7 +219,7 @@ final class Workflows
         if (in_array($tool, ['copy_playlist', 'merge_playlists', 'transfer_tracks'], true)) {
             [$before, $actions, $skipped] = $this->sourceActions($user, $channel, $tool, $arguments, $before, $deadline);
         } elseif ($tool === 'remove_playlist_duplicates') {
-            $actions = $this->duplicateActions($before[$target], $arguments['keep'] ?? 'first');
+            $actions = $this->duplicateActions($before[$target], Data::string($arguments['keep'] ?? 'first'));
         } else {
             $actions = $this->reorderActions($before[$target], $tool, $arguments);
         }
@@ -257,16 +258,16 @@ final class Workflows
         array $before,
         float $deadline,
     ): array {
-        $target = $arguments['playlist_id'] ?? null;
+        $target = isset($arguments['playlist_id']) ? Data::string($arguments['playlist_id']) : null;
         $actions = [];
         $skipped = 0;
-        $sources = $arguments['source_playlist_ids'] ?? [$arguments['source_playlist_id']];
+        $sources = Data::strings($arguments['source_playlist_ids'] ?? [$arguments['source_playlist_id']]);
         if (in_array($target, $sources, true)) {
             throw new ServiceError('INVALID_ARGUMENT', 'Source and destination playlists must differ.');
         }
 
         $targetEntries = $target === null ? [] : ($before[$target] ?? []);
-        $seen = array_fill_keys(array_filter(array_column($targetEntries, 'video_id')), true);
+        $seen = array_fill_keys(Data::strings(array_values(array_filter(array_column($targetEntries, 'video_id')))), true);
         $sourceCount = 0;
         foreach ($sources as $source) {
             if ($tool === 'transfer_tracks' && ($arguments['move'] ?? false)) {
@@ -282,8 +283,8 @@ final class Workflows
             }
             if ($tool === 'transfer_tracks') {
                 $byId = array_column($entries, null, 'id');
-                foreach ($arguments['playlist_item_ids'] as $id) {
-                    if (!isset($byId[$id])) {
+                foreach (Data::array($arguments['playlist_item_ids']) as $id) {
+                    if (!isset($byId[Data::string($id)])) {
                         throw new ServiceError('ITEM_NOT_IN_PLAYLIST', 'A selected occurrence is not in the source.', [], 409);
                     }
                 }
@@ -291,7 +292,7 @@ final class Workflows
                     $before[$source] = $entries;
                 }
 
-                $entries = array_map(fn($id) => $byId[$id], array_values($arguments['playlist_item_ids']));
+                $entries = array_map(fn($id) => $byId[Data::string($id)], Data::strings($arguments['playlist_item_ids']));
             }
 
             [$sourceActions, $sourceSkipped, $seen] = $this->sourceAdditions($entries, $tool, $arguments, $seen);
@@ -299,7 +300,7 @@ final class Workflows
             $skipped += $sourceSkipped;
             if ($tool === 'transfer_tracks' && ($arguments['move'] ?? false)) {
                 foreach ($entries as $entry) {
-                    $actions[] = ['type' => 'remove', 'playlist_id' => $source, 'id' => $entry['id']];
+                    $actions[] = ['type' => 'remove', 'playlist_id' => $source, 'id' => Data::string($entry['id'])];
                 }
             }
         }
@@ -321,10 +322,10 @@ final class Workflows
             if ($video === null) {
                 continue;
             }
-            if (isset($seen[$video])) {
-                $actions[] = ['type' => 'remove', 'id' => $entry['id']];
+            if (isset($seen[Data::string($video)])) {
+                $actions[] = ['type' => 'remove', 'id' => Data::string($entry['id'])];
             } else {
-                $seen[$video] = true;
+                $seen[Data::string($video)] = true;
             }
         }
 
@@ -353,7 +354,7 @@ final class Workflows
                 throw new ServiceError('INVALID_VIDEO', 'Cannot reorder an occurrence without a valid video ID.');
             }
 
-            $actions[] = ['type' => 'move', 'id' => $entry['id'], 'video_id' => $entry['video_id'], 'position' => $position];
+            $actions[] = ['type' => 'move', 'id' => Data::string($entry['id']), 'video_id' => $entry['video_id'], 'position' => $position];
             array_splice($entries, $index, 1);
             array_splice($entries, $position, 0, [$entry]);
         }
@@ -369,19 +370,20 @@ final class Workflows
     private function orderedEntries(array $entries, string $tool, array $arguments): array
     {
         if ($tool === 'reorder_playlist') {
-            $ids = array_column($entries, 'id');
+            $ids = Data::strings(array_column($entries, 'id'));
+            $requestedIds = Data::strings($arguments['playlist_item_ids']);
             if (
-                count($ids) !== count($arguments['playlist_item_ids'])
-                || array_diff($ids, $arguments['playlist_item_ids'])
+                count($ids) !== count($requestedIds)
+                || array_diff($ids, $requestedIds)
             ) {
                 throw new ServiceError('INVALID_ARGUMENT', 'Supply each current occurrence ID exactly once.');
             }
 
             $byId = array_column($entries, null, 'id');
-            $desired = array_map(fn($id) => $byId[$id], array_values($arguments['playlist_item_ids']));
+            $desired = array_map(fn($id) => $byId[$id], $requestedIds);
         } else {
             $desired = $entries;
-            $order = $arguments['order'];
+            $order = Data::string($arguments['order']);
             if (
                 str_starts_with($order, 'added_')
                 && array_filter($entries, fn($entry) => $entry['added_at'] === null)
@@ -391,7 +393,7 @@ final class Workflows
             if (str_starts_with($order, 'added_')) {
                 foreach ($desired as &$entry) {
                     try {
-                        $entry['added_sort_key'] = (float) (new \DateTimeImmutable($entry['added_at']))->format('U.u');
+                        $entry['added_sort_key'] = (float) (new \DateTimeImmutable(Data::string($entry['added_at'])))->format('U.u');
                     } catch (\Exception) {
                         throw new ServiceError('YOUTUBE_RESPONSE_INVALID', 'An invalid playlist-added timestamp was returned.', [], 502);
                     }
@@ -401,7 +403,9 @@ final class Workflows
             usort(
                 $desired,
                 static function ($left, $right) use ($order) {
-                    $comparison = str_starts_with($order, 'title_') ? strnatcasecmp($left['title'], $right['title']) : $left['added_sort_key'] <=> $right['added_sort_key'];
+                    $comparison = str_starts_with($order, 'title_')
+                        ? strnatcasecmp(Data::string($left['title']), Data::string($right['title']))
+                        : $left['added_sort_key'] <=> $right['added_sort_key'];
                     if (in_array($order, ['title_desc', 'added_newest'], true)) {
                         $comparison = -$comparison;
                     }
@@ -462,12 +466,12 @@ final class Workflows
         );
         $entries = array_map(
             fn($entry) => [
-                'playlist_item_id' => $entry['id'],
-                'video_id' => $entry['contentDetails']['videoId'] ?? $entry['snippet']['resourceId']['videoId'] ?? null,
-                'title' => $entry['snippet']['title'] ?? '',
-                'position' => $entry['snippet']['position'] ?? null,
+                'playlist_item_id' => Data::get($entry, 'id'),
+                'video_id' => Data::get($entry, 'contentDetails', 'videoId') ?? Data::get($entry, 'snippet', 'resourceId', 'videoId'),
+                'title' => Data::get($entry, 'snippet', 'title') ?? '',
+                'position' => Data::get($entry, 'snippet', 'position'),
             ],
-            array_values($response['items'] ?? []),
+            array_values(Data::array($response['items'] ?? [])),
         );
         $result = [
             'next_page_token' => $response['nextPageToken'] ?? null,
@@ -485,7 +489,7 @@ final class Workflows
             return $result + [
                 'format' => $format,
                 'urls' => array_map(
-                    fn($entry) => $entry['video_id'] ? 'https://www.youtube.com/watch?v=' . $entry['video_id'] : null,
+                    fn($entry) => $entry['video_id'] ? 'https://www.youtube.com/watch?v=' . Data::text($entry['video_id']) : null,
                     $entries,
                 ),
             ];
@@ -514,7 +518,7 @@ final class Workflows
                 }
             }
             unset($cell);
-            fputcsv($stream, array_values($entry), ',', '"', '');
+            fputcsv($stream, array_map(Data::scalar(...), array_values($entry)), ',', '"', '');
         }
         rewind($stream);
         $csv = stream_get_contents($stream);
@@ -560,8 +564,8 @@ final class Workflows
     private function comparePlaylists(string $user, array $arguments): array
     {
         $deadline = microtime(true) + 45;
-        $left = $this->scanner->entries($user, $arguments['playlist_id'], $deadline);
-        $right = $this->scanner->entries($user, $arguments['other_playlist_id'], $deadline);
+        $left = $this->scanner->entries($user, Data::string($arguments['playlist_id']), $deadline);
+        $right = $this->scanner->entries($user, Data::string($arguments['other_playlist_id']), $deadline);
         $leftCounts = array_count_values(array_filter(array_column($left, 'video_id'), 'is_string'));
         $rightCounts = array_count_values(array_filter(array_column($right, 'video_id'), 'is_string'));
 
@@ -583,17 +587,18 @@ final class Workflows
     {
         $ids = array_values(array_unique(array_filter(array_column($entries, 'video_id'), 'is_string')));
         $videos = $ids ? $this->api->call($user, 'videos.list', ['part' => 'snippet,status,contentDetails', 'id' => implode(',', $ids)]) : ['items' => []];
-        $byId = array_column($videos['items'] ?? [], null, 'id');
+        $byId = array_column(Data::array($videos['items'] ?? []), null, 'id');
         foreach ($entries as &$entry) {
-            $video = $byId[$entry['video_id']] ?? null;
+            $videoId = $entry['video_id'];
+            $video = is_string($videoId) ? ($byId[$videoId] ?? null) : null;
             $entry['returned'] = $video !== null;
-            $entry['privacy'] = $video['status']['privacyStatus'] ?? null;
-            $restrictions = $video['contentDetails']['regionRestriction'] ?? [];
+            $entry['privacy'] = Data::get($video, 'status', 'privacyStatus');
+            $restrictions = Data::get($video, 'contentDetails', 'regionRestriction') ?? [];
             $entry['region_restrictions'] = $restrictions;
             if (isset($arguments['region'])) {
                 $entry['region_restricted'] = $video === null ? null : (
-                    in_array($arguments['region'], $restrictions['blocked'] ?? [], true)
-                    || (isset($restrictions['allowed']) && !in_array($arguments['region'], $restrictions['allowed'], true))
+                    in_array($arguments['region'], Data::array(Data::get($restrictions, 'blocked') ?? []), true)
+                    || (Data::get($restrictions, 'allowed') !== null && !in_array($arguments['region'], Data::array(Data::get($restrictions, 'allowed')), true))
                 );
             }
         }

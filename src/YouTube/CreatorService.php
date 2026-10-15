@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\YouTube;
 
+use YouTubeMcp\Data;
 use YouTubeMcp\Auth\Google;
 use YouTubeMcp\Mcp\Arguments;
 use YouTubeMcp\Mcp\ToolCatalog;
@@ -62,16 +63,16 @@ final class CreatorService
     private function ownedVideo(string $user, array $connection, string $video): array
     {
         $response = $this->api->call($user, 'videos.list', ['part' => 'snippet,status', 'id' => $video]);
-        $metadata = $response['items'][0] ?? null;
+        $metadata = Data::get($response, 'items', 0);
         if (
             !$metadata
-            || ($metadata['id'] ?? '') !== $video
-            || ($metadata['snippet']['channelId'] ?? '') !== $connection['channel_id']
+            || (Data::get($metadata, 'id') ?? '') !== $video
+            || (Data::get($metadata, 'snippet', 'channelId') ?? '') !== $connection['channel_id']
         ) {
             throw new ServiceError('NOT_VIDEO_OWNER', 'This video must be owned by your confirmed channel.', [], 403);
         }
 
-        return $metadata;
+        return Data::object($metadata);
     }
 
     /**
@@ -81,18 +82,18 @@ final class CreatorService
      */
     private function caption(string $user, array $connection, array $arguments): array
     {
-        $this->ownedVideo($user, $connection, $arguments['video_id']);
+        $this->ownedVideo($user, $connection, Data::string($arguments['video_id']));
         $response = $this->api->call(
             $user,
             'captions.list',
             ['part' => 'snippet', 'videoId' => $arguments['video_id'], 'id' => $arguments['caption_id']],
         );
-        foreach ($response['items'] ?? [] as $caption) {
+        foreach (Data::array($response['items'] ?? []) as $caption) {
             if (
-                $caption['id'] === $arguments['caption_id']
-                && ($caption['snippet']['videoId'] ?? '') === $arguments['video_id']
+                Data::get($caption, 'id') === $arguments['caption_id']
+                && (Data::get($caption, 'snippet', 'videoId') ?? '') === $arguments['video_id']
             ) {
-                return $caption;
+                return Data::object($caption);
             }
         }
         throw new ServiceError('CAPTION_NOT_FOUND', 'Caption does not belong to this owned video.', [], 404);
@@ -123,10 +124,10 @@ final class CreatorService
         if ($tool === 'download_caption') {
             $this->caption($user, $connection, $arguments);
 
-            return $this->media->caption($user, $arguments['caption_id'], $arguments['format'] ?? 'vtt');
+            return $this->media->caption($user, Data::string($arguments['caption_id']), Data::string($arguments['format'] ?? 'vtt'));
         }
 
-        $this->ownedVideo($user, $connection, $arguments['video_id']);
+        $this->ownedVideo($user, $connection, Data::string($arguments['video_id']));
 
         return $this->api->call($user, 'captions.list', ['part' => 'snippet', 'videoId' => $arguments['video_id']]);
     }
@@ -150,7 +151,7 @@ final class CreatorService
             $step(
                 'delete-asset',
                 function () use ($user, $connection, $arguments) {
-                    $this->assets->delete($user, $connection, $arguments['asset_id']);
+                    $this->assets->delete($user, $connection, Data::string($arguments['asset_id']));
 
                     return ['deleted' => true];
                 },
@@ -161,10 +162,10 @@ final class CreatorService
 
         $video = null;
         if (isset($arguments['video_id']) && !isset($arguments['caption_id'])) {
-            $video = $this->ownedVideo($user, $connection, $arguments['video_id']);
+            $video = $this->ownedVideo($user, $connection, Data::string($arguments['video_id']));
         }
 
-        $asset = isset($arguments['asset_id']) ? $this->assets->get($user, $connection, $arguments['asset_id']) : null;
+        $asset = isset($arguments['asset_id']) ? $this->assets->get($user, $connection, Data::string($arguments['asset_id'])) : null;
         if ($tool === 'upload_video') {
             return $this->uploadVideo($user, $connection, $arguments, $asset, $step);
         }
@@ -236,7 +237,7 @@ final class CreatorService
     {
         $body = ['id' => $arguments['video_id']];
         $snippet = array_intersect_key(
-            $video['snippet'],
+            Data::array($video['snippet']),
             array_flip(['title', 'description', 'categoryId', 'tags', 'defaultLanguage', 'defaultAudioLanguage']),
         );
         $supplied = false;
@@ -256,7 +257,7 @@ final class CreatorService
         }
         if (isset($arguments['privacy'])) {
             $body['status'] = array_intersect_key(
-                $video['status'] ?? [],
+                Data::array($video['status'] ?? []),
                 array_flip(
                     [
                         'privacyStatus',
@@ -350,12 +351,12 @@ final class CreatorService
         callable $step,
         string $operation,
     ): array {
-        $channel = $this->api->call($user, 'channels.list', ['part' => 'brandingSettings', 'id' => $connection['channel_id']])['items'][0] ?? null;
-        if (!$channel || ($channel['id'] ?? '') !== $connection['channel_id']) {
+        $channel = Data::get($this->api->call($user, 'channels.list', ['part' => 'brandingSettings', 'id' => $connection['channel_id']]), 'items', 0);
+        if (!$channel || (Data::get($channel, 'id') ?? '') !== $connection['channel_id']) {
             throw new ServiceError('CHANNEL_NOT_FOUND', 'Your confirmed channel was not returned.', [], 404);
         }
 
-        $branding = $channel['brandingSettings'] ?? [];
+        $branding = Data::array(Data::get($channel, 'brandingSettings') ?? []);
         if ($tool === 'set_channel_banner') {
             $this->assertMime($asset, 'image/');
             $uploaded = $this->media->upload($user, 'channelBanners.insert', [], [], $asset, $step);
@@ -364,6 +365,7 @@ final class CreatorService
                 throw new ServiceError('UPSTREAM_UNCERTAIN', 'Banner upload returned no HTTPS image URL.', [], 502);
             }
 
+            $branding['image'] = Data::array($branding['image'] ?? []);
             $branding['image']['bannerExternalUrl'] = $url;
         } else {
             $changes = array_intersect_key($arguments, array_flip(['description', 'keywords', 'country', 'trailer_video_id']));
@@ -371,9 +373,10 @@ final class CreatorService
                 throw new ServiceError('INVALID_ARGUMENT', 'Supply at least one branding change.');
             }
             if (isset($arguments['trailer_video_id'])) {
-                $this->ownedVideo($user, $connection, $arguments['trailer_video_id']);
+                $this->ownedVideo($user, $connection, Data::string($arguments['trailer_video_id']));
             }
 
+            $branding['channel'] = Data::array($branding['channel'] ?? []);
             foreach ($changes as $key => $value) {
                 $branding['channel'][$key === 'trailer_video_id' ? 'unsubscribedTrailer' : $key] = $value;
             }
@@ -408,14 +411,14 @@ final class CreatorService
     ): array {
         $section = null;
         if (isset($arguments['section_id'])) {
-            $section = $this->api->call(
+            $section = Data::get($this->api->call(
                 $user,
                 'channelSections.list',
                 ['part' => 'snippet,contentDetails', 'id' => $arguments['section_id']],
-            )['items'][0] ?? null;
+            ), 'items', 0);
             if (
-                ($section['id'] ?? '') !== $arguments['section_id']
-                || ($section['snippet']['channelId'] ?? '') !== $connection['channel_id']
+                (Data::get($section, 'id') ?? '') !== $arguments['section_id']
+                || (Data::get($section, 'snippet', 'channelId') ?? '') !== $connection['channel_id']
             ) {
                 throw new ServiceError('NOT_CHANNEL_OWNER', 'Section must belong to your confirmed channel.', [], 403);
             }
@@ -429,7 +432,7 @@ final class CreatorService
             return ['deleted' => true];
         }
 
-        $body = $this->sectionBody($section, $arguments, $connection['channel_id']);
+        $body = $this->sectionBody($section === null ? null : Data::object($section), $arguments, $connection['channel_id']);
         $result = $step(
             'section-change',
             fn() => $this->api->call(
@@ -454,7 +457,7 @@ final class CreatorService
      */
     private function assertMime(?array $asset, string $prefix): void
     {
-        if (!$asset || !str_starts_with($asset['mime'], $prefix)) {
+        if (!$asset || !str_starts_with(Data::string($asset['mime']), $prefix)) {
             throw new ServiceError('INVALID_MEDIA', 'Asset type is not supported by this operation.');
         }
     }
@@ -469,12 +472,12 @@ final class CreatorService
         $playlists = $details['playlists'] ?? [];
         $channels = $details['channels'] ?? [];
         $invalidSection = match ($type) {
-            'singlePlaylist' => count($playlists) !== 1 || $channels,
+            'singlePlaylist' => count(Data::array($playlists)) !== 1 || $channels,
             'multiplePlaylists' => !$playlists || $channels || empty($snippet['title']),
             'multipleChannels' => !$channels
                 || $playlists
                 || empty($snippet['title'])
-                || in_array($channel, $channels, true),
+                || in_array($channel, Data::array($channels), true),
             default => true,
         };
         if ($invalidSection) {
@@ -498,8 +501,8 @@ final class CreatorService
         $this->assertMime($asset, 'video/');
         $current = $this->api->call($user, 'channels.list', ['part' => 'id', 'mine' => 'true']);
         if (
-            count($current['items'] ?? []) !== 1
-            || ($current['items'][0]['id'] ?? '') !== $connection['channel_id']
+            count(Data::array($current['items'] ?? [])) !== 1
+            || (Data::get($current, 'items', 0, 'id') ?? '') !== $connection['channel_id']
         ) {
             throw new ServiceError('GOOGLE_ACCOUNT_MISMATCH', 'Google upload identity differs from your confirmed channel.', [], 403);
         }
@@ -534,7 +537,7 @@ final class CreatorService
      */
     private function captionBody(?array $existing, array $arguments): array
     {
-        $snippet = $existing ? array_intersect_key($existing['snippet'], array_flip(['name', 'isDraft'])) : [
+        $snippet = $existing ? array_intersect_key(Data::array($existing['snippet']), array_flip(['name', 'isDraft'])) : [
             'videoId' => $arguments['video_id'],
             'language' => $arguments['language'],
             'name' => $arguments['name'] ?? '',
@@ -556,21 +559,21 @@ final class CreatorService
      */
     private function sectionBody(?array $section, array $arguments, string $channel): array
     {
-        $snippet = array_intersect_key($section['snippet'] ?? [], array_flip(['type', 'title', 'position']));
+        $snippet = array_intersect_key(Data::array($section['snippet'] ?? []), array_flip(['type', 'title', 'position']));
         foreach (['type', 'title', 'position'] as $field) {
             if (array_key_exists($field, $arguments)) {
                 $snippet[$field] = $arguments[$field];
             }
         }
 
-        $details = $section['contentDetails'] ?? [];
+        $details = Data::array($section['contentDetails'] ?? []);
         foreach (['playlist_ids' => 'playlists', 'channel_ids' => 'channels'] as $arg => $field) {
             if (isset($arguments[$arg])) {
                 $details[$field] = $arguments[$arg];
             }
         }
 
-        $this->validateSection($snippet, $details, $channel);
+        $this->validateSection($snippet, Data::object($details), $channel);
         return ['snippet' => $snippet, 'contentDetails' => $details] + (isset($arguments['section_id']) ? ['id' => $arguments['section_id']] : []);
     }
 }

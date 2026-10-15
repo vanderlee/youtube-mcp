@@ -32,7 +32,7 @@ final class RequestChecks
     {
         self::post($request);
         $body = (array) $request->getParsedBody();
-        if (!hash_equals($_SESSION['csrf'], (string) ($body['csrf'] ?? ''))) {
+        if (!is_string($_SESSION['csrf'] ?? null) || !hash_equals($_SESSION['csrf'], (string) ($body['csrf'] ?? ''))) {
             throw new ServiceError('CSRF_FAILED', 'Reload the page and retry.', [], 403);
         }
     }

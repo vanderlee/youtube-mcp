@@ -36,6 +36,9 @@ try {
             }
             $names[$tool->name] = true;
             $schema = json_decode(json_encode($tool->inputSchema, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
+            if (!$schema instanceof stdClass) {
+                throw new RuntimeException('Invalid tool schema.');
+            }
             // Compiles each schema. Missing required arguments in this dummy value are expected.
             $validator->validate(new stdClass(), $schema);
             if (array_diff($tool->inputSchema['required'] ?? [], array_keys((array) $tool->inputSchema['properties']))) {

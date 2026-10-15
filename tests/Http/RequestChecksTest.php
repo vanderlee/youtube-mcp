@@ -22,6 +22,9 @@ test('csrf accepts array and object parsed bodies and rejects missing or incorre
             expect(fn() => RequestChecks::csrf($request->withParsedBody($body)))
                 ->toThrow(ServiceError::class, 'Reload the page and retry.');
         }
+        unset($_SESSION['csrf']);
+        expect(fn() => RequestChecks::csrf($request->withParsedBody(['csrf' => 'fixture-csrf'])))
+            ->toThrow(ServiceError::class, 'Reload the page and retry.');
     } finally {
         $_SESSION = $previousSession;
     }

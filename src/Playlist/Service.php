@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Playlist;
 
+use YouTubeMcp\Data;
 use YouTubeMcp\Auth\Google;
 use YouTubeMcp\Mcp\Arguments;
 use YouTubeMcp\Mcp\ToolCatalog;
@@ -75,7 +76,7 @@ final class Service
                 $connection = $this->google->connection($user);
 
                 return $this->locks->run(
-                    'playlist:' . $user . ':' . ($arguments['playlist_id'] ?? 'create'),
+                    'playlist:' . $user . ':' . Data::string($arguments['playlist_id'] ?? 'create'),
                     fn() => $this->receipts->run(
                         $user,
                         $connection['generation'],
@@ -117,7 +118,7 @@ final class Service
             return $response + ['music_availability' => 'YouTube liked videos; may include non-music content. Music playback is not guaranteed.'];
         }
         if ($tool === 'get_track_ratings') {
-            $ids = array_map(fn($v) => $this->video($v), $a['video_ids']);
+            $ids = array_map(fn($v) => $this->video($v), Data::strings($a['video_ids']));
 
             return $this->api->call($user, 'videos.getRating', ['id' => implode(',', array_unique($ids))], ttl: 15);
         }
@@ -130,7 +131,7 @@ final class Service
             );
         }
         if ($tool === 'get_playlist') {
-            $metadata = $this->metadata($user, $a['playlist_id'], fresh: false);
+            $metadata = $this->metadata($user, Data::string($a['playlist_id']), fresh: false);
             $contents = $this->api->call(
                 $user,
                 'playlistItems.list',
@@ -142,7 +143,7 @@ final class Service
                 'playlist' => $metadata,
                 'entries' => $contents['items'] ?? [],
                 'next_page_token' => $contents['nextPageToken'] ?? null,
-                'links' => $this->links($a['playlist_id']),
+                'links' => $this->links(Data::string($a['playlist_id'])),
             ];
         }
         if ($tool === 'search_tracks') {
@@ -215,7 +216,7 @@ final class Service
 
         $metadata = $this->metadata($user, $id);
         $planned = [];
-        if (($metadata['snippet']['channelId'] ?? null) !== $connection['channel_id']) {
+        if (Data::get($metadata, 'snippet', 'channelId') !== $connection['channel_id']) {
             throw new ServiceError(
                 'NOT_PLAYLIST_OWNER',
                 'Only playlists owned by your connected channel may be changed.',
@@ -257,7 +258,7 @@ final class Service
 
         $body = null;
         if ($tool === 'rate_track') {
-            $target = $this->video($arguments['video_id']);
+            $target = $this->video(Data::string($arguments['video_id']));
             if (!in_array($arguments['rating'], ['like', 'dislike', 'none'], true)) {
                 throw new ServiceError('INVALID_RATING', 'Use like, dislike or none.');
             }
@@ -265,7 +266,7 @@ final class Service
             $method = 'videos.rate';
             $params = ['id' => $target, 'rating' => $arguments['rating']];
         } else {
-            $target = $arguments['channel_id'];
+            $target = Data::string($arguments['channel_id']);
             if (!preg_match('/^UC[A-Za-z0-9_-]{22}$/', $target)) {
                 throw new ServiceError('INVALID_CHANNEL', 'Supply a YouTube channel ID beginning with UC.');
             }
@@ -280,7 +281,7 @@ final class Service
                     'maxResults' => 50,
                 ],
             );
-            $subscription = $response['items'][0]['id'] ?? null;
+            $subscription = Data::get($response, 'items', 0, 'id');
             if (
                 ($tool === 'subscribe_artist'
                     && $subscription !== null)
@@ -355,7 +356,7 @@ final class Service
             throw new ServiceError('INVALID_ARGUMENT', 'Create accepts at most 20 initial tracks.');
         }
         // Validate every ID before creating anything. Preserve occurrence indexes for receipt replay.
-        $videos = array_map(fn($v) => $this->video($v), $inputs);
+        $videos = array_map(fn($v) => $this->video($v), Data::strings($inputs));
         $policy = $arguments['duplicate_policy'] ?? 'skip';
         if (!in_array($policy, ['skip', 'allow'], true)) {
             throw new ServiceError('INVALID_ARGUMENT', 'Unsupported duplicate policy.');
@@ -365,7 +366,7 @@ final class Service
         $id = $this->createPlaylist($user, $arguments, $step, $operation);
         if (isset($done['create']) && count($done) < count($videos) + 1 && $videos) {
             $metadata = $this->metadata($user, $id);
-            if (($metadata['snippet']['channelId'] ?? null) !== $connection['channel_id']) {
+            if (Data::get($metadata, 'snippet', 'channelId') !== $connection['channel_id']) {
                 throw new ServiceError(
                     'NOT_PLAYLIST_OWNER',
                     'Created playlist is no longer owned by this channel.',
@@ -395,12 +396,12 @@ final class Service
         ? $this->api->call($user, 'playlists.list', $params)
         : $this->api->read($user, 'playlists.list', $params);
 
-        return $response['items'][0] ?? throw new ServiceError(
+        return Data::object(Data::get($response, 'items', 0) ?? throw new ServiceError(
             'PLAYLIST_NOT_FOUND',
             'Playlist not found or not accessible.',
             [],
             404,
-        );
+        ));
     }
 
     /**
@@ -438,10 +439,10 @@ final class Service
             }
 
             $response = $this->api->call($user, 'playlistItems.list', $p);
-            $items = array_merge($items, $response['items'] ?? []);
+            $items = array_merge($items, Data::objects($response['items'] ?? []));
             $page = $response['nextPageToken'] ?? null;
             if (!$page) {
-                return array_values($items);
+                return $items;
             }
         }
         throw new ServiceError(
@@ -471,18 +472,18 @@ final class Service
             return [
                 'candidates' => array_map(
                     fn($v) => [
-                        'video_id' => $v['id']['videoId'],
-                        'title' => $v['snippet']['title'],
-                        'channel' => $v['snippet']['channelTitle'],
+                        'video_id' => Data::get($v, 'id', 'videoId'),
+                        'title' => Data::get($v, 'snippet', 'title'),
+                        'channel' => Data::get($v, 'snippet', 'channelTitle'),
                     ],
-                    $results['items'] ?? [],
+                    Data::array($results['items'] ?? []),
                 ),
                 'next_page_token' => $results['nextPageToken'] ?? null,
                 'music_availability' => 'YouTube candidates; Music playback is not guaranteed.',
             ];
         }
 
-        $ids = array_column(array_column($results['items'] ?? [], 'id'), 'videoId');
+        $ids = array_column(array_column(Data::array($results['items'] ?? []), 'id'), 'videoId');
         $videos = $ids ? $this->api->call(
             $user,
             'videos.list',
@@ -493,13 +494,13 @@ final class Service
         return [
             'candidates' => array_map(
                 fn($v) => [
-                    'video_id' => $v['id'],
-                    'title' => $v['snippet']['title'],
-                    'channel' => $v['snippet']['channelTitle'],
-                    'duration' => $v['contentDetails']['duration'] ?? null,
-                    'url' => 'https://www.youtube.com/watch?v=' . $v['id'],
+                    'video_id' => Data::get($v, 'id'),
+                    'title' => Data::get($v, 'snippet', 'title'),
+                    'channel' => Data::get($v, 'snippet', 'channelTitle'),
+                    'duration' => Data::get($v, 'contentDetails', 'duration'),
+                    'url' => 'https://www.youtube.com/watch?v=' . Data::text(Data::get($v, 'id')),
                 ],
-                $videos['items'] ?? [],
+                Data::array($videos['items'] ?? []),
             ),
             'next_page_token' => $results['nextPageToken'] ?? null,
             'music_availability' => 'These are YouTube video candidates; YouTube Music playback is not guaranteed.',
@@ -514,8 +515,7 @@ final class Service
     private function planMetadataUpdate(string $id, array $metadata, array $arguments): array
     {
         $snippet = $metadata['snippet'];
-        unset($snippet['thumbnails'], $snippet['channelId'], $snippet['channelTitle'], $snippet['publishedAt'], $snippet['localized']);
-        $snippet = array_intersect_key($snippet, array_flip(['title', 'description', 'tags', 'defaultLanguage']));
+        $snippet = array_intersect_key(Data::array($snippet), array_flip(['title', 'description', 'tags', 'defaultLanguage']));
         foreach (['title', 'description'] as $field) {
             if (array_key_exists($field, $arguments)) {
                 $snippet[$field] = $arguments[$field];
@@ -525,7 +525,7 @@ final class Service
         $body = [
             'id' => $id,
             'snippet' => $snippet,
-            'status' => ['privacyStatus' => $arguments['privacy'] ?? $metadata['status']['privacyStatus']],
+            'status' => ['privacyStatus' => $arguments['privacy'] ?? Data::get($metadata, 'status', 'privacyStatus')],
         ];
 
         return [['update', 'playlists.update', ['part' => 'snippet,status'], $body]];
@@ -539,7 +539,7 @@ final class Service
     private function planTrackAdditions(string $user, string $id, array $arguments, array $done): array
     {
         $planned = [];
-        $videos = array_map(fn($v) => $this->video($v), $arguments['video_ids']);
+        $videos = array_map(fn($v) => $this->video($v), Data::strings($arguments['video_ids']));
         $policy = $arguments['duplicate_policy'] ?? 'skip';
         $present = $policy === 'skip' ? array_column(
             array_column($this->entries($user, $id), 'snippet'),
@@ -586,7 +586,7 @@ final class Service
         array $done,
     ): array {
         $planned = [];
-        $targets = $tool === 'remove_tracks' ? $arguments['playlist_item_ids'] : [$arguments['playlist_item_id']];
+        $targets = Data::strings($tool === 'remove_tracks' ? $arguments['playlist_item_ids'] : [$arguments['playlist_item_id']]);
         $pending = array_values(
             array_filter($targets, fn($t) => !isset($done[($tool === 'remove_tracks' ? 'remove:' : 'move:') . $t])),
         );
@@ -600,13 +600,13 @@ final class Service
                 'fields' => 'items(id,snippet(playlistId,position,resourceId))',
             ],
         )['items'] ?? [] : [];
-        $byId = array_column($entries, null, 'id');
+        $byId = array_column(Data::array($entries), null, 'id');
         foreach ($targets as $target) {
             $label = ($tool === 'remove_tracks' ? 'remove:' : 'move:') . $target;
             if (isset($done[$label])) {
                 continue;
             }
-            if (!isset($byId[$target]) || ($byId[$target]['snippet']['playlistId'] ?? null) !== $id) {
+            if (!isset($byId[$target]) || Data::get($byId, $target, 'snippet', 'playlistId') !== $id) {
                 throw new ServiceError(
                     'ITEM_NOT_IN_PLAYLIST',
                     'An entry is missing from this playlist. Refresh before retrying.',
@@ -617,7 +617,7 @@ final class Service
             if ($tool === 'remove_tracks') {
                 $planned[] = [$label, 'playlistItems.delete', ['id' => $target], null];
             } else {
-                $move = $this->planOccurrenceMove($id, $target, $byId[$target], $metadata, $arguments);
+                $move = $this->planOccurrenceMove($id, $target, Data::object($byId[$target]), $metadata, $arguments);
                 if ($move !== null) {
                     $planned[] = $move;
                 }
@@ -640,7 +640,7 @@ final class Service
         ?array $metadata,
         array $arguments,
     ): ?array {
-        $length = $metadata['contentDetails']['itemCount'] ?? null;
+        $length = Data::get($metadata, 'contentDetails', 'itemCount');
         if (!is_int($length)) {
             throw new ServiceError(
                 'YOUTUBE_RESPONSE_INVALID',
@@ -652,7 +652,7 @@ final class Service
         if ($arguments['position'] >= $length) {
             throw new ServiceError('INVALID_POSITION', 'Position is outside the playlist.');
         }
-        if ($entry['snippet']['position'] === $arguments['position']) {
+        if (Data::get($entry, 'snippet', 'position') === $arguments['position']) {
             return null;
         }
 
@@ -665,7 +665,7 @@ final class Service
                 'snippet' => [
                     'playlistId' => $id,
                     'position' => $arguments['position'],
-                    'resourceId' => $entry['snippet']['resourceId'],
+                    'resourceId' => Data::get($entry, 'snippet', 'resourceId'),
                 ],
             ],
         ];

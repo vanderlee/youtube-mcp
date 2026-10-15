@@ -353,6 +353,27 @@ test(
     },
 );
 
+test('audits preserve unavailable occurrences without a video id', function (): void {
+    [$service, $api] = $this->workflows([
+        'PLtarget00000' => [
+            'owner' => 'public',
+            'items' => [['id' => 'unavailable', 'snippet' => ['title' => 'Unavailable']]],
+        ],
+    ]);
+
+    $audit = $service->execute('u1', ['playlists.read'], 'audit_playlist', [
+        'playlist_id' => 'PLtarget00000',
+        'region' => 'NL',
+    ]);
+
+    expect($audit['entries'])->toHaveCount(1);
+    expect($audit['entries'][0]['playlist_item_id'])->toBe('unavailable');
+    expect($audit['entries'][0]['video_id'])->toBeNull();
+    expect($audit['entries'][0]['returned'])->toBeFalse();
+    expect($audit['entries'][0]['region_restricted'])->toBeNull();
+    expect($api->writes)->toBe(0);
+});
+
 test('merging skips duplicate video ids and comparison retains occurrence counts', function (): void {
     [$service, $api] = $this->workflows([
         'PLtarget00000' => ['owner' => 'channel-u1', 'items' => [$this->occurrence('target', 'aaaaaaaaaaa')]],

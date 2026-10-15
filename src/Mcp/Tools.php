@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Mcp;
 
+use YouTubeMcp\Data;
 use Mcp\Schema\{Tool, ToolAnnotations};
 use Mcp\Schema\Content\TextContent;
 use Mcp\Schema\Result\CallToolResult;
@@ -74,14 +75,15 @@ final class Tools
                         ),
                     );
                     $result = $detail === 'full' ? $result : Presentation::compact($this->name, $result);
+                    $status = $result['status'] ?? null;
 
                     return new CallToolResult(
                         [
                             new TextContent(
-                                'Result in structuredContent' . (isset($result['status']) ? ': ' . $result['status'] : '.'),
+                                'Result in structuredContent' . ($status !== null ? ': ' . Data::text($status) : '.'),
                             ),
                         ],
-                        isset($result['status']) && $result['status'] !== 'completed',
+                        $status !== null && $status !== 'completed',
                         $result,
                     );
                 } catch (ServiceError $e) {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Routes;
 
+use YouTubeMcp\Data;
 use Nyholm\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -37,7 +38,7 @@ final class AuthorizeClientRoute
         } else {
             RequestChecks::csrf($request);
         }
-        if (empty($_SESSION['user'])) {
+        if (!is_string($_SESSION['user'] ?? null) || $_SESSION['user'] === '') {
             return $this->view->page('Sign in', 'authorization-sign-in');
         }
 
@@ -46,12 +47,12 @@ final class AuthorizeClientRoute
             throw new ServiceError('invalid_request', 'Authorization request expired. Reconnect from your AI client.');
         }
 
-        $authorization = $this->oauth->validateAuthorization($request->withQueryParams($query));
+        $authorization = $this->oauth->validateAuthorization($request->withQueryParams(Data::array($query)));
         if (!$this->db->one('SELECT user_id FROM google_connections WHERE user_id=?', [$_SESSION['user']])) {
             return $this->view->page('Connect YouTube first', 'authorization-connect');
         }
         if ($method === 'POST') {
-            $user = $_SESSION['user'];
+            $user = Data::string($_SESSION['user']);
 
             return $this->locks->run(
                 'account:' . $user,

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Auth;
 
+use YouTubeMcp\Data;
 use YouTubeMcp\{Config, ServiceError};
 use YouTubeMcp\Http\Client;
 use YouTubeMcp\Storage\{Database, Lock};
@@ -72,7 +73,9 @@ final class Google
 
         if (
             $response['status'] !== 200
-            || empty($profile['sub'])
+            || !is_string($profile['sub'] ?? null)
+            || $profile['sub'] === ''
+            || !is_string($profile['email'] ?? null)
             || ($profile['email_verified'] ?? false) !== true
         ) {
             throw new ServiceError('INVALID_IDENTITY', 'Google did not provide a verified identity.', [], 401);
@@ -91,7 +94,7 @@ final class Google
     {
         $existing = $this->db->one('SELECT id FROM users WHERE subject=?', [$identity['subject']]);
         if ($existing) {
-            return $existing['id'];
+            return Data::string($existing['id']);
         }
 
         if (
@@ -127,7 +130,7 @@ final class Google
             throw new \RuntimeException('Cannot load signed-in user.');
         }
 
-        return $user['id'];
+        return Data::string($user['id']);
     }
 
     /**
@@ -136,7 +139,7 @@ final class Google
      */
     public function connect(string $user, array $tokens, array $channel): void
     {
-        $scopes = preg_split('/\s+/', (string) ($tokens['scope'] ?? '')) ?: [];
+        $scopes = preg_split('/\s+/', Data::text($tokens['scope'] ?? '')) ?: [];
         if (
             (
                 !in_array(self::YOUTUBE_SCOPE, $scopes, true)
@@ -160,7 +163,7 @@ final class Google
                         [
                             $user,
                             $channel['id'],
-                            $channel['snippet']['title'],
+                            Data::get($channel, 'snippet', 'title'),
                             $this->vault->encrypt($tokens),
                             implode(' ', $scopes),
                             bin2hex(random_bytes(16)),
@@ -182,7 +185,7 @@ final class Google
                 if (($tokens['expires_at'] ?? 0) <= time() + 60) {
                     // Google authorization failures do not revoke the independent MCP authorization.
                     $refreshedTokens = $this->token(
-                        ['grant_type' => 'refresh_token', 'refresh_token' => $tokens['refresh_token']],
+                        ['grant_type' => 'refresh_token', 'refresh_token' => Data::string($tokens['refresh_token'])],
                     );
 
                     $tokens = array_replace($tokens, $refreshedTokens);
@@ -192,7 +195,7 @@ final class Google
                     );
                 }
 
-                return $tokens['access_token'];
+                return Data::string($tokens['access_token']);
             },
         );
     }
@@ -217,12 +220,12 @@ final class Google
         );
 
         return [
-            'user_id' => $connection['user_id'],
-            'channel_id' => $connection['channel_id'],
-            'channel_name' => $connection['channel_name'],
-            'tokens' => $connection['tokens'],
-            'scopes' => $connection['scopes'],
-            'generation' => $connection['generation'],
+            'user_id' => Data::string($connection['user_id']),
+            'channel_id' => Data::string($connection['channel_id']),
+            'channel_name' => Data::string($connection['channel_name']),
+            'tokens' => Data::string($connection['tokens']),
+            'scopes' => Data::string($connection['scopes']),
+            'generation' => Data::string($connection['generation']),
         ];
     }
 
@@ -239,7 +242,7 @@ final class Google
                     $connection = $this->db->one('SELECT tokens FROM google_connections WHERE user_id=?', [$user]);
                     $revoked = false;
                     if ($connection) {
-                        $tokens = $this->vault->decrypt($connection['tokens']);
+                        $tokens = $this->vault->decrypt(Data::string($connection['tokens']));
                         try {
                             $response = $this->http->request(
                                 'POST',
@@ -313,6 +316,6 @@ final class Google
             );
         }
 
-        return $response['data'] + ['expires_at' => time() + (int) ($response['data']['expires_in'] ?? 3600)];
+        return $response['data'] + ['expires_at' => time() + (int) (Data::scalar($response['data']['expires_in'] ?? 3600))];
     }
 }

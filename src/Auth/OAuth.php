@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Auth;
 
+use YouTubeMcp\Data;
 use DateInterval;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
@@ -105,6 +106,9 @@ final class OAuth
     }
 
     /**
+     * @template T
+     * @param callable(): T $work
+     * @return T
      * @param array{
      *     id: string,
      *     scopes: list<string>,
@@ -209,11 +213,11 @@ final class OAuth
 
             return [
                 'id' => $claims['sub'],
-                'scopes' => $scopes,
+                'scopes' => Data::strings($scopes),
                 'token_id' => $claims['jti'],
                 'expires_at' => $claims['exp'],
                 'client_id' => $claims['client_id'],
-                'generation' => $connection['generation'] ?? null,
+                'generation' => $connection === null ? null : Data::string($connection['generation']),
             ];
         } catch (Throwable) {
             throw new ServiceError(
@@ -280,7 +284,7 @@ final class OAuth
 
         $id = bin2hex(random_bytes(24));
         $secret = $method === 'none' ? null : bin2hex(random_bytes(32));
-        $name = $public ? 'ChatGPT' : mb_substr((string) ($data['client_name'] ?? 'ChatGPT'), 0, 100);
+        $name = $public ? 'ChatGPT' : mb_substr(Data::text($data['client_name'] ?? 'ChatGPT'), 0, 100);
         $this->db->execute(
             'INSERT INTO oauth_clients VALUES (?,?,?,?,?)',
             [

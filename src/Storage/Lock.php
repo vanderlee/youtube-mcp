@@ -22,6 +22,11 @@ final class Lock
         }
     }
 
+    /**
+     * @template T
+     * @param callable(): T $fn
+     * @return T
+     */
     public function run(string $name, callable $fn): mixed
     {
         if (isset($this->held[$name])) {

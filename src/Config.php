@@ -30,7 +30,7 @@ final class Config
     {
         $environment = getenv($name);
 
-        return (string) ($this->values[$name] ?? ($environment === false ? $default : $environment));
+        return Data::text($this->values[$name] ?? ($environment === false ? $default : $environment));
     }
 
     public function storage(): string

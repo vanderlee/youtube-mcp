@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Mcp;
 
+use YouTubeMcp\Data;
+
 /** Shape model-facing results without changing persisted receipts or upstream data. */
 final class Presentation
 {
@@ -22,20 +24,20 @@ final class Presentation
 
             return [
                 'items' => array_map(
-                    fn($item) => [$field => $item['id'][$id]] + [
-                        'title' => $item['snippet']['title'] ?? '',
-                        'channel_id' => $item['snippet']['channelId'] ?? null,
-                        'channel' => $item['snippet']['channelTitle'] ?? '',
+                    fn($item) => [$field => Data::get($item, 'id', $id)] + [
+                        'title' => Data::get($item, 'snippet', 'title') ?? '',
+                        'channel_id' => Data::get($item, 'snippet', 'channelId'),
+                        'channel' => Data::get($item, 'snippet', 'channelTitle') ?? '',
                     ],
-                    $data['items'] ?? [],
+                    Data::array($data['items'] ?? []),
                 ),
                 'next_page_token' => $data['nextPageToken'] ?? null,
             ];
         }
         if ($tool === 'get_playlist') {
             return [
-                'playlist' => self::playlist($data['playlist']),
-                'entries' => array_map(fn($item) => self::entry($item), $data['entries']),
+                'playlist' => self::playlist(Data::object($data['playlist'])),
+                'entries' => array_map(fn($item) => self::entry(Data::object($item)), Data::array($data['entries'])),
                 'next_page_token' => $data['next_page_token'] ?? null,
                 'links' => $data['links'],
             ];
@@ -46,22 +48,22 @@ final class Presentation
             $items = array_map(
                 function ($item) use ($tool) {
                     return match ($tool) {
-                        'list_playlists' => self::playlist($item),
+                        'list_playlists' => self::playlist(Data::object($item)),
                         'list_liked_tracks' => [
-                            'video_id' => $item['id'],
-                            'title' => $item['snippet']['title'] ?? '',
-                            'channel' => $item['snippet']['channelTitle'] ?? '',
-                            'duration' => $item['contentDetails']['duration'] ?? null,
+                            'video_id' => Data::get($item, 'id'),
+                            'title' => Data::get($item, 'snippet', 'title') ?? '',
+                            'channel' => Data::get($item, 'snippet', 'channelTitle') ?? '',
+                            'duration' => Data::get($item, 'contentDetails', 'duration'),
                         ],
                         'list_subscriptions' => [
-                            'subscription_id' => $item['id'],
-                            'channel_id' => $item['snippet']['resourceId']['channelId'] ?? null,
-                            'title' => $item['snippet']['title'] ?? '',
+                            'subscription_id' => Data::get($item, 'id'),
+                            'channel_id' => Data::get($item, 'snippet', 'resourceId', 'channelId'),
+                            'title' => Data::get($item, 'snippet', 'title') ?? '',
                         ],
-                        default => ['video_id' => $item['videoId'], 'rating' => $item['rating']],
+                        default => ['video_id' => Data::get($item, 'videoId'), 'rating' => Data::get($item, 'rating')],
                     };
                 },
-                $data['items'] ?? [],
+                Data::array($data['items'] ?? []),
             );
 
             return ['items' => $items, 'next_page_token' => $data['nextPageToken'] ?? null]
@@ -81,18 +83,18 @@ final class Presentation
             $data,
             array_flip(['operation_id', 'tool', 'status', 'result', 'error', 'pending_step']),
         );
-        $result['completed_steps'] = array_keys($data['completed']);
+        $result['completed_steps'] = array_keys(Data::array($data['completed']));
 
         $entries = [];
-        foreach ($data['completed'] as $step => $value) {
+        foreach (Data::array($data['completed']) as $step => $value) {
             if (!is_array($value) || !isset($value['id'])) {
                 continue;
             }
 
             $entries[] = ['step' => $step, 'id' => $value['id']] + array_filter(
                 [
-                    'video_id' => $value['snippet']['resourceId']['videoId'] ?? null,
-                    'position' => $value['snippet']['position'] ?? null,
+                    'video_id' => Data::get($value, 'snippet', 'resourceId', 'videoId'),
+                    'position' => Data::get($value, 'snippet', 'position'),
                 ],
                 fn($item) => $item !== null,
             );
@@ -112,9 +114,9 @@ final class Presentation
     {
         return [
             'playlist_id' => $item['id'],
-            'title' => $item['snippet']['title'] ?? '',
-            'privacy' => $item['status']['privacyStatus'] ?? null,
-            'item_count' => $item['contentDetails']['itemCount'] ?? null,
+            'title' => Data::get($item, 'snippet', 'title') ?? '',
+            'privacy' => Data::get($item, 'status', 'privacyStatus'),
+            'item_count' => Data::get($item, 'contentDetails', 'itemCount'),
         ];
     }
 
@@ -126,9 +128,9 @@ final class Presentation
     {
         return [
             'playlist_item_id' => $item['id'],
-            'video_id' => $item['snippet']['resourceId']['videoId'] ?? $item['contentDetails']['videoId'] ?? null,
-            'title' => $item['snippet']['title'] ?? '',
-            'position' => $item['snippet']['position'] ?? null,
+            'video_id' => Data::get($item, 'snippet', 'resourceId', 'videoId') ?? Data::get($item, 'contentDetails', 'videoId'),
+            'title' => Data::get($item, 'snippet', 'title') ?? '',
+            'position' => Data::get($item, 'snippet', 'position'),
         ];
     }
 

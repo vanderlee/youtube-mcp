@@ -19,6 +19,29 @@ trait ReceiptsTestHelpers
 
 uses(ReceiptsTestHelpers::class);
 
+test('malformed stored receipts cannot dispatch work or overwrite replay state', function (bool $resume, bool $invalidSteps): void {
+    $db = $this->database();
+    $this->user($db);
+    $receipts = new Receipts($db, new Lock($this->dir));
+    $args = ['operation_key' => 'corrupt-receipt-test'];
+    $receipt = $receipts->run('u1', 'g', 'create_playlist', $args, fn() => ['id' => 'fixture-playlist']);
+    $stored = $invalidSteps ? json_encode(array_replace($receipt, ['completed' => 'invalid'])) : 'null';
+    $db->execute('UPDATE operations SET receipt=? WHERE id=?', [$stored, $receipt['operation_id']]);
+    $calls = 0;
+    $work = function () use (&$calls): array {
+        $calls++;
+        return [];
+    };
+
+    expect(fn() => $receipts->run('u1', 'g', 'create_playlist', $args + ['resume' => $resume], $work))
+        ->toThrow(\UnexpectedValueException::class);
+    expect(fn() => $receipts->get('u1', $receipt['operation_id'], 'g', ['playlists.read']))
+        ->toThrow(\UnexpectedValueException::class);
+    expect($calls)->toBe(0);
+    expect($db->one('SELECT receipt,status FROM operations WHERE id=?', [$receipt['operation_id']]))
+        ->toBe(['receipt' => $stored, 'status' => 'completed']);
+})->with([false, true])->with([false, true]);
+
 test('replay does not execute again and other user cannot read receipt', function (): void {
     $db = $this->database();
     $this->user($db);

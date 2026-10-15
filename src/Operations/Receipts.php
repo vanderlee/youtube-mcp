@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\Operations;
 
+use YouTubeMcp\Data;
 use Throwable;
 use YouTubeMcp\ServiceError;
 use YouTubeMcp\Storage\{Database, Lock};
@@ -25,7 +26,7 @@ final class Receipts
         if (!$row) {
             throw new ServiceError('OPERATION_NOT_FOUND', 'Operation was not found for this account connection.', [], 404);
         }
-        $scope = \YouTubeMcp\Mcp\ToolCatalog::scope($row['tool']);
+        $scope = \YouTubeMcp\Mcp\ToolCatalog::scope(Data::string($row['tool']));
         $readScope = explode('.', $scope, 2)[0] . '.read';
         if (!in_array($scope, $scopes, true) && !in_array($readScope, $scopes, true)) {
             throw new ServiceError(
@@ -36,7 +37,7 @@ final class Receipts
             );
         }
 
-        return json_decode($row['receipt'], true);
+        return $this->decodeReceipt(Data::string($row['receipt']));
     }
 
     /**
@@ -73,7 +74,7 @@ final class Receipts
                         );
                     }
 
-                    $receipt = json_decode($row['receipt'], true);
+                    $receipt = $this->decodeReceipt(Data::string($row['receipt']));
                     if ($row['status'] === 'completed' || !$resume) {
                         return $receipt;
                     }
@@ -92,6 +93,18 @@ final class Receipts
                 return $this->executeReceipt($user, $tool, $receipt, $work);
             },
         );
+    }
+
+    /** @return array<string, mixed> */
+    private function decodeReceipt(string $json): array
+    {
+        $receipt = Data::object(json_decode($json, true, 512, JSON_THROW_ON_ERROR));
+        Data::string($receipt['operation_id'] ?? null);
+        Data::string($receipt['tool'] ?? null);
+        Data::string($receipt['status'] ?? null);
+        Data::array($receipt['completed'] ?? null);
+
+        return $receipt;
     }
 
     /**
@@ -196,6 +209,7 @@ final class Receipts
     private function receiptStep(array &$receipt): callable
     {
         return function (string $id, callable $work) use (&$receipt) {
+            $receipt['completed'] = Data::array($receipt['completed']);
             if (array_key_exists($id, $receipt['completed'])) {
                 return $receipt['completed'][$id];
             }

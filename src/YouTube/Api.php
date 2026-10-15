@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\YouTube;
 
+use YouTubeMcp\Data;
 use InvalidArgumentException;
 use YouTubeMcp\Auth\Google;
 use YouTubeMcp\Http\Client;
@@ -85,7 +86,9 @@ class Api
         }
         $versions = $verb === 'GET' && $ttl > 0 ? $cache->versions($user, $tags) : [];
         $itemBinding = $user . '|' . $cacheBinding . '|';
-        $playlist = $body['snippet']['playlistId'] ?? (isset($params['id']) ? $this->playlistItems[$itemBinding . $params['id']] ?? null : null);
+        $playlist = Data::get($body, 'snippet', 'playlistId') ?? (isset($params['id']) ? $this->playlistItems[$itemBinding . Data::text($params['id'])] ?? null : null);
+
+        $playlist = $playlist === null ? null : Data::string($playlist);
 
         $access = $token ?? $this->google?->accessToken($user);
         if (!$access) {
@@ -112,9 +115,9 @@ class Api
                 $this->requireCurrentConnection($user, $connection, $verb);
             }
             if ($resource === 'playlistItems') {
-                foreach ($data['items'] ?? [] as $entry) {
-                    if (isset($entry['id'], $entry['snippet']['playlistId'])) {
-                        $this->playlistItems[$itemBinding . $entry['id']] = $entry['snippet']['playlistId'];
+                foreach (Data::array($data['items'] ?? []) as $entry) {
+                    if (Data::get($entry, 'id') !== null && Data::get($entry, 'snippet', 'playlistId') !== null) {
+                        $this->playlistItems[$itemBinding . Data::text(Data::get($entry, 'id'))] = Data::string(Data::get($entry, 'snippet', 'playlistId'));
                     }
                 }
             }
@@ -176,7 +179,7 @@ class Api
     /** @param array<array-key, mixed> $data */
     private function throwUpstreamError(int $status, array $data, string $verb, string $bucket): never
     {
-        $reason = (string) ($data['error']['errors'][0]['reason'] ?? 'unknown');
+        $reason = Data::text(Data::get($data, 'error', 'errors', 0, 'reason') ?? 'unknown');
         if (in_array($reason, ['quotaExceeded', 'dailyLimitExceeded'], true)) {
             throw new ServiceError(
                 'YOUTUBE_QUOTA_EXHAUSTED',

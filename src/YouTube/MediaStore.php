@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace YouTubeMcp\YouTube;
 
+use YouTubeMcp\Data;
 use Psr\Http\Message\UploadedFileInterface;
 use YouTubeMcp\{Config, ServiceError};
 use YouTubeMcp\Storage\Database;
@@ -25,7 +26,7 @@ final class MediaStore
         if ($active === null) {
             throw new \RuntimeException('Cannot count active media assets.');
         }
-        if ((int) $active['n'] >= 50) {
+        if ((int) Data::scalar($active['n']) >= 50) {
             throw new ServiceError('MEDIA_LIMIT', 'Delete an asset before staging more than 50 active files.');
         }
         if ($upload->getError() !== UPLOAD_ERR_OK || !is_int($size) || $size < 1 || $size > self::MAX_BYTES) {
@@ -127,13 +128,13 @@ final class MediaStore
             [$id, $user, $connection['channel_id'], $connection['generation'], time() - 86400],
         );
         $path = $this->config->storage() . '/media/' . $id;
-        $hash = $row && is_file($path) && !is_link($path) && filesize($path) === (int) $row['bytes']
+        $hash = $row && is_file($path) && !is_link($path) && filesize($path) === (int) Data::scalar($row['bytes'])
             ? hash_file('sha256', $path)
             : false;
         if (
             !$row
             || $hash === false
-            || !hash_equals($row['sha256'], $hash)
+            || !hash_equals(Data::string($row['sha256']), $hash)
         ) {
             throw new ServiceError(
                 'MEDIA_NOT_FOUND',
@@ -164,7 +165,7 @@ final class MediaStore
     public function delete(string $user, array $connection, string $id): void
     {
         $asset = $this->get($user, $connection, $id);
-        if (!unlink($asset['path'])) {
+        if (!unlink(Data::string($asset['path']))) {
             throw new ServiceError('STORAGE_UNAVAILABLE', 'Media could not be removed.', [], 503);
         }
 
@@ -175,11 +176,11 @@ final class MediaStore
     public function purge(string $user): void
     {
         foreach ($this->db->all('SELECT id FROM media_assets WHERE user_id=?', [$user]) as $row) {
-            if (!preg_match('/^[a-f0-9]{48}$/D', $row['id'])) {
+            if (!preg_match('/^[a-f0-9]{48}$/D', Data::string($row['id']))) {
                 continue;
             }
 
-            $path = $this->config->storage() . '/media/' . $row['id'];
+            $path = $this->config->storage() . '/media/' . Data::string($row['id']);
             if ((is_file($path) || is_link($path)) && !unlink($path)) {
                 throw new ServiceError('STORAGE_UNAVAILABLE', 'Owned media could not be removed.', [], 503);
             }
@@ -194,7 +195,7 @@ final class MediaStore
         $deferred = 0;
         foreach ($this->db->all('SELECT id,user_id FROM media_assets WHERE created_at<=?', [time() - 86400]) as $row) {
             try {
-                $locks->run('account:' . $row['user_id'], fn() => $this->removeExpiredAsset($row['id']));
+                $locks->run('account:' . Data::text($row['user_id']), fn() => $this->removeExpiredAsset(Data::string($row['id'])));
             } catch (ServiceError $error) {
                 if ($error->reason !== 'OPERATION_BUSY') {
                     throw $error;
