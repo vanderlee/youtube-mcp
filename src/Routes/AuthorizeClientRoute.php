@@ -59,7 +59,8 @@ final class AuthorizeClientRoute
                     $this->browser->requireUser($user);
                     unset($_SESSION['authorization_query'], $_SESSION['authorization_at']);
                     $authorization->setUser(new User($user));
-                    $authorization->setAuthorizationApproved(($request->getParsedBody()['decision'] ?? '') === 'approve');
+                    $body = (array) $request->getParsedBody();
+                    $authorization->setAuthorizationApproved(($body['decision'] ?? '') === 'approve');
 
                     return $this->oauth->server->completeAuthorizationRequest($authorization, new Response());
                 },

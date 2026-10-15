@@ -70,10 +70,17 @@ final class Config
             throw new RuntimeException('APP_URL must be an HTTPS origin without a path.');
         }
 
+        $this->appKey();
+    }
+
+    public function appKey(): string
+    {
         $key = base64_decode($this->get('APP_KEY'), true);
         if ($key === false || strlen($key) !== 32) {
             throw new RuntimeException('APP_KEY must be a base64 encoded 32-byte key.');
         }
+
+        return $key;
     }
 
     public function url(): string

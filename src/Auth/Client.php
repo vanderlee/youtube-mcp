@@ -20,6 +20,10 @@ final class Client implements ClientEntityInterface
         private array $redirects,
         private bool $confidential = false,
     ) {
+        if ($id === '') {
+            throw new \InvalidArgumentException('Identifier must not be empty.');
+        }
+
         $this->setIdentifier($id);
     }
 

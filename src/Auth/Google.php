@@ -112,7 +112,7 @@ final class Google
 
         // Keep usage history tied to the same installation-local identity after account recreation.
         $id = substr(
-            hash_hmac('sha256', $identity['subject'], base64_decode($this->config->get('APP_KEY'), true)),
+            hash_hmac('sha256', $identity['subject'], $this->config->appKey()),
             0,
             32,
         );
@@ -131,7 +131,7 @@ final class Google
      */
     public function connect(string $user, array $tokens, array $channel): void
     {
-        $scopes = preg_split('/\s+/', (string) ($tokens['scope'] ?? ''));
+        $scopes = preg_split('/\s+/', (string) ($tokens['scope'] ?? '')) ?: [];
         if (
             (
                 !in_array(self::YOUTUBE_SCOPE, $scopes, true)
@@ -204,12 +204,21 @@ final class Google
      */
     public function connection(string $user): array
     {
-        return $this->db->one('SELECT * FROM google_connections WHERE user_id=?', [$user]) ?? throw new ServiceError(
+        $connection = $this->db->one('SELECT * FROM google_connections WHERE user_id=?', [$user]) ?? throw new ServiceError(
             'GOOGLE_RECONNECT_REQUIRED',
             'Connect your Google account in the service dashboard.',
             [],
             401,
         );
+
+        return [
+            'user_id' => $connection['user_id'],
+            'channel_id' => $connection['channel_id'],
+            'channel_name' => $connection['channel_name'],
+            'tokens' => $connection['tokens'],
+            'scopes' => $connection['scopes'],
+            'generation' => $connection['generation'],
+        ];
     }
 
     /**

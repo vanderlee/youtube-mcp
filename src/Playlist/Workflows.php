@@ -288,7 +288,7 @@ final class Workflows
                     $before[$source] = $entries;
                 }
 
-                $entries = array_map(fn($id) => $byId[$id], $arguments['playlist_item_ids']);
+                $entries = array_map(fn($id) => $byId[$id], array_values($arguments['playlist_item_ids']));
             }
 
             [$sourceActions, $sourceSkipped, $seen] = $this->sourceAdditions($entries, $tool, $arguments, $seen);
@@ -340,6 +340,9 @@ final class Workflows
 
         foreach ($desired as $position => $entry) {
             $index = array_search($entry['id'], array_column($entries, 'id'), true);
+            if ($index === false) {
+                throw new ServiceError('RECONCILIATION_REQUIRED', 'Playlist order contains an unknown occurrence.', [], 409);
+            }
             if ($index === $position) {
                 continue;
             }
@@ -372,7 +375,7 @@ final class Workflows
             }
 
             $byId = array_column($entries, null, 'id');
-            $desired = array_map(fn($id) => $byId[$id], $arguments['playlist_item_ids']);
+            $desired = array_map(fn($id) => $byId[$id], array_values($arguments['playlist_item_ids']));
         } else {
             $desired = $entries;
             $order = $arguments['order'];
@@ -461,7 +464,7 @@ final class Workflows
                 'title' => $entry['snippet']['title'] ?? '',
                 'position' => $entry['snippet']['position'] ?? null,
             ],
-            $response['items'] ?? [],
+            array_values($response['items'] ?? []),
         );
         $result = [
             'next_page_token' => $response['nextPageToken'] ?? null,
@@ -496,6 +499,9 @@ final class Workflows
     private function exportCsv(array $entries): string
     {
         $stream = fopen('php://temp', 'w+');
+        if ($stream === false) {
+            throw new ServiceError('STORAGE_UNAVAILABLE', 'Cannot open playlist export stream.', [], 503);
+        }
         fputcsv($stream, ['playlist_item_id', 'video_id', 'title', 'position'], ',', '"', '');
         foreach ($entries as $entry) {
             // Prevent spreadsheet formula evaluation when the exported title is opened in Excel.
@@ -510,6 +516,10 @@ final class Workflows
         rewind($stream);
         $csv = stream_get_contents($stream);
         fclose($stream);
+
+        if ($csv === false) {
+            throw new ServiceError('STORAGE_UNAVAILABLE', 'Cannot read playlist export stream.', [], 503);
+        }
 
         return $csv;
     }

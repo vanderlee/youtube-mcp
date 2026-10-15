@@ -97,7 +97,8 @@ final class MediaStore
         if (str_starts_with($mime, 'text/')) {
             $text = file_get_contents($path);
             if (
-                !mb_check_encoding($text, 'UTF-8')
+                $text === false
+                || !mb_check_encoding($text, 'UTF-8')
                 || (!str_starts_with(ltrim($text, "\xEF\xBB\xBF"), 'WEBVTT')
                     && !preg_match('/\d{2}:\d{2}:\d{2}[,.]\d{3}\s+-->\s+\d{2}:\d{2}:\d{2}[,.]\d{3}/', $text))
             ) {
@@ -123,12 +124,13 @@ final class MediaStore
             [$id, $user, $connection['channel_id'], $connection['generation'], time() - 86400],
         );
         $path = $this->config->storage() . '/media/' . $id;
+        $hash = $row && is_file($path) && !is_link($path) && filesize($path) === (int) $row['bytes']
+            ? hash_file('sha256', $path)
+            : false;
         if (
             !$row
-            || !is_file($path)
-            || is_link($path)
-            || filesize($path) !== (int) $row['bytes']
-            || !hash_equals($row['sha256'], hash_file('sha256', $path))
+            || $hash === false
+            || !hash_equals($row['sha256'], $hash)
         ) {
             throw new ServiceError(
                 'MEDIA_NOT_FOUND',

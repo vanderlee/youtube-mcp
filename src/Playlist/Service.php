@@ -46,7 +46,7 @@ final class Service
         }
         $connection = $this->google->connection($user);
         if ($tool === 'get_connection_status') {
-            $googleScopes = array_values(array_filter(preg_split('/\s+/', trim($connection['scopes']))));
+            $googleScopes = array_values(array_filter(preg_split('/\s+/', trim($connection['scopes'])) ?: []));
 
             return [
                 'connected' => true,
@@ -439,7 +439,7 @@ final class Service
             $items = array_merge($items, $response['items'] ?? []);
             $page = $response['nextPageToken'] ?? null;
             if (!$page) {
-                return $items;
+                return array_values($items);
             }
         }
         throw new ServiceError(

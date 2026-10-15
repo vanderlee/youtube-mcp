@@ -210,3 +210,33 @@ beforeEach(function (): void {
 afterEach(function (): void {
     $this->removeDir($this->dir);
 });
+
+test('signed tokens with malformed identity claims are rejected', function (array $overrides): void {
+    [$db, $oauth, $client] = $this->environment();
+    $id = 'malformed-token';
+    $db->execute('INSERT INTO oauth_tokens(id,kind,user_id,client_id,expires_at) VALUES (?,?,?,?,?)', [
+        hash('sha256', $id), 'access', 'u1', $client['client_id'], time() + 3600,
+    ]);
+    $claims = array_replace([
+        'iss' => 'https://music.example.test',
+        'aud' => 'https://music.example.test/mcp',
+        'sub' => 'u1',
+        'jti' => $id,
+        'exp' => time() + 3600,
+        'client_id' => $client['client_id'],
+        'scopes' => ['playlists.read'],
+    ], $overrides);
+    $jwt = \Firebase\JWT\JWT::encode($claims, file_get_contents($this->dir . '/oauth-private.pem'), 'RS256');
+    $request = (new ServerRequest('POST', 'https://music.example.test/mcp'))
+        ->withHeader('Authorization', 'Bearer ' . $jwt);
+
+    expect(fn() => $oauth->authenticate($request))->toThrow(ServiceError::class, 'Session expired or revoked.');
+})->with([
+    'scalar scopes' => [['scopes' => 'playlists.read']],
+    'non-string scope' => [['scopes' => [123]]],
+    'keyed scopes' => [['scopes' => ['read' => 'playlists.read']]],
+    'missing client' => [['client_id' => null]],
+    'empty client' => [['client_id' => '']],
+    'non-string client' => [['client_id' => 123]],
+    'non-integer expiry' => [['exp' => (string) (time() + 3600)]],
+]);

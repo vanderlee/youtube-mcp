@@ -31,7 +31,8 @@ final class RequestChecks
     public static function csrf(ServerRequestInterface $request): void
     {
         self::post($request);
-        if (!hash_equals($_SESSION['csrf'], (string) ($request->getParsedBody()['csrf'] ?? ''))) {
+        $body = (array) $request->getParsedBody();
+        if (!hash_equals($_SESSION['csrf'], (string) ($body['csrf'] ?? ''))) {
             throw new ServiceError('CSRF_FAILED', 'Reload the page and retry.', [], 403);
         }
     }

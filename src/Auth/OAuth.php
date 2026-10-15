@@ -33,7 +33,7 @@ final class OAuth
             $this->repository,
             $this->repository,
             'file://' . $config->storage() . '/oauth-private.pem',
-            base64_decode($config->get('APP_KEY'), true),
+            $config->appKey(),
         );
 
         $grant = new AuthCodeGrant($this->repository, $this->repository, new DateInterval('PT5M'));
@@ -171,9 +171,14 @@ final class OAuth
             throw new ServiceError('AUTHENTICATION_REQUIRED', 'Connect this service using OAuth.', [], 401);
         }
         try {
+            $publicKey = file_get_contents($this->config->storage() . '/oauth-public.pem');
+            if ($publicKey === false) {
+                throw new RuntimeException('Cannot read OAuth public key.');
+            }
+
             $claims = (array) JWT::decode(
                 $match[1],
-                new Key(file_get_contents($this->config->storage() . '/oauth-public.pem'), 'RS256'),
+                new Key($publicKey, 'RS256'),
             );
             if (
                 ($claims['iss'] ?? null) !== $this->config->url()
@@ -185,6 +190,17 @@ final class OAuth
             ) {
                 throw new RuntimeException('Invalid token.');
             }
+            $scopes = $claims['scopes'] ?? [];
+            if (
+                !is_string($claims['jti'] ?? null) || $claims['jti'] === ''
+                || !is_int($claims['exp'] ?? null)
+                || !is_string($claims['client_id'] ?? null) || $claims['client_id'] === ''
+                || !is_array($scopes) || !array_is_list($scopes)
+                || array_filter($scopes, fn($scope) => !is_string($scope))
+            ) {
+                throw new RuntimeException('Invalid token claims.');
+            }
+
             if (!$this->db->one('SELECT id FROM users WHERE id=?', [$claims['sub']])) {
                 throw new RuntimeException('Unknown user.');
             }
@@ -193,7 +209,7 @@ final class OAuth
 
             return [
                 'id' => $claims['sub'],
-                'scopes' => (array) ($claims['scopes'] ?? []),
+                'scopes' => $scopes,
                 'token_id' => $claims['jti'],
                 'expires_at' => $claims['exp'],
                 'client_id' => $claims['client_id'],
@@ -228,7 +244,8 @@ final class OAuth
                             'event' => 'oauth_registration_callback_rejected',
                             'redirect_uri' => is_string($uri) ? substr($uri, 0, 2048) : null,
                         ],
-                    ),
+                        JSON_INVALID_UTF8_SUBSTITUTE,
+                    ) ?: '{"event":"log_encoding_failed"}',
                 );
                 throw new ServiceError('invalid_redirect_uri', 'Callback URL is not in the operator allowlist.');
             }

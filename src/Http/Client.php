@@ -21,6 +21,10 @@ class Client
      */
     public function request(string $method, string $url, array $headers = [], ?string $body = null): array
     {
+        if ($url === '' || $method === '') {
+            throw new \InvalidArgumentException('HTTP URL and method must not be empty.');
+        }
+
         $curl = $this->connection($url, $headers);
 
         // Reset body/method/header options while retaining libcurl's connection and DNS caches.
@@ -45,7 +49,7 @@ class Client
         $raw = curl_exec($curl);
         $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
         $curlError = curl_errno($curl);
-        if ($raw === false || $curlError) {
+        if (!is_string($raw) || $curlError) {
             throw new ServiceError(
                 'UPSTREAM_UNCERTAIN',
                 'Upstream request did not complete. A dispatched change may have succeeded; inspect the operation before retrying.',

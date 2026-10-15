@@ -43,7 +43,8 @@ try {
                 'reason' => $bootstrapReason ?? 'initialization_failed',
                 'missing_class' => $missingClass ?? null,
             ],
-        ),
+            JSON_INVALID_UTF8_SUBSTITUTE,
+        ) ?: '{"event":"log_encoding_failed"}',
     );
     http_response_code(503);
     header('Content-Type: application/json');

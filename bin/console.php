@@ -63,9 +63,14 @@ try {
             if (!$key || !openssl_pkey_export($key, $private)) {
                 throw new RuntimeException('Cannot generate OAuth key pair.');
             }
+            $details = openssl_pkey_get_details($key);
+            if ($details === false) {
+                throw new RuntimeException('Cannot inspect OAuth key pair.');
+            }
+
             file_put_contents($dir . '/oauth-private.pem', $private);
             chmod($dir . '/oauth-private.pem', 0600);
-            file_put_contents($dir . '/oauth-public.pem', openssl_pkey_get_details($key)['key']);
+            file_put_contents($dir . '/oauth-public.pem', $details['key']);
             chmod($dir . '/oauth-public.pem', 0644);
         }
         $db = new Database($dir . '/service.sqlite');

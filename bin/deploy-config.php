@@ -39,8 +39,16 @@ try {
         echo "Dependency runtime checks passed.\n";
         exit;
     }
-    $load = static function () use ($root): array {
-        return is_file($root . '/.env') ? \Dotenv\Dotenv::parse(file_get_contents($root . '/.env')) : [];
+    $read = static function (string $path): string {
+        $content = file_get_contents($path);
+        if ($content === false) {
+            throw new RuntimeException('Cannot read required deployment file.');
+        }
+
+        return $content;
+    };
+    $load = static function () use ($root, $read): array {
+        return is_file($root . '/.env') ? \Dotenv\Dotenv::parse($read($root . '/.env')) : [];
     };
     $values = $load();
     if ($command === 'read') {
@@ -71,7 +79,7 @@ try {
         if (is_link($root . '/.env')) {
             throw new RuntimeException('Refusing to replace a symlinked .env.');
         }
-        $template = $existing ? file_get_contents($root . '/.env') : file_get_contents($root . '/.env.example');
+        $template = $read($root . ($existing ? '/.env' : '/.env.example'));
         $values = \Dotenv\Dotenv::parse($template);
         foreach (
             [
@@ -143,6 +151,9 @@ try {
             $pattern = '/^' . preg_quote($name, '/') . '\s*=.*$/m';
             if (preg_match($pattern, $text)) {
                 $text = preg_replace_callback($pattern, fn() => $line, $text);
+                if ($text === null) {
+                    throw new RuntimeException('Cannot serialize configuration; .env unchanged.');
+                }
             } else {
                 $text = rtrim($text) . "\n" . $line . "\n";
             }
@@ -192,8 +203,9 @@ try {
         if (!is_readable($private) || !is_readable($public)) {
             throw new RuntimeException('OAuth signing keys missing.');
         }
-        $key = openssl_pkey_get_private(file_get_contents($private));
-        if (!$key || openssl_pkey_get_details($key)['key'] !== file_get_contents($public)) {
+        $key = openssl_pkey_get_private($read($private));
+        $details = $key ? openssl_pkey_get_details($key) : false;
+        if ($details === false || $details['key'] !== $read($public)) {
             throw new RuntimeException('OAuth signing keys do not match.');
         }
         echo "Storage, migrations, and signing-key checks passed.\n";
@@ -226,7 +238,7 @@ try {
             throw new RuntimeException('Invalid cron line.');
         }
         $run = static function (array $args, ?string $stdin = null): array {
-            $process = proc_open($args, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+            $process = proc_open(array_values($args), [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
             if (!is_resource($process)) {
                 throw new RuntimeException('Cannot invoke crontab.');
             }
@@ -258,6 +270,10 @@ try {
     }
     if ($command === 'http') {
         $get = static function (string $url, string $method = 'GET'): array {
+            if ($method === '') {
+                throw new RuntimeException('HTTPS probe requires a method.');
+            }
+
             $ch = curl_init($url);
             curl_setopt_array(
                 $ch,
@@ -273,7 +289,7 @@ try {
             $body = curl_exec($ch);
             $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
             unset($ch);
-            if ($body === false) {
+            if (!is_string($body)) {
                 throw new RuntimeException('HTTPS probe failed. Check DNS, certificate, and routing.');
             }
             return [$status, $body];

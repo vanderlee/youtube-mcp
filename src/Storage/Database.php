@@ -75,7 +75,7 @@ final class Database
      */
     public function all(string $sql, array $params = []): array
     {
-        return $this->execute($sql, $params)->fetchAll();
+        return array_values($this->execute($sql, $params)->fetchAll(PDO::FETCH_ASSOC));
     }
 
     /**
@@ -140,6 +140,9 @@ final class Database
         }
         // Bundled sections retain the original identities for existing databases.
         $parts = preg_split('/^-- Migration: ([a-zA-Z0-9_]+\.sql)\h*\r?\n/m', $sql, -1, PREG_SPLIT_DELIM_CAPTURE);
+        if ($parts === false) {
+            throw new \RuntimeException('Cannot parse migration sections.');
+        }
         if (count($parts) === 1) {
             return [basename($file) => $sql];
         }

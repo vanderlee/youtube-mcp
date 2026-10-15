@@ -13,6 +13,10 @@ final class User implements UserEntityInterface
 
     public function __construct(string $id)
     {
+        if ($id === '') {
+            throw new \InvalidArgumentException('Identifier must not be empty.');
+        }
+
         $this->setIdentifier($id);
     }
 }

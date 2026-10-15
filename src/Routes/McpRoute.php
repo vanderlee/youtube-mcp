@@ -92,7 +92,8 @@ final class McpRoute
                         true,
                     ) ? $message : 'Other transport rejection',
                 ],
-            ),
+                JSON_INVALID_UTF8_SUBSTITUTE,
+            ) ?: '{"event":"log_encoding_failed"}',
         );
     }
 }

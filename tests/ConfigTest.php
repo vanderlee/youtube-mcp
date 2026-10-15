@@ -82,3 +82,10 @@ test('configuration loads an isolated environment file and retains its root', fu
         $this->removeDir($directory);
     }
 });
+
+test('application key consumers receive validated decoded bytes', function (): void {
+    $key = str_repeat('k', 32);
+    expect($this->config(['APP_KEY' => base64_encode($key)])->appKey())->toBe($key);
+    expect(fn() => $this->config(['APP_KEY' => '!invalid'])->appKey())->toThrow(RuntimeException::class, 'APP_KEY');
+    expect(fn() => $this->config(['APP_KEY' => base64_encode('short')])->appKey())->toThrow(RuntimeException::class, 'APP_KEY');
+});

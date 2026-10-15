@@ -20,6 +20,10 @@ class MediaClient
         ?string $body = null,
         ?string $path = null,
     ): array {
+        if ($method === '') {
+            throw new \InvalidArgumentException('HTTP method must not be empty.');
+        }
+
         $raw = '';
         $responseHeaders = [];
         $file = null;
@@ -33,7 +37,12 @@ class MediaClient
                     throw new ServiceError('MEDIA_NOT_FOUND', 'Media cannot be read.', [], 404);
                 }
 
-                curl_setopt_array($curl, [CURLOPT_UPLOAD => true, CURLOPT_INFILE => $file, CURLOPT_INFILESIZE => filesize($path)]);
+                $size = filesize($path);
+                if ($size === false) {
+                    throw new ServiceError('MEDIA_NOT_FOUND', 'Media size cannot be read.', [], 404);
+                }
+
+                curl_setopt_array($curl, [CURLOPT_UPLOAD => true, CURLOPT_INFILE => $file, CURLOPT_INFILESIZE => $size]);
             } elseif ($body !== null) {
                 curl_setopt($curl, CURLOPT_POSTFIELDS, $body);
             }
@@ -60,6 +69,7 @@ class MediaClient
 
     /**
      * @param list<string> $headers
+     * @param non-empty-string $method
      * @param array<string, string> $responseHeaders
      */
     private function configureTransfer(

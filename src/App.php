@@ -161,7 +161,8 @@ final class App
                         'file' => basename($e->getFile()),
                         'line' => $e->getLine(),
                     ] + ($e instanceof \PDOException ? Database::errorDetails($e) : []),
-                ),
+                    JSON_INVALID_UTF8_SUBSTITUTE,
+                ) ?: '{"event":"log_encoding_failed"}',
             );
             $response = Responses::json(
                 [
@@ -291,7 +292,8 @@ final class App
                         'path' => $request->getUri()->getPath(),
                         'origin' => substr($request->getHeaderLine('Origin'), 0, 512),
                     ],
-                ),
+                    JSON_INVALID_UTF8_SUBSTITUTE,
+                ) ?: '{"event":"log_encoding_failed"}',
             );
             throw new ServiceError('INVALID_ORIGIN', 'Unexpected origin.', [], 403);
         }

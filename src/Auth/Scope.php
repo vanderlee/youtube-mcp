@@ -36,6 +36,10 @@ final class Scope implements ScopeEntityInterface
 
     public function __construct(string $id)
     {
+        if ($id === '') {
+            throw new \InvalidArgumentException('Identifier must not be empty.');
+        }
+
         $this->setIdentifier($id);
     }
 }

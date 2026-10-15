@@ -71,6 +71,10 @@ final class OAuthRepository implements
         array $scopes,
         ?string $userIdentifier = null,
     ): AccessTokenEntityInterface {
+        if ($userIdentifier === null || $userIdentifier === '') {
+            throw new \InvalidArgumentException('A user identifier is required for access tokens.');
+        }
+
         $token = new AccessToken($this->issuer);
         $token->setClient($clientEntity);
         $token->setUserIdentifier($userIdentifier);

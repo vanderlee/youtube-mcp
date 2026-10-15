@@ -28,4 +28,4 @@ This is a PHP 8.2+ multi-user MCP service running one application instance under
 
 Run the hourly CLI cleanup task, migrations and backups as described in [operations](OPERATIONS.md). Busy accounts defer expired media until a later run without stopping other cleanup. Real storage errors still fail the command.
 
-Tests use mocked upstream calls and isolated storage. CI checks locked dependencies, tests on PHP 8.2/8.5, PHPStan and formatting. These checks do not establish deployment or client compatibility; record the [live acceptance checks](ACCEPTANCE.md) separately.
+Tests use mocked upstream calls and isolated storage. CI checks locked dependencies, tests on PHP 8.2/8.5, PHPStan level 7 and formatting. These checks do not establish deployment or client compatibility; record the [live acceptance checks](ACCEPTANCE.md) separately.
